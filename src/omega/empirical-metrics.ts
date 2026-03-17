@@ -1,0 +1,254 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+import type {
+  OmegaSessionOutcomeSnapshot,
+  OmegaSessionValidationSnapshot,
+} from "./session-context.js";
+
+const OMEGA_EMPIRICAL_METRICS_VERSION = 1;
+const FALSE_SUCCESS_ERROR_KINDS = new Set([
+  "invalid_structured_result",
+  "target_not_touched",
+  "missing_target_writes",
+]);
+
+export type OmegaEmpiricalRoute =
+  | "frontal_cache"
+  | "omega_delegate"
+  | "sessions_spawn"
+  | "sessions_send";
+
+export type OmegaEmpiricalMetrics = {
+  version: number;
+  updatedAt: number;
+  validation: {
+    recordedOutcomes: number;
+    validatedOutcomes: number;
+    preventedFalseSuccesses: number;
+    falseSuccessRate: number;
+  };
+  routing: {
+    toolTasks: number;
+    llmCallsEstimated: number;
+    llmCallsSaved: number;
+    meanLlmCallsPerToolTask: number;
+    routeCounts: Partial<Record<OmegaEmpiricalRoute, number>>;
+  };
+  background: {
+    usefulActions: number;
+  };
+};
+
+function createDefaultOmegaEmpiricalMetrics(): OmegaEmpiricalMetrics {
+  return {
+    version: OMEGA_EMPIRICAL_METRICS_VERSION,
+    updatedAt: 0,
+    validation: {
+      recordedOutcomes: 0,
+      validatedOutcomes: 0,
+      preventedFalseSuccesses: 0,
+      falseSuccessRate: 0,
+    },
+    routing: {
+      toolTasks: 0,
+      llmCallsEstimated: 0,
+      llmCallsSaved: 0,
+      meanLlmCallsPerToolTask: 0,
+      routeCounts: {},
+    },
+    background: {
+      usefulActions: 0,
+    },
+  };
+}
+
+function resolveMetricsDir(workspaceRoot: string): string {
+  return path.join(workspaceRoot, ".openskynet");
+}
+
+export function resolveOmegaEmpiricalMetricsFile(workspaceRoot: string): string {
+  return path.join(resolveMetricsDir(workspaceRoot), "omega-empirical-metrics.json");
+}
+
+function clampNonNegativeInteger(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+}
+
+function normalizeRouteCounts(
+  value: unknown,
+): Partial<Record<OmegaEmpiricalRoute, number>> {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+  const input = value as Partial<Record<OmegaEmpiricalRoute, unknown>>;
+  const counts: Partial<Record<OmegaEmpiricalRoute, number>> = {};
+  const routes: OmegaEmpiricalRoute[] = [
+    "frontal_cache",
+    "omega_delegate",
+    "sessions_spawn",
+    "sessions_send",
+  ];
+  for (const route of routes) {
+    const count = clampNonNegativeInteger(input[route]);
+    if (count > 0) {
+      counts[route] = count;
+    }
+  }
+  return counts;
+}
+
+function withDerivedOmegaEmpiricalMetrics(
+  metrics: OmegaEmpiricalMetrics,
+): OmegaEmpiricalMetrics {
+  const validatedOutcomes = clampNonNegativeInteger(metrics.validation.validatedOutcomes);
+  const preventedFalseSuccesses = clampNonNegativeInteger(
+    metrics.validation.preventedFalseSuccesses,
+  );
+  const toolTasks = clampNonNegativeInteger(metrics.routing.toolTasks);
+  const llmCallsEstimated = clampNonNegativeInteger(metrics.routing.llmCallsEstimated);
+
+  return {
+    version: OMEGA_EMPIRICAL_METRICS_VERSION,
+    updatedAt: typeof metrics.updatedAt === "number" && Number.isFinite(metrics.updatedAt)
+      ? metrics.updatedAt
+      : 0,
+    validation: {
+      recordedOutcomes: clampNonNegativeInteger(metrics.validation.recordedOutcomes),
+      validatedOutcomes,
+      preventedFalseSuccesses,
+      falseSuccessRate:
+        validatedOutcomes > 0 ? preventedFalseSuccesses / validatedOutcomes : 0,
+    },
+    routing: {
+      toolTasks,
+      llmCallsEstimated,
+      llmCallsSaved: clampNonNegativeInteger(metrics.routing.llmCallsSaved),
+      meanLlmCallsPerToolTask: toolTasks > 0 ? llmCallsEstimated / toolTasks : 0,
+      routeCounts: normalizeRouteCounts(metrics.routing.routeCounts),
+    },
+    background: {
+      usefulActions: clampNonNegativeInteger(metrics.background.usefulActions),
+    },
+  };
+}
+
+function parseOmegaEmpiricalMetrics(raw: unknown): OmegaEmpiricalMetrics {
+  const base = createDefaultOmegaEmpiricalMetrics();
+  if (!raw || typeof raw !== "object") {
+    return base;
+  }
+  const parsed = raw as Partial<OmegaEmpiricalMetrics>;
+  return withDerivedOmegaEmpiricalMetrics({
+    version: OMEGA_EMPIRICAL_METRICS_VERSION,
+    updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : 0,
+    validation: {
+      recordedOutcomes: clampNonNegativeInteger(parsed.validation?.recordedOutcomes),
+      validatedOutcomes: clampNonNegativeInteger(parsed.validation?.validatedOutcomes),
+      preventedFalseSuccesses: clampNonNegativeInteger(
+        parsed.validation?.preventedFalseSuccesses,
+      ),
+      falseSuccessRate: 0,
+    },
+    routing: {
+      toolTasks: clampNonNegativeInteger(parsed.routing?.toolTasks),
+      llmCallsEstimated: clampNonNegativeInteger(parsed.routing?.llmCallsEstimated),
+      llmCallsSaved: clampNonNegativeInteger(parsed.routing?.llmCallsSaved),
+      meanLlmCallsPerToolTask: 0,
+      routeCounts: normalizeRouteCounts(parsed.routing?.routeCounts),
+    },
+    background: {
+      usefulActions: clampNonNegativeInteger(parsed.background?.usefulActions),
+    },
+  });
+}
+
+export async function loadOmegaEmpiricalMetrics(params: {
+  workspaceRoot: string;
+}): Promise<OmegaEmpiricalMetrics> {
+  const file = resolveOmegaEmpiricalMetricsFile(params.workspaceRoot);
+  try {
+    const raw = await fs.readFile(file, "utf-8");
+    return parseOmegaEmpiricalMetrics(JSON.parse(raw));
+  } catch {
+    return createDefaultOmegaEmpiricalMetrics();
+  }
+}
+
+async function updateOmegaEmpiricalMetrics(
+  workspaceRoot: string,
+  update: (metrics: OmegaEmpiricalMetrics) => OmegaEmpiricalMetrics,
+): Promise<OmegaEmpiricalMetrics> {
+  const current = await loadOmegaEmpiricalMetrics({ workspaceRoot });
+  const next = withDerivedOmegaEmpiricalMetrics(update(current));
+  next.updatedAt = Date.now();
+  await fs.mkdir(resolveMetricsDir(workspaceRoot), { recursive: true });
+  await fs.writeFile(
+    resolveOmegaEmpiricalMetricsFile(workspaceRoot),
+    JSON.stringify(next, null, 2),
+    "utf-8",
+  );
+  return next;
+}
+
+export async function recordOmegaValidationMetrics(params: {
+  workspaceRoot: string;
+  validation: OmegaSessionValidationSnapshot;
+  outcome: OmegaSessionOutcomeSnapshot;
+}): Promise<OmegaEmpiricalMetrics> {
+  const requiresValidation =
+    params.validation.expectsJson ||
+    params.validation.expectedKeys.length > 0 ||
+    params.validation.expectedPaths.length > 0;
+  const preventedFalseSuccess =
+    typeof params.outcome.errorKind === "string" &&
+    FALSE_SUCCESS_ERROR_KINDS.has(params.outcome.errorKind);
+
+  return updateOmegaEmpiricalMetrics(params.workspaceRoot, (metrics) => ({
+    ...metrics,
+    validation: {
+      ...metrics.validation,
+      recordedOutcomes: metrics.validation.recordedOutcomes + 1,
+      validatedOutcomes: metrics.validation.validatedOutcomes + (requiresValidation ? 1 : 0),
+      preventedFalseSuccesses:
+        metrics.validation.preventedFalseSuccesses + (preventedFalseSuccess ? 1 : 0),
+      falseSuccessRate: metrics.validation.falseSuccessRate,
+    },
+  }));
+}
+
+export async function recordOmegaRouteMetrics(params: {
+  workspaceRoot: string;
+  route: OmegaEmpiricalRoute;
+  llmCallsEstimated?: number;
+  llmCallsSaved?: number;
+}): Promise<OmegaEmpiricalMetrics> {
+  return updateOmegaEmpiricalMetrics(params.workspaceRoot, (metrics) => ({
+    ...metrics,
+    routing: {
+      ...metrics.routing,
+      toolTasks: metrics.routing.toolTasks + 1,
+      llmCallsEstimated:
+        metrics.routing.llmCallsEstimated + clampNonNegativeInteger(params.llmCallsEstimated),
+      llmCallsSaved:
+        metrics.routing.llmCallsSaved + clampNonNegativeInteger(params.llmCallsSaved),
+      meanLlmCallsPerToolTask: metrics.routing.meanLlmCallsPerToolTask,
+      routeCounts: {
+        ...metrics.routing.routeCounts,
+        [params.route]: (metrics.routing.routeCounts[params.route] ?? 0) + 1,
+      },
+    },
+  }));
+}
+
+export async function recordOmegaBackgroundActionMetrics(params: {
+  workspaceRoot: string;
+  usefulActions?: number;
+}): Promise<OmegaEmpiricalMetrics> {
+  return updateOmegaEmpiricalMetrics(params.workspaceRoot, (metrics) => ({
+    ...metrics,
+    background: {
+      usefulActions:
+        metrics.background.usefulActions + clampNonNegativeInteger(params.usefulActions),
+    },
+  }));
+}

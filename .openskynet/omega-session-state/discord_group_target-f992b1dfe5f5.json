@@ -1,0 +1,110 @@
+{
+  "sessionKey": "discord:group:target",
+  "updatedAt": 1773515965266,
+  "entries": [
+    {
+      "createdAt": 1773513982936,
+      "task": "ping",
+      "validation": {
+        "expectsJson": false,
+        "expectedKeys": [],
+        "expectedPaths": []
+      },
+      "outcome": {
+        "status": "ok"
+      },
+      "reply": "initial"
+    },
+    {
+      "createdAt": 1773514258777,
+      "task": "ping",
+      "validation": {
+        "expectsJson": false,
+        "expectedKeys": [],
+        "expectedPaths": []
+      },
+      "outcome": {
+        "status": "ok"
+      },
+      "reply": "initial"
+    },
+    {
+      "createdAt": 1773514778843,
+      "task": "ping",
+      "validation": {
+        "expectsJson": false,
+        "expectedKeys": [],
+        "expectedPaths": []
+      },
+      "outcome": {
+        "status": "ok"
+      },
+      "reply": "initial"
+    },
+    {
+      "createdAt": 1773515192545,
+      "task": "ping",
+      "validation": {
+        "expectsJson": false,
+        "expectedKeys": [],
+        "expectedPaths": []
+      },
+      "outcome": {
+        "status": "ok"
+      },
+      "reply": "initial"
+    },
+    {
+      "createdAt": 1773515965266,
+      "task": "ping",
+      "validation": {
+        "expectsJson": false,
+        "expectedKeys": [],
+        "expectedPaths": []
+      },
+      "outcome": {
+        "status": "ok"
+      },
+      "reply": "initial"
+    }
+  ],
+  "state": {
+    "activeTargets": [],
+    "requiredKeys": [],
+    "lastInteractionKind": "direct_instruction",
+    "lastTask": "ping",
+    "lastOutcomeStatus": "ok",
+    "lastSuccessfulTask": "ping",
+    "learnedConstraints": [],
+    "updatedAt": 1773515965266
+  },
+  "kernel": {
+    "revision": 2,
+    "sessionKey": "discord:group:target",
+    "turnCount": 5,
+    "identity": {
+      "continuityId": "f992b1dfe5f5",
+      "firstSeenAt": 1773513982936,
+      "lastSeenAt": 1773515965266,
+      "lastTask": "ping",
+      "lastInteractionKind": "direct_instruction"
+    },
+    "world": {
+      "lastOutcomeStatus": "ok",
+      "lastObservedChangedFiles": []
+    },
+    "goals": [],
+    "tension": {
+      "openGoalCount": 0,
+      "staleGoalCount": 0,
+      "failureStreak": 0,
+      "repeatedFailureKinds": [],
+      "pendingCorrection": false
+    },
+    "causalGraph": {
+      "files": [],
+      "edges": []
+    },
+    "updatedAt": 1773515965266
+  }
+}

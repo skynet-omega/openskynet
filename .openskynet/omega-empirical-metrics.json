@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "updatedAt": 1773515965267,
+  "validation": {
+    "recordedOutcomes": 10,
+    "validatedOutcomes": 0,
+    "preventedFalseSuccesses": 0,
+    "falseSuccessRate": 0
+  },
+  "routing": {
+    "toolTasks": 0,
+    "llmCallsEstimated": 0,
+    "llmCallsSaved": 0,
+    "meanLlmCallsPerToolTask": 0,
+    "routeCounts": {}
+  },
+  "background": {
+    "usefulActions": 0
+  }
+}

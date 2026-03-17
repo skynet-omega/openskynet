@@ -1,0 +1,36 @@
+{
+  "sessionKey": "agent:openskynet:frontal-cache-probe:mmpzxcak",
+  "updatedAt": 1773472821302,
+  "entries": [
+    {
+      "createdAt": 1773472821289,
+      "task": "Return exactly one JSON object and nothing else: {\"status\":\"ok\",\"summary\":\"cache probe ok\"}",
+      "validation": {
+        "expectsJson": true,
+        "expectedKeys": [
+          "status",
+          "summary"
+        ],
+        "expectedPaths": []
+      },
+      "outcome": {
+        "status": "ok",
+        "structuredOk": true
+      },
+      "reply": "{\"status\":\"ok\",\"summary\":\"cache probe ok\"}"
+    }
+  ],
+  "state": {
+    "activeTargets": [],
+    "requiredKeys": [
+      "status",
+      "summary"
+    ],
+    "lastInteractionKind": "verification_request",
+    "lastTask": "Return exactly one JSON object and nothing else: {\"status\":\"ok\",\"summary\":\"cache probe ok\"}",
+    "lastOutcomeStatus": "ok",
+    "lastSuccessfulTask": "Return exactly one JSON object and nothing else: {\"status\":\"ok\",\"summary\":\"cache probe ok\"}",
+    "learnedConstraints": [],
+    "updatedAt": 1773472821302
+  }
+}
