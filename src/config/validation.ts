@@ -501,7 +501,7 @@ function validateConfigObjectWithPluginsBase(
   const entries = pluginsConfig?.entries;
   if (entries && isRecord(entries)) {
     for (const pluginId of Object.keys(entries)) {
-      if (!knownIds.has(pluginId)) {
+      if (!knownIds.has(pluginId) && !CHANNEL_IDS.includes(pluginId as any)) {
         // Keep gateway startup resilient when plugins are removed/renamed across upgrades.
         pushMissingPluginIssue(`plugins.entries.${pluginId}`, pluginId, { warnOnly: true });
       }
@@ -513,7 +513,7 @@ function validateConfigObjectWithPluginsBase(
     if (typeof pluginId !== "string" || !pluginId.trim()) {
       continue;
     }
-    if (!knownIds.has(pluginId)) {
+    if (!knownIds.has(pluginId) && !CHANNEL_IDS.includes(pluginId as any)) {
       pushMissingPluginIssue("plugins.allow", pluginId);
     }
   }
@@ -523,7 +523,7 @@ function validateConfigObjectWithPluginsBase(
     if (typeof pluginId !== "string" || !pluginId.trim()) {
       continue;
     }
-    if (!knownIds.has(pluginId)) {
+    if (!knownIds.has(pluginId) && !CHANNEL_IDS.includes(pluginId as any)) {
       pushMissingPluginIssue("plugins.deny", pluginId);
     }
   }

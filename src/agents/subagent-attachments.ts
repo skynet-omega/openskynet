@@ -106,9 +106,8 @@ export async function materializeSubagentAttachments(params: {
   const limits = resolveAttachmentLimits(params.config);
   if (!limits.enabled) {
     return {
-      status: "forbidden",
-      error:
-        "attachments are disabled for sessions_spawn (enable tools.sessions_spawn.attachments.enabled)",
+      status: "error",
+      error: "attachments_disabled (enable tools.sessions_spawn.attachments.enabled)",
     };
   }
   if (requestedAttachments.length > limits.maxFiles) {

@@ -1,19 +1,19 @@
 /**
  * Neural Logic Engine para OpenSkyNet
- * 
+ *
  * Motor de inferencia lógica diferenciable que opera en espacio latente
  * SIN dependencia de LLMs. Basado en SKYNET_OMEGA.
- * 
+ *
  * Problema que resuelve:
  *   - OpenSkyNet hace sugerencias al LLM que luego decide
  *   - NeuralLogicEngine permite RAZONAMIENTO IMPLICITO directamente
  *   - Sobre el estado latente sin necesidad de tokens de texto
- * 
+ *
  * Arquitectura:
  *   64 reglas = 64 patrones lógicos aprendibles
  *   Cada regla: IF pattern_A in z THEN push_toward pattern_B
  *   Se aprenden por gradiente junto con JEPA + Bifásic
- * 
+ *
  * Inspiración: Neural Theorem Provers (Rocktaschel & Riedel 2017)
  *              Differentiable Logic (Evans et al 2018)
  */
@@ -22,17 +22,17 @@ export interface LogicRule {
   id: number;
   antecedent: number[]; // Patrón que activa la regla (embedding)
   consequent: number[]; // Hacia dónde mueve el estado
-  strength: number;     // Fuerza de la regla (0-1)
-  active: boolean;      // Estuvo activa en último ciclo
-  confidence: number;   // Confianza en la inferencia
+  strength: number; // Fuerza de la regla (0-1)
+  active: boolean; // Estuvo activa en último ciclo
+  confidence: number; // Confianza en la inferencia
 }
 
 export interface LogicState {
-  processedAt: number;     // timestamp del proceso
-  activeRules: number[];   // IDs de reglas activas
+  processedAt: number; // timestamp del proceso
+  activeRules: number[]; // IDs de reglas activas
   inferenceConfidence: number;
-  logicalDelta: number[];  // El delta aplicado al estado
-  stateAfter: number[];    // Estado post-inferencia
+  logicalDelta: number[]; // El delta aplicado al estado
+  stateAfter: number[]; // Estado post-inferencia
 }
 
 export class NeuralLogicEngine {
@@ -62,46 +62,30 @@ export class NeuralLogicEngine {
     this.addRule(
       [0.7, 0.8, 0.9], // patrón de frustración alta
       [0.2, 0.3, 0.1], // hacia curiosidad
-      0.8
+      0.8,
     );
 
     // Regla 2: Si success rate bajo → activate exploration
-    this.addRule(
-      [0.1, 0.2, 0.3],
-      [0.5, 0.6, 0.7],
-      0.7
-    );
+    this.addRule([0.1, 0.2, 0.3], [0.5, 0.6, 0.7], 0.7);
 
     // Regla 3: Si stability alto → maintain
-    this.addRule(
-      [0.4, 0.4, 0.4],
-      [0.4, 0.4, 0.4],
-      0.5
-    );
+    this.addRule([0.4, 0.4, 0.4], [0.4, 0.4, 0.4], 0.5);
 
     // Regla 4: Si error diverging → reduce entropy
-    this.addRule(
-      [0.9, 0.95, 1.0],
-      [0.3, 0.25, 0.2],
-      0.85
-    );
+    this.addRule([0.9, 0.95, 1.0], [0.3, 0.25, 0.2], 0.85);
   }
 
   /**
    * Añade una nueva regla lógica al motor
    */
-  addRule(
-    antecedent: number[],
-    consequent: number[],
-    initialStrength: number
-  ): number {
+  addRule(antecedent: number[], consequent: number[], initialStrength: number): number {
     if (this.ruleCounter >= this.MAX_RULES) {
       console.warn(`[NLE] Maximum rules (${this.MAX_RULES}) reached. Ignoring new rule.`);
       return -1;
     }
 
     const ruleId = this.ruleCounter++;
-    const patternKey = antecedent.join(',');
+    const patternKey = antecedent.join(",");
 
     // Evitar reglas duplicadas
     if (this.patternMemory.has(patternKey)) {
@@ -120,11 +104,20 @@ export class NeuralLogicEngine {
 
     this.patternMemory.set(patternKey, ruleId);
 
-    // Inicializar weights como matriz identidad perturbada
+    // Inicializar weights como matriz identidad perturbada (determinista para tests)
     const dim = antecedent.length;
     const weights = Array(dim)
       .fill(0)
-      .map(() => Array(dim).fill(0).map(() => Math.random() * 0.1 - 0.05));
+      .map((_, i) =>
+        Array(dim)
+          .fill(0)
+          .map((_, j) => {
+            const identity = i === j ? 1 : 0;
+            // Usar una función determinista en lugar de Math.random() si se desea consistencia
+            // Para este fix, usaremos una perturbación fija basada en los índices
+            return identity + Math.sin(ruleId * dim + i * dim + j) * 0.01;
+          }),
+      );
     this.ruleWeights.set(ruleId, weights);
 
     console.log(`[NLE] Rule #${ruleId} added. Total rules: ${this.rules.size}`);
@@ -132,13 +125,36 @@ export class NeuralLogicEngine {
   }
 
   /**
+   * REINFORCEMENT: Adjust rule strength based on actual outcomes.
+   * If an action led to success, reinforce all rules that were active.
+   */
+  reinforceRule(ruleId: number, reward: number = 0.05) {
+    const rule = this.rules.get(ruleId);
+    if (rule) {
+      rule.strength = Math.min(1.0, rule.strength + reward * rule.confidence);
+      console.log(`[NLE] Reinforced rule #${ruleId}. New strength: ${rule.strength.toFixed(3)}`);
+    }
+  }
+
+  /**
+   * PENALTY: Reduce rule strength if it led to failure or error.
+   */
+  penalizeRule(ruleId: number, penalty: number = 0.1) {
+    const rule = this.rules.get(ruleId);
+    if (rule) {
+      rule.strength = Math.max(0.1, rule.strength - penalty * rule.confidence);
+      console.log(`[NLE] Penalized rule #${ruleId}. New strength: ${rule.strength.toFixed(3)}`);
+    }
+  }
+
+  /**
    * CORE: Aplica inferencia lógica sobre el estado actual
-   * 
+   *
    * Simula el forward pass de SKYNET_OMEGA NeuralLogicEngine
    */
   infer(
     currentState: number[],
-    context?: { frustration: number; recentFailures: number; successRate: number }
+    context?: { frustration: number; recentFailures: number; successRate: number },
   ): LogicState {
     const timestamp = Date.now();
     const activeRules: number[] = [];
@@ -165,8 +181,7 @@ export class NeuralLogicEngine {
       }
 
       // Activación final: similitud × contexto × fuerza
-      const activation =
-        Math.max(0, similarity) * contextGate * rule.strength;
+      const activation = Math.max(0, similarity) * contextGate * rule.strength;
 
       if (activation > this.ACTIVATION_THRESHOLD) {
         rule.active = true;
@@ -175,9 +190,15 @@ export class NeuralLogicEngine {
         // ── 2. Aplicar la regla activa ──────────────────────────────────
         // Mover estado hacia el consecuente
         const weights = this.ruleWeights.get(ruleId)!;
+        if (weights.length !== currentState.length) {
+          console.warn(
+            `[NLE] Dimension mismatch in rule #${ruleId}. Expected ${weights.length}, got ${currentState.length}. Skipping.`,
+          );
+          continue;
+        }
         const ruleOutput = this.multiplyMatrix(weights, currentState);
         const ruleEffect = ruleOutput.map(
-          (v, i) => v * activation * 0.1 // Pequeño factor para no saturar
+          (v, i) => v * activation * 0.1, // Pequeño factor para no saturar
         );
 
         logicalDelta = logicalDelta.map((v, i) => v + ruleEffect[i]);
@@ -196,10 +217,7 @@ export class NeuralLogicEngine {
     });
 
     // ── 4. Confianza general ───────────────────────────────────────────────
-    const inferenceConfidence =
-      this.rules.size > 0
-        ? totalConfidence / this.rules.size
-        : 0;
+    const inferenceConfidence = this.rules.size > 0 ? totalConfidence / this.rules.size : 0;
 
     const logicState: LogicState = {
       processedAt: timestamp,
@@ -225,25 +243,27 @@ export class NeuralLogicEngine {
    */
   explain(): string {
     if (!this.lastState) {
-      return '[NLE] No inference history. Call infer() first.';
+      return "[NLE] No inference history. Call infer() first.";
     }
 
     const activeRuleDetails = this.lastState.activeRules
       .map((ruleId) => {
         const rule = this.rules.get(ruleId);
-        if (!rule) return '';
-        return `  Rule #${ruleId}: ${JSON.stringify(rule.antecedent.slice(0, 2))}... → ` +
-               `${JSON.stringify(rule.consequent.slice(0, 2))}... ` +
-               `(strength=${rule.strength.toFixed(2)}, confidence=${rule.confidence.toFixed(2)})`;
+        if (!rule) return "";
+        return (
+          `  Rule #${ruleId}: ${JSON.stringify(rule.antecedent.slice(0, 2))}... → ` +
+          `${JSON.stringify(rule.consequent.slice(0, 2))}... ` +
+          `(strength=${rule.strength.toFixed(2)}, confidence=${rule.confidence.toFixed(2)})`
+        );
       })
-      .join('\n');
+      .join("\n");
 
     return (
       `[NLE] Logic Inference Report\n` +
       `  Active Rules: ${this.lastState.activeRules.length}/${this.rules.size}\n` +
       `  Confidence: ${(this.lastState.inferenceConfidence * 100).toFixed(1)}%\n` +
       `  Delta magnitude: ${this.magnitude(this.lastState.logicalDelta).toFixed(4)}\n` +
-      (activeRuleDetails ? `\n${activeRuleDetails}` : '')
+      (activeRuleDetails ? `\n${activeRuleDetails}` : "")
     );
   }
 
@@ -265,9 +285,7 @@ export class NeuralLogicEngine {
   }
 
   private multiplyMatrix(matrix: number[][], vec: number[]): number[] {
-    return matrix.map((row) =>
-      row.reduce((s, v, i) => s + v * (vec[i] || 0), 0)
-    );
+    return matrix.map((row) => row.reduce((s, v, i) => s + v * (vec[i] || 0), 0));
   }
 
   private magnitude(vec: number[]): number {
@@ -278,11 +296,12 @@ export class NeuralLogicEngine {
    * Obtén estadísticas del motor
    */
   getStats() {
-    const activeCount = Array.from(this.rules.values()).filter(r => r.active).length;
+    const activeCount = Array.from(this.rules.values()).filter((r) => r.active).length;
     return {
       totalRules: this.rules.size,
       activeRules: activeCount,
-      avgStrength: Array.from(this.rules.values()).reduce((s, r) => s + r.strength, 0) / this.rules.size,
+      avgStrength:
+        Array.from(this.rules.values()).reduce((s, r) => s + r.strength, 0) / this.rules.size,
       lastConfidence: this.lastState?.inferenceConfidence ?? 0,
     };
   }
@@ -302,6 +321,6 @@ export function getNeuralLogicEngine(): NeuralLogicEngine {
 
 export function initializeNeuralLogicEngine(): NeuralLogicEngine {
   nleInstance = new NeuralLogicEngine();
-  console.log('[NLE] Neural Logic Engine initialized');
+  console.log("[NLE] Neural Logic Engine initialized");
   return nleInstance;
 }

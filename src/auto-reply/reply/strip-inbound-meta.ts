@@ -88,7 +88,9 @@ function shouldStripTrailingUntrustedContext(lines: string[], index: number): bo
     return false;
   }
   const probe = lines.slice(index + 1, Math.min(lines.length, index + 8)).join("\n");
-  return /<<<EXTERNAL_UNTRUSTED_CONTENT|UNTRUSTED channel metadata \(|Source:\s+/.test(probe);
+  return /<<<EXTERNAL_UNTRUSTED_CONTENT|UNTRUSTED channel metadata \(|Source:\s+|\[Omega NLE/.test(
+    probe,
+  );
 }
 
 function stripTrailingUntrustedContextSuffix(lines: string[]): string[] {

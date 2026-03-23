@@ -9,14 +9,6 @@ import {
 } from "./episodic-recall.js";
 import { deriveOmegaSessionSelfState, type OmegaSessionSelfState } from "./event-model.js";
 import {
-  cloneOmegaTaskTransactions,
-  parseOmegaTaskTransactions,
-  selectActiveOmegaTaskTransaction,
-  updateOmegaTaskTransactions,
-  type OmegaTaskTransaction,
-  type OmegaTaskTransactionExecutionSnapshot,
-} from "./task-transaction.js";
-import {
   deriveOmegaSelfTimeKernel,
   type OmegaKernelCausalEdge,
   type OmegaKernelCausalGraphState,
@@ -25,6 +17,14 @@ import {
   type OmegaSelfTimeKernelState,
 } from "./self-time-kernel.js";
 import type { OmegaSessionTaskValidationSummary } from "./session-task.js";
+import {
+  cloneOmegaTaskTransactions,
+  parseOmegaTaskTransactions,
+  selectActiveOmegaTaskTransaction,
+  updateOmegaTaskTransactions,
+  type OmegaTaskTransaction,
+  type OmegaTaskTransactionExecutionSnapshot,
+} from "./task-transaction.js";
 
 const OMEGA_SESSION_HISTORY_LIMIT = 32;
 const OMEGA_PROMPT_HISTORY_LIMIT = 3;
@@ -33,6 +33,7 @@ export type OmegaSessionValidationSnapshot = {
   expectsJson: boolean;
   expectedKeys: string[];
   expectedPaths: string[];
+  watchedPaths?: string[];
 };
 
 export type OmegaSessionOutcomeSnapshot = {
@@ -41,6 +42,7 @@ export type OmegaSessionOutcomeSnapshot = {
   observedChangedFiles?: string[];
   structuredOk?: boolean;
   writeOk?: boolean;
+  localityScore?: number;
 };
 
 export type OmegaSessionTimelineEntry = {
@@ -72,21 +74,15 @@ function parseTrackedFile(value: unknown): OmegaKernelTrackedFile | undefined {
   return {
     path: file.path,
     lastTargetedAt: typeof file.lastTargetedAt === "number" ? file.lastTargetedAt : undefined,
-    lastTargetedTurn:
-      typeof file.lastTargetedTurn === "number" ? file.lastTargetedTurn : undefined,
-    lastTargetGoalId:
-      typeof file.lastTargetGoalId === "string" ? file.lastTargetGoalId : undefined,
+    lastTargetedTurn: typeof file.lastTargetedTurn === "number" ? file.lastTargetedTurn : undefined,
+    lastTargetGoalId: typeof file.lastTargetGoalId === "string" ? file.lastTargetGoalId : undefined,
     lastWriteAt: typeof file.lastWriteAt === "number" ? file.lastWriteAt : undefined,
     lastWriteTurn: typeof file.lastWriteTurn === "number" ? file.lastWriteTurn : undefined,
-    lastWriterGoalId:
-      typeof file.lastWriterGoalId === "string" ? file.lastWriterGoalId : undefined,
+    lastWriterGoalId: typeof file.lastWriterGoalId === "string" ? file.lastWriterGoalId : undefined,
     lastFailureAt: typeof file.lastFailureAt === "number" ? file.lastFailureAt : undefined,
-    lastFailureTurn:
-      typeof file.lastFailureTurn === "number" ? file.lastFailureTurn : undefined,
-    lastFailedGoalId:
-      typeof file.lastFailedGoalId === "string" ? file.lastFailedGoalId : undefined,
-    lastFailureKind:
-      typeof file.lastFailureKind === "string" ? file.lastFailureKind : undefined,
+    lastFailureTurn: typeof file.lastFailureTurn === "number" ? file.lastFailureTurn : undefined,
+    lastFailedGoalId: typeof file.lastFailedGoalId === "string" ? file.lastFailedGoalId : undefined,
+    lastFailureKind: typeof file.lastFailureKind === "string" ? file.lastFailureKind : undefined,
     writeCount: typeof file.writeCount === "number" ? file.writeCount : 0,
     failureCount: typeof file.failureCount === "number" ? file.failureCount : 0,
   };
@@ -165,7 +161,10 @@ function resolveOmegaSessionStateReadCandidates(params: {
   const canonicalFile = resolveOmegaSessionStateFile(params);
   const normalized = params.sessionKey.trim() || "main";
   if (normalized === "main" || normalized.toLowerCase() === "agent:main:main") {
-    const legacyFile = path.join(resolveOmegaSessionStateDir(params.workspaceRoot), sanitizeSessionKey("main"));
+    const legacyFile = path.join(
+      resolveOmegaSessionStateDir(params.workspaceRoot),
+      sanitizeSessionKey("main"),
+    );
     return canonicalFile === legacyFile ? [canonicalFile] : [canonicalFile, legacyFile];
   }
   return [canonicalFile];
@@ -179,7 +178,10 @@ export function resolveOmegaSessionStateFile(params: {
   workspaceRoot: string;
   sessionKey: string;
 }): string {
-  return path.join(resolveOmegaSessionStateDir(params.workspaceRoot), sanitizeSessionKey(params.sessionKey));
+  return path.join(
+    resolveOmegaSessionStateDir(params.workspaceRoot),
+    sanitizeSessionKey(params.sessionKey),
+  );
 }
 
 async function readOmegaSessionTimeline(params: {
@@ -197,150 +199,164 @@ async function readOmegaSessionTimeline(params: {
       const parsedKernel =
         parsed.kernel && typeof parsed.kernel === "object"
           ? {
-            revision:
-              typeof parsed.kernel.revision === "number" ? parsed.kernel.revision : 1,
-            sessionKey:
-              typeof parsed.kernel.sessionKey === "string"
-                ? canonicalizeOmegaSessionKey(parsed.kernel.sessionKey)
-                : canonicalSessionKey,
-            turnCount:
-              typeof parsed.kernel.turnCount === "number" ? parsed.kernel.turnCount : 0,
-            activeGoalId:
-              typeof parsed.kernel.activeGoalId === "string" ? parsed.kernel.activeGoalId : undefined,
-            identity:
-              parsed.kernel.identity && typeof parsed.kernel.identity === "object"
-                ? {
-                    continuityId:
-                      typeof parsed.kernel.identity.continuityId === "string"
-                        ? parsed.kernel.identity.continuityId
-                        : "",
-                    firstSeenAt:
-                      typeof parsed.kernel.identity.firstSeenAt === "number"
-                        ? parsed.kernel.identity.firstSeenAt
-                        : 0,
-                    lastSeenAt:
-                      typeof parsed.kernel.identity.lastSeenAt === "number"
-                        ? parsed.kernel.identity.lastSeenAt
-                        : 0,
-                    lastTask:
-                      typeof parsed.kernel.identity.lastTask === "string"
-                        ? parsed.kernel.identity.lastTask
-                        : undefined,
-                    lastInteractionKind:
-                      typeof parsed.kernel.identity.lastInteractionKind === "string"
-                        ? parsed.kernel.identity.lastInteractionKind
-                        : undefined,
-                  }
-                : {
-                    continuityId: "",
-                    firstSeenAt: 0,
-                    lastSeenAt: 0,
-                  },
-            world:
-              parsed.kernel.world && typeof parsed.kernel.world === "object"
-                ? {
-                    lastOutcomeStatus:
-                      typeof parsed.kernel.world.lastOutcomeStatus === "string"
-                        ? parsed.kernel.world.lastOutcomeStatus
-                        : undefined,
-                    lastErrorKind:
-                      typeof parsed.kernel.world.lastErrorKind === "string"
-                        ? parsed.kernel.world.lastErrorKind
-                        : undefined,
-                    lastObservedChangedFiles: Array.isArray(parsed.kernel.world.lastObservedChangedFiles)
-                      ? parsed.kernel.world.lastObservedChangedFiles.filter(
-                          (value): value is string =>
-                            typeof value === "string" && value.trim().length > 0,
-                        )
-                      : [],
-                    lastStructuredOk:
-                      typeof parsed.kernel.world.lastStructuredOk === "boolean"
-                        ? parsed.kernel.world.lastStructuredOk
-                        : undefined,
-                    lastWriteOk:
-                      typeof parsed.kernel.world.lastWriteOk === "boolean"
-                        ? parsed.kernel.world.lastWriteOk
-                        : undefined,
-                  }
-                : {
-                    lastObservedChangedFiles: [],
-                  },
-            goals: Array.isArray(parsed.kernel.goals)
-              ? parsed.kernel.goals.filter(
-                  (goal): goal is OmegaKernelGoal =>
-                    !!goal &&
-                    typeof goal === "object" &&
-                    typeof goal.id === "string" &&
-                    typeof goal.task === "string",
-                ).map((goal) => ({
-                  id: goal.id,
-                  task: goal.task,
-                  targets: Array.isArray(goal.targets)
-                    ? goal.targets.filter(
-                        (value): value is string => typeof value === "string" && value.trim().length > 0,
+              revision: typeof parsed.kernel.revision === "number" ? parsed.kernel.revision : 1,
+              sessionKey:
+                typeof parsed.kernel.sessionKey === "string"
+                  ? canonicalizeOmegaSessionKey(parsed.kernel.sessionKey)
+                  : canonicalSessionKey,
+              turnCount: typeof parsed.kernel.turnCount === "number" ? parsed.kernel.turnCount : 0,
+              activeGoalId:
+                typeof parsed.kernel.activeGoalId === "string"
+                  ? parsed.kernel.activeGoalId
+                  : undefined,
+              identity:
+                parsed.kernel.identity && typeof parsed.kernel.identity === "object"
+                  ? {
+                      continuityId:
+                        typeof parsed.kernel.identity.continuityId === "string"
+                          ? parsed.kernel.identity.continuityId
+                          : "",
+                      firstSeenAt:
+                        typeof parsed.kernel.identity.firstSeenAt === "number"
+                          ? parsed.kernel.identity.firstSeenAt
+                          : 0,
+                      lastSeenAt:
+                        typeof parsed.kernel.identity.lastSeenAt === "number"
+                          ? parsed.kernel.identity.lastSeenAt
+                          : 0,
+                      lastTask:
+                        typeof parsed.kernel.identity.lastTask === "string"
+                          ? parsed.kernel.identity.lastTask
+                          : undefined,
+                      lastInteractionKind:
+                        typeof parsed.kernel.identity.lastInteractionKind === "string"
+                          ? parsed.kernel.identity.lastInteractionKind
+                          : undefined,
+                    }
+                  : {
+                      continuityId: "",
+                      firstSeenAt: 0,
+                      lastSeenAt: 0,
+                    },
+              world:
+                parsed.kernel.world && typeof parsed.kernel.world === "object"
+                  ? {
+                      lastOutcomeStatus:
+                        typeof parsed.kernel.world.lastOutcomeStatus === "string"
+                          ? parsed.kernel.world.lastOutcomeStatus
+                          : undefined,
+                      lastErrorKind:
+                        typeof parsed.kernel.world.lastErrorKind === "string"
+                          ? parsed.kernel.world.lastErrorKind
+                          : undefined,
+                      lastObservedChangedFiles: Array.isArray(
+                        parsed.kernel.world.lastObservedChangedFiles,
                       )
-                    : [],
-                  requiredKeys: Array.isArray(goal.requiredKeys)
-                    ? goal.requiredKeys.filter(
-                        (value): value is string => typeof value === "string" && value.trim().length > 0,
+                        ? parsed.kernel.world.lastObservedChangedFiles.filter(
+                            (value): value is string =>
+                              typeof value === "string" && value.trim().length > 0,
+                          )
+                        : [],
+                      lastStructuredOk:
+                        typeof parsed.kernel.world.lastStructuredOk === "boolean"
+                          ? parsed.kernel.world.lastStructuredOk
+                          : undefined,
+                      lastWriteOk:
+                        typeof parsed.kernel.world.lastWriteOk === "boolean"
+                          ? parsed.kernel.world.lastWriteOk
+                          : undefined,
+                    }
+                  : {
+                      lastObservedChangedFiles: [],
+                    },
+              goals: Array.isArray(parsed.kernel.goals)
+                ? parsed.kernel.goals
+                    .filter(
+                      (goal): goal is OmegaKernelGoal =>
+                        !!goal &&
+                        typeof goal === "object" &&
+                        typeof goal.id === "string" &&
+                        typeof goal.task === "string",
+                    )
+                    .map((goal) => ({
+                      id: goal.id,
+                      task: goal.task,
+                      targets: Array.isArray(goal.targets)
+                        ? goal.targets.filter(
+                            (value): value is string =>
+                              typeof value === "string" && value.trim().length > 0,
+                          )
+                        : [],
+                      requiredKeys: Array.isArray(goal.requiredKeys)
+                        ? goal.requiredKeys.filter(
+                            (value): value is string =>
+                              typeof value === "string" && value.trim().length > 0,
+                          )
+                        : [],
+                      status:
+                        goal.status === "active" ||
+                        goal.status === "completed" ||
+                        goal.status === "stale"
+                          ? goal.status
+                          : "stale",
+                      createdAt: typeof goal.createdAt === "number" ? goal.createdAt : 0,
+                      updatedAt: typeof goal.updatedAt === "number" ? goal.updatedAt : 0,
+                      createdTurn: typeof goal.createdTurn === "number" ? goal.createdTurn : 0,
+                      updatedTurn: typeof goal.updatedTurn === "number" ? goal.updatedTurn : 0,
+                      failureCount: typeof goal.failureCount === "number" ? goal.failureCount : 0,
+                      successCount: typeof goal.successCount === "number" ? goal.successCount : 0,
+                      lastOutcomeStatus:
+                        typeof goal.lastOutcomeStatus === "string"
+                          ? goal.lastOutcomeStatus
+                          : undefined,
+                      lastErrorKind:
+                        typeof goal.lastErrorKind === "string" ? goal.lastErrorKind : undefined,
+                      lastInteractionKind:
+                        typeof goal.lastInteractionKind === "string"
+                          ? goal.lastInteractionKind
+                          : undefined,
+                      observedChangedFiles: Array.isArray(goal.observedChangedFiles)
+                        ? goal.observedChangedFiles.filter(
+                            (value): value is string =>
+                              typeof value === "string" && value.trim().length > 0,
+                          )
+                        : [],
+                    }))
+                : [],
+              tension:
+                parsed.kernel.tension && typeof parsed.kernel.tension === "object"
+                  ? {
+                      openGoalCount:
+                        typeof parsed.kernel.tension.openGoalCount === "number"
+                          ? parsed.kernel.tension.openGoalCount
+                          : 0,
+                      staleGoalCount:
+                        typeof parsed.kernel.tension.staleGoalCount === "number"
+                          ? parsed.kernel.tension.staleGoalCount
+                          : 0,
+                      failureStreak:
+                        typeof parsed.kernel.tension.failureStreak === "number"
+                          ? parsed.kernel.tension.failureStreak
+                          : 0,
+                      repeatedFailureKinds: Array.isArray(
+                        parsed.kernel.tension.repeatedFailureKinds,
                       )
-                    : [],
-                  status:
-                    goal.status === "active" || goal.status === "completed" || goal.status === "stale"
-                      ? goal.status
-                      : "stale",
-                  createdAt: typeof goal.createdAt === "number" ? goal.createdAt : 0,
-                  updatedAt: typeof goal.updatedAt === "number" ? goal.updatedAt : 0,
-                  createdTurn: typeof goal.createdTurn === "number" ? goal.createdTurn : 0,
-                  updatedTurn: typeof goal.updatedTurn === "number" ? goal.updatedTurn : 0,
-                  failureCount: typeof goal.failureCount === "number" ? goal.failureCount : 0,
-                  successCount: typeof goal.successCount === "number" ? goal.successCount : 0,
-                  lastOutcomeStatus:
-                    typeof goal.lastOutcomeStatus === "string" ? goal.lastOutcomeStatus : undefined,
-                  lastErrorKind:
-                    typeof goal.lastErrorKind === "string" ? goal.lastErrorKind : undefined,
-                  lastInteractionKind:
-                    typeof goal.lastInteractionKind === "string" ? goal.lastInteractionKind : undefined,
-                  observedChangedFiles: Array.isArray(goal.observedChangedFiles)
-                    ? goal.observedChangedFiles.filter(
-                        (value): value is string => typeof value === "string" && value.trim().length > 0,
-                      )
-                    : [],
-                }))
-              : [],
-            tension:
-              parsed.kernel.tension && typeof parsed.kernel.tension === "object"
-                ? {
-                    openGoalCount:
-                      typeof parsed.kernel.tension.openGoalCount === "number"
-                        ? parsed.kernel.tension.openGoalCount
-                        : 0,
-                    staleGoalCount:
-                      typeof parsed.kernel.tension.staleGoalCount === "number"
-                        ? parsed.kernel.tension.staleGoalCount
-                        : 0,
-                    failureStreak:
-                      typeof parsed.kernel.tension.failureStreak === "number"
-                        ? parsed.kernel.tension.failureStreak
-                        : 0,
-                    repeatedFailureKinds: Array.isArray(parsed.kernel.tension.repeatedFailureKinds)
-                      ? parsed.kernel.tension.repeatedFailureKinds.filter(
-                          (value): value is string => typeof value === "string" && value.trim().length > 0,
-                        )
-                      : [],
-                    pendingCorrection:
-                      parsed.kernel.tension.pendingCorrection === true,
-                  }
-                : {
-                    openGoalCount: 0,
-                    staleGoalCount: 0,
-                    failureStreak: 0,
-                    repeatedFailureKinds: [],
-                    pendingCorrection: false,
-                  },
-            causalGraph: parseCausalGraph(parsed.kernel.causalGraph),
-            updatedAt:
-              typeof parsed.kernel.updatedAt === "number" ? parsed.kernel.updatedAt : 0,
+                        ? parsed.kernel.tension.repeatedFailureKinds.filter(
+                            (value): value is string =>
+                              typeof value === "string" && value.trim().length > 0,
+                          )
+                        : [],
+                      pendingCorrection: parsed.kernel.tension.pendingCorrection === true,
+                    }
+                  : {
+                      openGoalCount: 0,
+                      staleGoalCount: 0,
+                      failureStreak: 0,
+                      repeatedFailureKinds: [],
+                      pendingCorrection: false,
+                    },
+              causalGraph: parseCausalGraph(parsed.kernel.causalGraph),
+              updatedAt: typeof parsed.kernel.updatedAt === "number" ? parsed.kernel.updatedAt : 0,
             }
           : undefined;
 
@@ -350,69 +366,77 @@ async function readOmegaSessionTimeline(params: {
             ? canonicalizeOmegaSessionKey(parsed.sessionKey)
             : canonicalSessionKey,
         updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : 0,
-        entries: parsed.entries.filter(
-          (entry): entry is OmegaSessionTimelineEntry =>
-            !!entry &&
-            typeof entry === "object" &&
-            typeof entry.createdAt === "number" &&
-            typeof entry.task === "string" &&
-            !!entry.validation &&
-            !!entry.outcome,
-        ).map((entry) => {
-          const causalTargets = (entry as { causalTargets?: unknown[] }).causalTargets;
-          return {
-            ...entry,
-            causalTargets: Array.isArray(causalTargets)
-              ? causalTargets.filter(
-                  (value): value is string => typeof value === "string" && value.trim().length > 0,
-                )
-              : undefined,
-            ...(typeof (entry as { reply?: unknown }).reply === "string"
-              ? { reply: (entry as { reply?: string }).reply }
-              : {}),
-          };
-        }),
+        entries: parsed.entries
+          .filter(
+            (entry): entry is OmegaSessionTimelineEntry =>
+              !!entry &&
+              typeof entry === "object" &&
+              typeof entry.createdAt === "number" &&
+              typeof entry.task === "string" &&
+              !!entry.validation &&
+              !!entry.outcome,
+          )
+          .map((entry) => {
+            const causalTargets = (entry as { causalTargets?: unknown[] }).causalTargets;
+            return {
+              ...entry,
+              causalTargets: Array.isArray(causalTargets)
+                ? causalTargets.filter(
+                    (value): value is string =>
+                      typeof value === "string" && value.trim().length > 0,
+                  )
+                : undefined,
+              ...(typeof (entry as { reply?: unknown }).reply === "string"
+                ? { reply: (entry as { reply?: string }).reply }
+                : {}),
+            };
+          }),
         state:
           parsed.state && typeof parsed.state === "object"
             ? {
-              activeGoal:
-                typeof parsed.state.activeGoal === "string" ? parsed.state.activeGoal : undefined,
-              activeTargets: Array.isArray(parsed.state.activeTargets)
-                ? parsed.state.activeTargets.filter(
-                    (value): value is string => typeof value === "string" && value.trim().length > 0,
-                  )
-                : [],
-              requiredKeys: Array.isArray(parsed.state.requiredKeys)
-                ? parsed.state.requiredKeys.filter(
-                    (value): value is string => typeof value === "string" && value.trim().length > 0,
-                  )
-                : [],
-              lastInteractionKind:
-                typeof parsed.state.lastInteractionKind === "string"
-                  ? parsed.state.lastInteractionKind
-                  : undefined,
-              lastTask: typeof parsed.state.lastTask === "string" ? parsed.state.lastTask : undefined,
-              lastOutcomeStatus:
-                typeof parsed.state.lastOutcomeStatus === "string"
-                  ? parsed.state.lastOutcomeStatus
-                  : undefined,
-              lastErrorKind:
-                typeof parsed.state.lastErrorKind === "string" ? parsed.state.lastErrorKind : undefined,
-              lastSuccessfulTask:
-                typeof parsed.state.lastSuccessfulTask === "string"
-                  ? parsed.state.lastSuccessfulTask
-                  : undefined,
-              lastFailedTask:
-                typeof parsed.state.lastFailedTask === "string"
-                  ? parsed.state.lastFailedTask
-                  : undefined,
-              learnedConstraints: Array.isArray(parsed.state.learnedConstraints)
-                ? parsed.state.learnedConstraints.filter(
-                    (value): value is string => typeof value === "string" && value.trim().length > 0,
-                  )
-                : [],
-              updatedAt:
-                typeof parsed.state.updatedAt === "number" ? parsed.state.updatedAt : 0,
+                activeGoal:
+                  typeof parsed.state.activeGoal === "string" ? parsed.state.activeGoal : undefined,
+                activeTargets: Array.isArray(parsed.state.activeTargets)
+                  ? parsed.state.activeTargets.filter(
+                      (value): value is string =>
+                        typeof value === "string" && value.trim().length > 0,
+                    )
+                  : [],
+                requiredKeys: Array.isArray(parsed.state.requiredKeys)
+                  ? parsed.state.requiredKeys.filter(
+                      (value): value is string =>
+                        typeof value === "string" && value.trim().length > 0,
+                    )
+                  : [],
+                lastInteractionKind:
+                  typeof parsed.state.lastInteractionKind === "string"
+                    ? parsed.state.lastInteractionKind
+                    : undefined,
+                lastTask:
+                  typeof parsed.state.lastTask === "string" ? parsed.state.lastTask : undefined,
+                lastOutcomeStatus:
+                  typeof parsed.state.lastOutcomeStatus === "string"
+                    ? parsed.state.lastOutcomeStatus
+                    : undefined,
+                lastErrorKind:
+                  typeof parsed.state.lastErrorKind === "string"
+                    ? parsed.state.lastErrorKind
+                    : undefined,
+                lastSuccessfulTask:
+                  typeof parsed.state.lastSuccessfulTask === "string"
+                    ? parsed.state.lastSuccessfulTask
+                    : undefined,
+                lastFailedTask:
+                  typeof parsed.state.lastFailedTask === "string"
+                    ? parsed.state.lastFailedTask
+                    : undefined,
+                learnedConstraints: Array.isArray(parsed.state.learnedConstraints)
+                  ? parsed.state.learnedConstraints.filter(
+                      (value): value is string =>
+                        typeof value === "string" && value.trim().length > 0,
+                    )
+                  : [],
+                updatedAt: typeof parsed.state.updatedAt === "number" ? parsed.state.updatedAt : 0,
               }
             : undefined,
         kernel: parsedKernel,
@@ -455,6 +479,20 @@ export async function loadOmegaTaskTransactions(params: {
 }): Promise<OmegaTaskTransaction[]> {
   const timeline = await readOmegaSessionTimeline(params);
   return cloneOmegaTaskTransactions(timeline?.transactions ?? []);
+}
+
+export async function loadOmegaSessionRuntimeSnapshot(params: {
+  workspaceRoot: string;
+  sessionKey: string;
+}): Promise<{
+  kernel?: OmegaSelfTimeKernelState;
+  timeline: OmegaSessionTimelineEntry[];
+}> {
+  const file = await readOmegaSessionTimeline(params);
+  return {
+    kernel: file?.kernel,
+    timeline: file?.entries ?? [],
+  };
 }
 
 export async function pruneStaleOmegaGoals(params: {
@@ -591,10 +629,7 @@ export function deriveFocusedActiveTargets(kernel?: OmegaSelfTimeKernelState): s
     return [];
   }
   const unresolvedTargets = deriveUnresolvedTargetsForGoal(activeGoal, kernel);
-  if (
-    unresolvedTargets.length === 0 ||
-    unresolvedTargets.length === activeGoal.targets.length
-  ) {
+  if (unresolvedTargets.length === 0 || unresolvedTargets.length === activeGoal.targets.length) {
     return [];
   }
   return unresolvedTargets;
@@ -614,10 +649,7 @@ function isShadowedGoal(goal: OmegaKernelGoal, kernel: OmegaSelfTimeKernelState)
     return false;
   }
   const unresolvedTargets = deriveUnresolvedTargetsForGoal(goal, kernel);
-  if (
-    unresolvedTargets.length === 0 ||
-    unresolvedTargets.length === goal.targets.length
-  ) {
+  if (unresolvedTargets.length === 0 || unresolvedTargets.length === goal.targets.length) {
     return false;
   }
   return kernel.goals.some(
@@ -662,8 +694,7 @@ export async function pruneSupersededOmegaGoals(params: {
     ...existing.kernel,
     goals: remainingGoals,
     activeGoalId:
-      currentActiveGoalId &&
-      remainingGoals.some((goal) => goal.id === currentActiveGoalId)
+      currentActiveGoalId && remainingGoals.some((goal) => goal.id === currentActiveGoalId)
         ? currentActiveGoalId
         : activeGoals.sort((left, right) => right.updatedTurn - left.updatedTurn)[0]?.id,
     tension: {
@@ -780,8 +811,7 @@ export async function pruneShadowedOmegaGoals(params: {
     ...existing.kernel,
     goals: remainingGoals,
     activeGoalId:
-      currentActiveGoalId &&
-      remainingGoals.some((goal) => goal.id === currentActiveGoalId)
+      currentActiveGoalId && remainingGoals.some((goal) => goal.id === currentActiveGoalId)
         ? currentActiveGoalId
         : activeGoals.sort((left, right) => right.updatedTurn - left.updatedTurn)[0]?.id,
     tension: {
@@ -983,9 +1013,7 @@ export async function buildOmegaSessionContextPrompt(params: {
     lines.push(`Kernel failure streak: ${kernel.tension.failureStreak}`);
     lines.push(`Kernel open goals: ${kernel.tension.openGoalCount}`);
     if (kernel.tension.repeatedFailureKinds.length > 0) {
-      lines.push(
-        `Kernel repeated failures: ${kernel.tension.repeatedFailureKinds.join(", ")}`,
-      );
+      lines.push(`Kernel repeated failures: ${kernel.tension.repeatedFailureKinds.join(", ")}`);
     }
   }
 
@@ -1006,14 +1034,18 @@ export async function buildOmegaSessionContextPrompt(params: {
 
     const recentFailures = recentEntries.filter((entry) => entry.outcome.status !== "ok");
     if (recentFailures.some((entry) => entry.outcome.errorKind === "invalid_structured_result")) {
-      lines.push("A recent verified turn failed because the JSON contract was broken. Return exactly one JSON object when structured output is required.");
+      lines.push(
+        "A recent verified turn failed because the JSON contract was broken. Return exactly one JSON object when structured output is required.",
+      );
     }
     if (
       recentFailures.some((entry) =>
         ["target_not_touched", "missing_target_writes"].includes(entry.outcome.errorKind ?? ""),
       )
     ) {
-      lines.push("A recent verified turn failed because required targets were not actually modified. Touch every required path before claiming success.");
+      lines.push(
+        "A recent verified turn failed because required targets were not actually modified. Touch every required path before claiming success.",
+      );
     }
   }
 

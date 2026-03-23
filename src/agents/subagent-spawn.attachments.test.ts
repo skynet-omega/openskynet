@@ -5,40 +5,41 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetSubagentRegistryForTests } from "./subagent-registry.js";
 import { decodeStrictBase64, spawnSubagentDirect } from "./subagent-spawn.js";
 
-const callGatewayMock = vi.fn();
-
-vi.mock("../gateway/call.js", () => ({
-  callGateway: (opts: unknown) => callGatewayMock(opts),
-}));
-
-let configOverride: Record<string, unknown> = {
-  session: {
-    mainKey: "main",
-    scope: "per-sender",
-  },
-  tools: {
-    sessions_spawn: {
-      attachments: {
-        enabled: true,
-        maxFiles: 50,
-        maxFileBytes: 1 * 1024 * 1024,
-        maxTotalBytes: 5 * 1024 * 1024,
+const hoisted = vi.hoisted(() => ({
+  callGatewayMock: vi.fn(),
+  configOverride: {
+    session: {
+      mainKey: "main",
+      scope: "per-sender",
+    },
+    tools: {
+      sessions_spawn: {
+        attachments: {
+          enabled: true,
+          maxFiles: 50,
+          maxFileBytes: 1 * 1024 * 1024,
+          maxTotalBytes: 5 * 1024 * 1024,
+        },
       },
     },
-  },
-  agents: {
-    defaults: {
-      workspace: os.tmpdir(),
+    agents: {
+      defaults: {
+        workspace: "/tmp",
+      },
     },
-  },
-};
-let workspaceDirOverride = "";
+  } as Record<string, any>,
+  workspaceDirOverride: "",
+}));
+
+vi.mock("../gateway/call.js", () => ({
+  callGateway: (opts: unknown) => hoisted.callGatewayMock(opts),
+}));
 
 vi.mock("../config/config.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../config/config.js")>();
   return {
     ...actual,
-    loadConfig: () => configOverride,
+    loadConfig: () => hoisted.configOverride,
   };
 });
 
@@ -63,7 +64,8 @@ vi.mock("./agent-scope.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./agent-scope.js")>();
   return {
     ...actual,
-    resolveAgentWorkspaceDir: () => workspaceDirOverride,
+    resolveAgentWorkspaceDir: () => hoisted.workspaceDirOverride,
+    resolveAgentConfig: (cfg: any, agentId: string) => undefined,
   };
 });
 
@@ -75,19 +77,39 @@ vi.mock("../plugins/hook-runner-global.js", () => ({
   getGlobalHookRunner: () => ({ hasHooks: () => false }),
 }));
 
+vi.mock("./model-selection.js", () => ({
+  resolveSubagentSpawnModelSelection: () => undefined,
+}));
+
+vi.mock("./sandbox/runtime-status.js", () => ({
+  resolveSandboxRuntimeStatus: () => ({ sandboxed: false }),
+}));
+
+vi.mock("../utils/delivery-context.js", () => ({
+  normalizeDeliveryContext: (value: unknown) => value as any,
+}));
+
+vi.mock("./tools/sessions-helpers.js", () => ({
+  resolveMainSessionAlias: () => ({ mainKey: "main", alias: "main" }),
+  resolveInternalSessionKey: ({ key }: { key?: string }) => key ?? "agent:main:main",
+  resolveDisplaySessionKey: ({ key }: { key?: string }) => key ?? "agent:main:main",
+}));
+
 function setupGatewayMock() {
-  callGatewayMock.mockImplementation(async (opts: { method?: string; params?: unknown }) => {
-    if (opts.method === "sessions.patch") {
-      return { ok: true };
-    }
-    if (opts.method === "sessions.delete") {
-      return { ok: true };
-    }
-    if (opts.method === "agent") {
-      return { runId: "run-1" };
-    }
-    return {};
-  });
+  hoisted.callGatewayMock.mockImplementation(
+    async (opts: { method?: string; params?: unknown }) => {
+      if (opts.method === "sessions.patch") {
+        return { ok: true };
+      }
+      if (opts.method === "sessions.delete") {
+        return { ok: true };
+      }
+      if (opts.method === "agent") {
+        return { runId: "run-1" };
+      }
+      return {};
+    },
+  );
 }
 
 // --- decodeStrictBase64 ---
@@ -145,17 +167,17 @@ describe("decodeStrictBase64", () => {
 describe("spawnSubagentDirect filename validation", () => {
   beforeEach(() => {
     resetSubagentRegistryForTests();
-    callGatewayMock.mockClear();
+    hoisted.callGatewayMock.mockClear();
     setupGatewayMock();
-    workspaceDirOverride = fs.mkdtempSync(
+    hoisted.workspaceDirOverride = fs.mkdtempSync(
       path.join(os.tmpdir(), `openclaw-subagent-attachments-${process.pid}-${Date.now()}-`),
     );
   });
 
   afterEach(() => {
-    if (workspaceDirOverride) {
-      fs.rmSync(workspaceDirOverride, { recursive: true, force: true });
-      workspaceDirOverride = "";
+    if (hoisted.workspaceDirOverride) {
+      fs.rmSync(hoisted.workspaceDirOverride, { recursive: true, force: true });
+      hoisted.workspaceDirOverride = "";
     }
   });
 
@@ -225,7 +247,7 @@ describe("spawnSubagentDirect filename validation", () => {
 
   it("removes materialized attachments when lineage patching fails", async () => {
     const calls: Array<{ method?: string; params?: Record<string, unknown> }> = [];
-    callGatewayMock.mockImplementation(async (opts: unknown) => {
+    hoisted.callGatewayMock.mockImplementation(async (opts: unknown) => {
       const request = opts as { method?: string; params?: Record<string, unknown> };
       calls.push(request);
       if (request.method === "sessions.patch" && typeof request.params?.spawnedBy === "string") {
@@ -249,7 +271,7 @@ describe("spawnSubagentDirect filename validation", () => {
       status: "error",
       error: "lineage patch failed",
     });
-    const attachmentsRoot = path.join(workspaceDirOverride, ".openclaw", "attachments");
+    const attachmentsRoot = path.join(hoisted.workspaceDirOverride, ".openclaw", "attachments");
     const retainedDirs = fs.existsSync(attachmentsRoot)
       ? fs.readdirSync(attachmentsRoot).filter((entry) => !entry.startsWith("."))
       : [];

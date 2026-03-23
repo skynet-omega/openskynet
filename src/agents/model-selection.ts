@@ -615,13 +615,38 @@ export function resolveAllowedModelRef(params: {
     return { error: `invalid model: ${trimmed}` };
   }
 
-  const status = getModelRefStatus({
+  let status = getModelRefStatus({
     cfg: params.cfg,
     catalog: params.catalog,
     ref: resolved.ref,
     defaultProvider: params.defaultProvider,
     defaultModel: params.defaultModel,
   });
+
+  if (!status.allowed && !trimmed.includes("/")) {
+    // If a providerless model ID was resolved to the default provider but is not
+    // allowed there, check if it's uniquely allowed under another provider.
+    // This handles fallbacks and patches that omit the provider prefix when
+    // switching between heterogeneous providers (e.g. OpenAI -> Google).
+    const allowed = buildAllowedModelSet({
+      cfg: params.cfg,
+      catalog: params.catalog,
+      defaultProvider: params.defaultProvider,
+      defaultModel: params.defaultModel,
+    });
+    const modelId = trimmed.toLowerCase();
+    const candidateKeys = [...allowed.allowedKeys].filter((key) =>
+      key.toLowerCase().endsWith(`/${modelId}`),
+    );
+    if (candidateKeys.length === 1) {
+      const matchKey = candidateKeys[0];
+      const matchRef = parseModelRef(matchKey, "");
+      if (matchRef) {
+        return { ref: matchRef, key: matchKey };
+      }
+    }
+  }
+
   if (!status.allowed) {
     return { error: `model not allowed: ${status.key}` };
   }
