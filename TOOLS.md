@@ -1,108 +1,54 @@
 # TOOLS.md - Local Operational Notes
 
-This file stores environment-specific facts.
-Only put real local information here.
-Do not invent values.
-Do not copy long generic docs here.
-
-## How To Use This File
-
-Use this file for short facts that help operate the real setup faster.
-Examples:
-
-- important local paths
-- SSH aliases
-- hostnames
-- device nicknames
-- preferred models
-- ports
-- service names
-- gateway locations
-- sandbox notes
-- voices, speakers, microphones, cameras
-- common commands worth remembering
-
-If a note becomes a procedure, move it to a skill.
-
----
+This file stores environment-specific facts for OpenSkyNet.
 
 ## Workspace
 
-- Main workspace path: _(fill)_
-- Main repo path: _(fill)_
+- Main workspace path: `/home/daroch/openskynet`
+- Main repo path: `/home/daroch/openskynet`
 - Important project folders:
-  - _(fill)_
-  - _(fill)_
+  - `src/omega`: Core logic and Neural Logic Engine.
+  - `extensions/`: Messaging and service plugins.
+  - `assets/`: Official branding (logo, banner).
+  - `memory/`: Durable episodic records.
 
 ## Models
 
-- Default model: _(fill)_
-- Fallback model: _(fill)_
-- Fast cheap model: _(fill)_
-- Notes on model limits:
-  - _(fill)_
+- Default model: `ollama/gpt-oss-safeguard:20b`
+- Fallback model: `google-gemini-cli/gemini-3-flash-preview`
+- Fast cheap model: `ollama/gpt-oss-safeguard:20b`
+- Notes on model limits: Small models (<300B) are currently running without sandboxing (Security Warning active).
 
-## openskynet / Gateway
+## OpenSkyNet / Gateway
 
-- Gateway host: _(fill)_
-- Gateway port: _(fill)_
-- Config path: _(fill)_
-- Session/log path: _(fill)_
-- Sandbox mode: _(fill)_
-- Important runtime notes:
-  - _(fill)_
+- Gateway host: `127.0.0.1`
+- Gateway port: `18789`
+- Config path: Internal JSON5 managed by OpenClaw.
+- Session/log path: `openskynet-gateway.log`
+- Sandbox mode: `off`
+- Important runtime notes: Running on Node `v22.22.1` via NVM.
 
 ## SSH / Machines
 
-- Primary machine alias: _(fill)_
-- Secondary machine alias: _(fill)_
-- Remote notes:
-  - _(fill)_
+- Primary machine alias: `DAROCHIN-PC` (WSL2)
+- Remote notes: GitHub repo linked at `git@github.com:skynet-omega/openskynet.git`.
 
 ## Devices
 
-### Cameras
-
-- _(fill)_
-
-### Audio
-
-- Preferred microphone: _(fill)_
-- Preferred speaker: _(fill)_
-- Preferred TTS voice: _(fill)_
-
 ### Mobile / Nodes
 
-- iPhone / iPad notes: _(fill)_
-- Android notes: _(fill)_
-- macOS app notes: _(fill)_
+- WhatsApp: Linked (+56988208988). Active and healthy.
 
 ## Common Commands
 
-Only add commands that are safe and repeatedly useful.
-
-- Start gateway: `_(fill)_`
-- Check gateway: `_(fill)_`
-- Run local agent: `_(fill)_`
-- Tail logs: `_(fill)_`
+- Check status: `bash -i -c "nvm use 22 && ./openclaw.mjs status"`
+- Start gateway: `bash -i -c "nvm use 22 && ./openclaw.mjs gateway start"`
+- Run tests: `bash -i -c "nvm use 22 && pnpm test <path>"`
+- Update system: `bash -i -c "nvm use 22 && ./openclaw.mjs update"`
 
 ## Safety Notes
 
-- Never store secrets here in plain text.
-- Never store tokens, passwords, API keys, private URLs, or recovery codes.
-- If a value is sensitive, store only a hint such as where it lives.
-
-## Good Examples
-
-- "Gateway logs live in /var/log/openskynet/\*.log"
-- "Use ssh lab-box for the GPU machine"
-- "Default voice is Nova on office speaker"
-
-## Bad Examples
-
-- full private keys
-- full API tokens
-- giant copied manuals
-- speculative values
+- Gateway auth token is currently short (6 chars). Prefer lengthening for production.
+- Small models are exposed to host environment; avoid untrusted inputs in this mode.
 
 _Last updated: 2026-03-23_

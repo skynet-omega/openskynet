@@ -2,7 +2,7 @@
 
 ![Banner](assets/banner.png)
 
-OpenSkyNet es una evolución científica y práctica de **SKYNET_OMEGA**, construida sobre la base de [OpenClaw](https://github.com/openclaw/openclaw).
+OpenSkyNet es una evolución científica y práctica de **OpenClaw**, construida sobre la base de [OpenClaw](https://github.com/openclaw/openclaw).
 
 Este proyecto se enfoca en la autonomía real, el razonamiento causal y la validación empírica de sistemas de IA, alejándose de las interfaces de chat genéricas para convertirse en un asistente de ingeniería y ciencia robusto.
 
@@ -26,6 +26,8 @@ Aunque OpenSkyNet hereda la potente arquitectura de OpenClaw, introduce:
 
 Consulte los scripts en `scripts/install.sh` para entornos Linux/WSL.
 
----
+## Gracias a OpenClaw
+
+## 🦞 openclaw (https://openclaw.ai/)
 
 _OpenSkyNet: Turn ambiguous ideas into tested, useful, reproducible progress._
