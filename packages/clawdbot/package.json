@@ -11,6 +11,6 @@
     "./cli-entry": "./bin/skynetbot.js"
   },
   "dependencies": {
-    "openskynet": "workspace:*"
+    "openclaw": "workspace:*"
   }
 }
