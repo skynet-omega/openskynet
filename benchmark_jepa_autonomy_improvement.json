@@ -1,0 +1,31 @@
+{
+  "timestamp": "2026-03-23T19:26:33.118Z",
+  "results": [
+    {
+      "scenario": "High Success (70%)",
+      "frustration": 0.8,
+      "autonomousWithout": 20,
+      "autonomousWith": 100,
+      "improvement": 400
+    },
+    {
+      "scenario": "Medium Success (50%)",
+      "frustration": 1,
+      "autonomousWithout": 30,
+      "autonomousWith": 100,
+      "improvement": 233.33333333333334
+    },
+    {
+      "scenario": "Low Success (30%)",
+      "frustration": 1.4,
+      "autonomousWithout": 20,
+      "autonomousWith": 100,
+      "improvement": 400
+    }
+  ],
+  "interpretation": {
+    "avgImprovement": 344.4444444444445,
+    "positiveCases": 3,
+    "totalScenarios": 3
+  }
+}

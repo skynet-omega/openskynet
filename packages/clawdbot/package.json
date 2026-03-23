@@ -1,16 +1,16 @@
 {
-  "name": "clawdbot",
+  "name": "skynetbot",
   "version": "2026.2.12",
-  "description": "Compatibility shim that forwards to openclaw",
+  "description": "Compatibility shim that forwards to openskynet",
   "bin": {
-    "clawdbot": "./bin/clawdbot.js"
+    "skynetbot": "./bin/skynetbot.js"
   },
   "type": "module",
   "exports": {
     ".": "./index.js",
-    "./cli-entry": "./bin/clawdbot.js"
+    "./cli-entry": "./bin/skynetbot.js"
   },
   "dependencies": {
-    "openclaw": "workspace:*"
+    "openskynet": "workspace:*"
   }
 }

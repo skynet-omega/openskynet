@@ -6,7 +6,23 @@ import { HolographicMemoryManager } from "./holographic-memory.js";
 import { getNeuralLogicEngine } from "./neural-logic-engine.js";
 
 const execAsync = promisify(exec);
-// ... [otras importaciones]
+
+export type DriveKind = "homeostasis" | "curiosity" | "entropy_alert" | "resilience_retry" | "idle";
+
+export interface DriveSignal {
+  kind: DriveKind;
+  urgency: number; // 0.0 to 1.0
+  reason: string;
+  context?: string;
+}
+
+export type AutonomousActionResult =
+  | { kind: "none"; reason: string }
+  | { kind: "memory_explored"; target: string; findings: string[] }
+  | { kind: "sessions_cleaned"; count: number }
+  | { kind: "status_check"; status: "healthy" | "degraded"; issues: string[] }
+  | { kind: "resilience_triggered"; context: string }
+  | { kind: "error"; error: string };
 
 export async function runHomeostasisDaemon(workspaceRoot: string): Promise<void> {
   const now = Date.now();
@@ -14,18 +30,31 @@ export async function runHomeostasisDaemon(workspaceRoot: string): Promise<void>
   const nle = getNeuralLogicEngine();
   await memory.initialize();
 
-  // 1. Derive state directly from Holographic Memory (No JSON state file)
+  // 1. Monitor Logs for Critical Failures (The Resilience Loop)
+  const criticalFailure = await scanForCriticalFailures(workspaceRoot);
+
+  // 2. Derive state directly from Holographic Memory
   const { lastActivity, failureStreak, lastInferenceState } = await deriveStateFromMemory(
     workspaceRoot,
     now,
   );
 
-  // ... [evaluar drives]
+  // 3. Evaluate "Drives" (Internal tensions)
+  const silenceMs = now - lastActivity;
+  const drive = evaluateIntrinsicDrives(silenceMs, failureStreak, criticalFailure);
 
-  // 3. Execute homeostasis/curiosity action
+  if (drive.kind === "idle" || (drive.urgency < 0.3 && !criticalFailure)) {
+    return;
+  }
+
+  // 4. Execute Action
   let action: AutonomousActionResult;
   try {
-    action = await executeIntrinsicAction(drive, workspaceRoot, memory);
+    if (drive.kind === "resilience_retry" && drive.context) {
+      action = { kind: "resilience_triggered", context: drive.context };
+    } else {
+      action = await executeIntrinsicAction(drive, workspaceRoot, memory);
+    }
 
     // BACKPROPAGATION: Reward NLE if action was successful
     if (lastInferenceState?.activeRules) {
@@ -35,8 +64,6 @@ export async function runHomeostasisDaemon(workspaceRoot: string): Promise<void>
     }
   } catch (error) {
     action = { kind: "error", error: String(error) };
-
-    // BACKPROPAGATION: Penalize NLE if action failed
     if (lastInferenceState?.activeRules) {
       for (const ruleId of lastInferenceState.activeRules) {
         nle.penalizeRule(ruleId, 0.1);
@@ -44,35 +71,54 @@ export async function runHomeostasisDaemon(workspaceRoot: string): Promise<void>
     }
   }
 
-  // 4. Log the Execution to Memory as a System Event trigger
-  const eventMetadata = {
+  // 5. Fossilize and Emit Wake Event
+  const content = `[Daemon] Activated drive: ${drive.kind} (${drive.urgency.toFixed(2)}). Reason: ${drive.reason}`;
+
+  await memory.fossilize(content, {
     domain: "homeostasis",
     driveKind: drive.kind,
     urgency: drive.urgency,
-    actionKind: action.kind,
-    isError: action.kind === "error",
+    isError: action.kind === "error" || !!criticalFailure,
     timestamp: now,
-  };
+  });
 
-  const actionDetails = action.kind === "error" ? action.error : JSON.stringify(action);
-  const content = `[Daemon] Activated drive: ${drive.kind} (${drive.urgency.toFixed(2)}). Action: ${action.kind}. Details: ${actionDetails}`;
-
-  await memory.fossilize(content, eventMetadata);
-
-  // 5. Emit real System Events for Omega to perceive via gateway cron or log
   try {
-    const openclaw = process.argv[1].includes("openclaw") ? process.argv[1] : "openclaw";
-    await execAsync(`${openclaw} cron wake --mode next-heartbeat "${content}"`, {
+    // Resilience alerts are priority: they are injected as hard instructions
+    const wakeMessage = criticalFailure
+      ? `🚨 OMEGA RESILIENCE LOOP: Detectado fallo [${criticalFailure}]. Acción requerida: ${drive.reason}`
+      : content;
+
+    await execAsync(`openclaw cron wake --mode next-heartbeat "${wakeMessage}"`, {
       cwd: workspaceRoot,
     });
   } catch (err) {
-    // Ignore wake emission errors if service is down
+    // Ignore wake emission errors
+  }
+}
+
+async function scanForCriticalFailures(workspaceRoot: string): Promise<string | null> {
+  try {
+    // Intentamos leer el log del gateway para detectar errores de sincronización o rate limits
+    // Usamos tail para ser eficientes
+    const logPath = path.join(workspaceRoot, ".openskynet", "gateway.log");
+    const { stdout } = await execAsync(`tail -n 100 "${logPath}"`).catch(() => ({ stdout: "" }));
+
+    if (stdout.includes("edit failed: Error: Could not find the exact text")) {
+      return "SYNC_ERROR_OLD_TEXT_MISMATCH";
+    }
+    if (stdout.includes("status 429") || stdout.includes("Rate limit reached")) {
+      return "API_RATE_LIMIT_BURST";
+    }
+    return null;
+  } catch {
+    return null;
   }
 }
 
 async function deriveStateFromMemory(workspaceRoot: string, now: number) {
-  let lastActivity = now; // Default to now if no memory
+  let lastActivity = now;
   let failureStreak = 0;
+  let lastInferenceState: any = null;
 
   try {
     const memoryFile = path.join(workspaceRoot, ".openskynet", "holographic-memory.json");
@@ -91,28 +137,57 @@ async function deriveStateFromMemory(workspaceRoot: string, now: number) {
         }
       }
     }
-  } catch (e) {
-    // If memory doesn't exist or is invalid, assume fresh start
-  }
+  } catch (e) {}
 
-  return { lastActivity, failureStreak };
+  return { lastActivity, failureStreak, lastInferenceState };
 }
 
-function evaluateIntrinsicDrives(silenceMs: number, failureStreak: number): DriveSignal {
-  if (failureStreak >= 3) {
-    return { kind: "homeostasis", urgency: 0.8, reason: `${failureStreak} consecutive failures` };
+function evaluateIntrinsicDrives(
+  silenceMs: number,
+  failureStreak: number,
+  criticalFailure: string | null,
+): DriveSignal {
+  // Resilience Loop Priority
+  if (criticalFailure === "SYNC_ERROR_OLD_TEXT_MISMATCH") {
+    return {
+      kind: "resilience_retry",
+      urgency: 0.98,
+      reason:
+        "El último intento de edición falló por desincronización. Debes ejecutar 'read' del archivo completo antes de intentar cualquier otro cambio.",
+      context: criticalFailure,
+    };
   }
+  if (criticalFailure === "API_RATE_LIMIT_BURST") {
+    return {
+      kind: "resilience_retry",
+      urgency: 0.85,
+      reason: "Se detectó un rate limit. Retomando la tarea con precaución.",
+      context: criticalFailure,
+    };
+  }
+
+  // Homeostasis Priority
+  if (failureStreak >= 3) {
+    return {
+      kind: "homeostasis",
+      urgency: 0.9,
+      reason: `${failureStreak} fallos consecutivos en tareas autónomas.`,
+    };
+  }
+
+  // Idle/Curiosity
   if (silenceMs > 60 * 60 * 1000) {
-    return { kind: "entropy_alert", urgency: 0.6, reason: "Prolonged silence detected" };
+    return { kind: "entropy_alert", urgency: 0.6, reason: "Silencio prolongado detectado." };
   }
   if (silenceMs > 8 * 60 * 1000) {
     return {
       kind: "curiosity",
       urgency: 0.4,
-      reason: `${Math.floor(silenceMs / 60000)} minutes of inactivity`,
+      reason: "Inactividad detectada, verificando estado de memoria.",
     };
   }
-  return { kind: "idle", urgency: 0, reason: "System stable" };
+
+  return { kind: "idle", urgency: 0, reason: "Sistema estable." };
 }
 
 async function executeIntrinsicAction(
@@ -125,8 +200,6 @@ async function executeIntrinsicAction(
       return await executeHomeostasisAction(workspaceRoot);
     case "curiosity":
       return await executeCuriosityAction(workspaceRoot, memory);
-    case "entropy_alert":
-      return await executeEntropyAction(workspaceRoot);
     default:
       return { kind: "none", reason: "unknown_drive" };
   }
@@ -140,8 +213,8 @@ async function executeHomeostasisAction(workspaceRoot: string): Promise<Autonomo
       timeout: 10000,
     });
     const sessionCount = parseInt(stdout.trim(), 10) || 0;
-    if (sessionCount > 50) {
-      issues.push(`Too many sessions: ${sessionCount}`);
+    if (sessionCount > 30) {
+      issues.push(`Exceso de sesiones: ${sessionCount}. Ejecutando limpieza.`);
       try {
         await execAsync("openclaw sessions cleanup", { cwd: workspaceRoot, timeout: 30000 });
       } catch {}
@@ -155,11 +228,10 @@ async function executeCuriosityAction(
   memory: HolographicMemoryManager,
 ): Promise<AutonomousActionResult> {
   try {
-    // Simulate reading something randomly from resonance
     const dummyEmbedding = Array(768)
       .fill(0)
       .map(() => Math.random() - 0.5);
-    const res = await memory.resonance(dummyEmbedding, 3);
+    const res = await memory.resonance(dummyEmbedding, 2);
     return {
       kind: "memory_explored",
       target: "holographic-memory",
@@ -168,12 +240,4 @@ async function executeCuriosityAction(
   } catch {
     return { kind: "memory_explored", target: "holographic-memory", findings: [] };
   }
-}
-
-async function executeEntropyAction(workspaceRoot: string): Promise<AutonomousActionResult> {
-  return {
-    kind: "experiment_proposed",
-    hypothesis: "Review logic engine triggers and semantic vectors",
-    testable: true,
-  };
 }
