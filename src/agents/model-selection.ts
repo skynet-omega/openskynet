@@ -420,11 +420,32 @@ export function resolveDefaultModelForAgent(params: {
 function resolveAllowedFallbacks(params: { cfg: OpenClawConfig; agentId?: string }): string[] {
   if (params.agentId) {
     const override = resolveAgentModelFallbacksOverride(params.cfg, params.agentId);
-    if (override !== undefined) {
+    if (override !== undefined && override.length > 0) {
       return override;
     }
   }
-  return resolveAgentModelFallbackValues(params.cfg.agents?.defaults?.model);
+
+  const explicitFallbacks = resolveAgentModelFallbackValues(params.cfg.agents?.defaults?.model);
+  if (explicitFallbacks.length > 0) {
+    return explicitFallbacks;
+  }
+
+  // Auto-infer fallback models purely from the user's active provider configuration
+  // so Open Source users don't need hardcoded arrays in the repo.
+  const primaryRef = resolveDefaultModelForAgent(params);
+  const providerCfg = params.cfg.models?.providers?.[primaryRef.provider];
+
+  if (providerCfg && Array.isArray(providerCfg.models)) {
+    const dynamicallyInferred: string[] = [];
+    for (const modelDef of providerCfg.models) {
+      if (modelDef.id && modelDef.id !== primaryRef.model) {
+        dynamicallyInferred.push(`${primaryRef.provider}/${modelDef.id}`);
+      }
+    }
+    return dynamicallyInferred;
+  }
+
+  return [];
 }
 
 export function resolveSubagentConfiguredModelSelection(params: {

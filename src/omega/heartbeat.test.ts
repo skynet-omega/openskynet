@@ -39,8 +39,8 @@ function createDeps(overrides: Partial<OmegaHeartbeatCycleDeps> = {}): OmegaHear
     sendAgentTurn: vi.fn(async () => undefined),
     appendConsciousnessLog: vi.fn(async () => undefined),
     applyExecutiveAction: vi.fn(async () => ({
-      kind: "none",
-      wakeAction: { kind: "heartbeat_ok", reason: "none" },
+      kind: "none" as const,
+      wakeAction: { kind: "heartbeat_ok" as const, reason: "none" },
     })),
     readLatestReply: vi.fn(async () => undefined),
     recordMetric: vi.fn(async () => undefined),
@@ -77,17 +77,17 @@ describe("omega heartbeat", () => {
     const workspaceRoot = await createWorkspaceRoot();
     const deps = createDeps({
       applyExecutiveAction: vi.fn(async () => ({
-        kind: "resumed_interrupted_goal",
+        kind: "resumed_interrupted_goal" as const,
         wakeAction: {
-          kind: "resume_interrupted_goal",
+          kind: "resume_interrupted_goal" as const,
           reason: "verified_failure_requires_followup",
           goalTask: "patch target file",
           goalTargets: ["src/omega/heartbeat.ts"],
           failureStreak: 1,
-          suggestedRoute: "omega_delegate",
+          suggestedRoute: "omega_delegate" as const,
         },
-        route: "omega_delegate",
-        status: "ok",
+        route: "omega_delegate" as const,
+        status: "ok" as const,
         observedChangedFiles: ["src/omega/heartbeat.ts"],
       })),
     });
@@ -574,6 +574,17 @@ describe("omega heartbeat", () => {
         .mockResolvedValueOnce(undefined),
       loadRuntimeSnapshot: vi.fn(async () => snapshots.shift() ?? snapshots[0]!),
       readLatestReply: vi.fn(async () => undefined),
+      applyExecutiveAction: vi.fn(async () => ({
+        kind: "none" as const,
+        wakeAction: {
+          kind: "resume_interrupted_goal" as const,
+          reason: "followup",
+          goalTask: "task",
+          goalTargets: [],
+          failureStreak: 0,
+          suggestedRoute: "omega_delegate" as const,
+        },
+      })),
     });
 
     const result = await runOneHeartbeatCycleWithDeps({ workspaceRoot, sessionKey: "main" }, deps);
@@ -644,11 +655,12 @@ describe("omega heartbeat", () => {
             readLatestReplyMs: 0,
             totalMs: 500,
           },
-        },
-        turnPolicy: {
-          continueDelayMs: 7500,
-          shouldBackoff: true,
-          turnHealth: "stalled",
+          decision: {
+            shouldContinue: true,
+            stopReason: "continue",
+            replyHeartbeatOk: false,
+            structuredIdleDetected: false,
+          },
         },
       });
     }
@@ -716,11 +728,12 @@ describe("omega heartbeat", () => {
             readLatestReplyMs: 100,
             totalMs: 2_000,
           },
-        },
-        turnPolicy: {
-          continueDelayMs: 7500,
-          shouldBackoff: true,
-          turnHealth: "stalled",
+          decision: {
+            shouldContinue: true,
+            stopReason: "continue",
+            replyHeartbeatOk: false,
+            structuredIdleDetected: false,
+          },
         },
       });
     }

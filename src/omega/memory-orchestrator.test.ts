@@ -13,6 +13,7 @@ describe("summarizeOmegaMemoryOrchestration", () => {
           observedChangedFiles: ["src/app.ts"],
           successCount: 2,
           failureCount: 0,
+          learnedConstraints: [],
           firstSeenAt: 1,
           lastSeenAt: 2,
           lastOutcomeStatus: "ok",

@@ -12,6 +12,7 @@ export {
 export {
   loadOmegaEmpiricalMetrics,
   recordOmegaBackgroundActionMetrics,
+  recordOmegaHeartbeatCycleMetrics,
   recordOmegaRouteMetrics,
   recordOmegaValidationMetrics,
   resolveOmegaEmpiricalMetricsFile,
@@ -91,6 +92,7 @@ export {
   buildAutonomousDirectivePrompt,
   type InnerDriveSignal,
 } from "./inner-life/index.js";
+export { processIntegratedBrain, formatInternalReflection } from "./integrated-brain.js";
 export {
   executeAutonomousAction,
   runAutonomousCycle,

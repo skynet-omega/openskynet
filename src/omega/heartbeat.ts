@@ -1,8 +1,18 @@
-import fs from "node:fs/promises";
-import path from "node:path";
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import { getActiveLearningStrategy } from "./active-learning-strategy.js";
 import { runAutonomousCycle } from "./autonomous-executor.js";
 import { getContinuousThinkingEngine } from "./continuous-thinking-engine.js";
+import {
+  loadOmegaEmpiricalMetrics,
+  recordOmegaBackgroundActionMetrics,
+  recordOmegaHeartbeatCycleMetrics,
+  recordOmegaRouteMetrics,
+  recordOmegaValidationMetrics,
+  resolveOmegaEmpiricalMetricsFile,
+  type OmegaEmpiricalMetrics,
+  type OmegaEmpiricalRoute,
+} from "./empirical-metrics.js";
 import { getEntropyMinimizationLoop } from "./entropy-minimization-loop.js";
 import { decideOmegaWakeAction } from "./frontal/wake-policy.js";
 import { evaluateInnerDrives, buildAutonomousDirectivePrompt } from "./inner-life/index.js";
@@ -15,7 +25,11 @@ import {
   loadOmegaOperationalMemoryTail,
   summarizeOmegaOperationalMemory,
 } from "./operational-memory.js";
-import { resumeInterruptedOmegaGoal } from "./recovery-runner.js";
+import {
+  resumeInterruptedOmegaGoal,
+  type OmegaAutonomousRecoveryResult,
+} from "./recovery-runner.js";
+import { queryScienceBase } from "./science-base-rag.js";
 import {
   focusActiveOmegaGoalTargets,
   loadOmegaSelfTimeKernel,
@@ -25,6 +39,7 @@ import {
   pruneSupersededOmegaGoals,
 } from "./session-context.js";
 import { deriveFocusedActiveTargets } from "./session-context.js";
+import { type OmegaSessionTaskFailure } from "./session-task.js";
 
 /**
  * Recolecta candidatos de memoria para exploración por la drive de curiosidad.
@@ -287,6 +302,32 @@ export async function buildOmegaHeartbeatPrompt(params: {
     );
   }
 
+  // --- RAG: Inject relevant SCIENCE_BASE.md knowledge ---
+  let taskToQuery = "";
+  if ("goalTask" in wakeAction) {
+    taskToQuery = wakeAction.goalTask;
+  } else if ("goalTasks" in wakeAction && wakeAction.goalTasks.length > 0) {
+    taskToQuery = wakeAction.goalTasks[0];
+  }
+
+  if (taskToQuery) {
+    const relevantRules = await queryScienceBase({
+      workspaceRoot: params.workspaceRoot,
+      query: taskToQuery,
+      maxRules: 3,
+    });
+    if (relevantRules.length > 0) {
+      lines.push("");
+      lines.push("--- EMPIRICAL KNOWLEDGE (SCIENCE_BASE.md RAG) ---");
+      lines.push("The following rules were previously learned and verified for similar tasks:");
+      for (const rule of relevantRules) {
+        lines.push(rule); // rule is a line from markdown
+      }
+      lines.push("Apply these rules if they match the current context.");
+    }
+  }
+
+  lines.push("");
   lines.push("If no user-facing update is needed after inspection, reply HEARTBEAT_OK.");
   return lines.join("\n");
 }
@@ -353,13 +394,14 @@ export async function applyOmegaHeartbeatExecutiveAction(params: {
       requesterAgentIdOverride: params.requesterAgentIdOverride,
     });
     if (resumed.kind === "resumed_interrupted_goal") {
+      const exec = resumed.execution;
       return {
         kind: "resumed_interrupted_goal",
         wakeAction,
         route: resumed.route,
-        status: resumed.execution.ok ? "ok" : resumed.execution.status,
-        errorKind: resumed.execution.ok ? undefined : resumed.execution.errorKind,
-        observedChangedFiles: resumed.execution.observedChangedFiles,
+        status: exec.ok ? "ok" : (exec as OmegaSessionTaskFailure).status,
+        errorKind: exec.ok ? undefined : (exec as OmegaSessionTaskFailure).errorKind,
+        observedChangedFiles: exec.observedChangedFiles,
       };
     }
   }
@@ -778,9 +820,17 @@ export async function runOneHeartbeatCycleWithDeps(
 
   await deps.ensureDirectories({ workspaceRoot });
 
+  void recordOmegaHeartbeatCycleMetrics({ workspaceRoot, started: true }).catch(() => undefined);
+
   // Fase 1: acción ejecutiva (no requiere LLM)
   const execResult = await deps.applyExecutiveAction({ workspaceRoot, sessionKey });
   const lastWakeActionKind = execResult.wakeAction.kind;
+
+  void recordOmegaHeartbeatCycleMetrics({
+    workspaceRoot,
+    executiveAction: true,
+    usefulExecutiveAction: execResult.kind !== "none",
+  }).catch(() => undefined);
 
   // Terminación estructurada: executive recovery completó sin necesitar LLM
   if (
@@ -792,12 +842,20 @@ export async function runOneHeartbeatCycleWithDeps(
     execResult.kind === "aborted_interrupted_goal" ||
     execResult.kind === "reframed_stalled_goal"
   ) {
+    void recordOmegaHeartbeatCycleMetrics({
+      workspaceRoot,
+      completed: true,
+      structuredTermination: true,
+    }).catch(() => undefined);
     return { iterations: 0, stopReason: "structured_idle", lastWakeActionKind };
   }
 
   // Fase 2: generar prompt para ciclo de razonamiento
   const prompt = await deps.buildPrompt({ workspaceRoot, sessionKey });
   if (!prompt) {
+    void recordOmegaHeartbeatCycleMetrics({ workspaceRoot, completed: true }).catch(
+      () => undefined,
+    );
     return { iterations: 0, stopReason: "no_prompt", lastWakeActionKind };
   }
 
@@ -840,5 +898,35 @@ export async function runOneHeartbeatCycleWithDeps(
     }
   }
 
+  void recordOmegaHeartbeatCycleMetrics({
+    workspaceRoot,
+    completed: true,
+    textTokenTermination: stopReason === "reply_heartbeat_ok",
+    iterations,
+  }).catch(() => undefined);
+
   return { iterations, stopReason, lastWakeActionKind };
+}
+
+/**
+ * Snapshots y utilidades para tests
+ */
+export function createDefaultHeartbeatDeps(
+  overrides: Partial<OmegaHeartbeatCycleDeps> = {},
+): OmegaHeartbeatCycleDeps {
+  return {
+    buildPrompt: async () => undefined,
+    loadRuntimeSnapshot: async () => ({ timeline: [], kernel: undefined }),
+    sendAgentTurn: async () => undefined,
+    appendConsciousnessLog: async () => undefined,
+    applyExecutiveAction: async () => ({
+      kind: "none" as const,
+      wakeAction: { kind: "heartbeat_ok" as const, reason: "none" },
+    }),
+    readLatestReply: async () => undefined,
+    recordMetric: async () => undefined,
+    ensureDirectories: async () => undefined,
+    sleep: async () => undefined,
+    ...overrides,
+  };
 }

@@ -12,8 +12,16 @@ export type OmegaPolicySnapshot = {
   driveSignal: InnerDriveSignal;
   shouldRunAutonomy: boolean;
   needsRecoveryAttention: boolean;
-  // Note: integratedState removed — experimental module does not exist yet
+  integratedState?: any;
 };
+
+export async function getOmegaPolicySnapshot(params: any): Promise<OmegaPolicySnapshot> {
+  const snapshot = deriveOmegaPolicySnapshot({
+    kernel: params.kernel,
+    operationalSummary: params.operationalSummary,
+  });
+  return snapshot;
+}
 
 export type OmegaHeartbeatTurnPolicy = {
   continueDelayMs: number;

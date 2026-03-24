@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { withEnvAsync } from "../test-utils/env.js";
+import { admitOmegaDurableMemory } from "./durable-memory.js";
 import { recordOmegaRecoveryStrategyMetrics } from "./empirical-metrics.js";
 import { buildIdleOmegaHeartbeatPrompt } from "./heartbeat-idle.js";
 import { recordOmegaOperationalTurnMemory } from "./operational-memory.js";
@@ -23,6 +24,18 @@ describe("omega world model", () => {
 
   it("builds a persisted world model from verified outcomes", async () => {
     await recordOmegaSessionOutcome({
+      workspaceRoot,
+      sessionKey,
+      task: "Fix session continuity bug",
+      validation: { expectsJson: false, expectedKeys: [], expectedPaths: ["src/session.ts"] },
+      outcome: {
+        status: "ok",
+        observedChangedFiles: ["src/session.ts"],
+        writeOk: true,
+      },
+    });
+
+    await admitOmegaDurableMemory({
       workspaceRoot,
       sessionKey,
       task: "Fix session continuity bug",
@@ -170,17 +183,17 @@ describe("omega world model", () => {
     });
     await recordOmegaRecoveryStrategyMetrics({
       workspaceRoot,
-      strategyKey: "target_not_touched|single_target|contained|omega_delegate",
+      strategy: "target_not_touched|single_target|contained|omega_delegate",
       success: true,
     });
     await recordOmegaRecoveryStrategyMetrics({
       workspaceRoot,
-      strategyKey: "target_not_touched|single_target|contained|omega_delegate",
+      strategy: "target_not_touched|single_target|contained|omega_delegate",
       success: true,
     });
     await recordOmegaRecoveryStrategyMetrics({
       workspaceRoot,
-      strategyKey: "target_not_touched|single_target|contained|sessions_spawn",
+      strategy: "target_not_touched|single_target|contained|sessions_spawn",
       success: false,
     });
 
@@ -210,17 +223,17 @@ describe("omega world model", () => {
     });
     await recordOmegaRecoveryStrategyMetrics({
       workspaceRoot,
-      strategyKey: "target_not_touched|single_target|collateral|omega_delegate",
+      strategy: "target_not_touched|single_target|collateral|omega_delegate",
       success: false,
     });
     await recordOmegaRecoveryStrategyMetrics({
       workspaceRoot,
-      strategyKey: "target_not_touched|single_target|contained|sessions_spawn",
+      strategy: "target_not_touched|single_target|contained|sessions_spawn",
       success: true,
     });
     await recordOmegaRecoveryStrategyMetrics({
       workspaceRoot,
-      strategyKey: "target_not_touched|single_target|contained|sessions_spawn",
+      strategy: "target_not_touched|single_target|contained|sessions_spawn",
       success: true,
     });
 
@@ -246,7 +259,7 @@ describe("omega world model", () => {
   });
 
   it("derives an isolation bias from repeated low-locality failures", async () => {
-    await recordOmegaSessionOutcome({
+    await admitOmegaDurableMemory({
       workspaceRoot,
       sessionKey,
       task: "Patch isolated config path",
@@ -254,13 +267,13 @@ describe("omega world model", () => {
       outcome: {
         status: "error",
         errorKind: "unexpected_collateral_writes",
-        observedChangedFiles: ["src/config.ts", "src/other.ts"],
+        observedChangedFiles: ["src/config.ts", "src/other.ts", "src/protected.ts"],
         writeOk: false,
         localityScore: 0.3,
-        protectedPreservationRate: 0.2,
+        // protectedPreservationRate: 0.2,
       },
     });
-    await recordOmegaSessionOutcome({
+    await admitOmegaDurableMemory({
       workspaceRoot,
       sessionKey,
       task: "Patch isolated config path",
@@ -268,10 +281,10 @@ describe("omega world model", () => {
       outcome: {
         status: "error",
         errorKind: "unexpected_collateral_writes",
-        observedChangedFiles: ["src/config.ts", "src/other.ts"],
+        observedChangedFiles: ["src/config.ts", "src/other.ts", "src/protected.ts"],
         writeOk: false,
         localityScore: 0.3,
-        protectedPreservationRate: 0.2,
+        // protectedPreservationRate: 0.2,
       },
     });
 
@@ -305,10 +318,10 @@ describe("omega world model", () => {
         observedChangedFiles: ["src/config.ts", "src/unrelated.ts"],
         writeOk: false,
         localityScore: 0.25,
-        protectedPreservationRate: 0.1,
+        // protectedPreservationRate: 0.1,
       },
     });
-    await recordOmegaSessionOutcome({
+    await admitOmegaDurableMemory({
       workspaceRoot,
       sessionKey,
       task: "Patch isolated config path",
@@ -324,7 +337,26 @@ describe("omega world model", () => {
         observedChangedFiles: ["src/config.ts", "src/unrelated.ts"],
         writeOk: false,
         localityScore: 0.25,
-        protectedPreservationRate: 0.1,
+        // protectedPreservationRate: 0.1,
+      },
+    });
+    await admitOmegaDurableMemory({
+      workspaceRoot,
+      sessionKey,
+      task: "Patch isolated config path",
+      validation: {
+        expectsJson: false,
+        expectedKeys: [],
+        expectedPaths: ["src/config.ts"],
+        watchedPaths: ["src/config.ts", "src/unrelated.ts"],
+      },
+      outcome: {
+        status: "error",
+        errorKind: "unexpected_collateral_writes",
+        observedChangedFiles: ["src/config.ts", "src/unrelated.ts"],
+        writeOk: false,
+        localityScore: 0.25,
+        // protectedPreservationRate: 0.1,
       },
     });
 
@@ -350,6 +382,12 @@ describe("omega world model", () => {
       turn: {
         iteration: 3,
         terminationReason: "reply_heartbeat_ok",
+        decision: {
+          shouldContinue: false,
+          stopReason: "reply_heartbeat_ok",
+          replyHeartbeatOk: true,
+          structuredIdleDetected: false,
+        },
         stateDelta: {
           timelineDelta: 0,
           kernelUpdated: false,
@@ -364,6 +402,7 @@ describe("omega world model", () => {
       },
       turnPolicy: {
         turnHealth: "resolved",
+        shouldBackoff: false,
       },
     });
 

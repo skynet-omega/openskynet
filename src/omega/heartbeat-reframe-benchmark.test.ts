@@ -73,6 +73,12 @@ async function seedPartialProgressWall(params: {
       turn: {
         iteration,
         terminationReason: "continue",
+        decision: {
+          shouldContinue: true,
+          stopReason: "continue",
+          replyHeartbeatOk: false,
+          structuredIdleDetected: false,
+        },
         stateDelta: {
           timelineDelta: 0,
           kernelUpdated: false,
@@ -86,7 +92,6 @@ async function seedPartialProgressWall(params: {
         },
       },
       turnPolicy: {
-        continueDelayMs: 7_500,
         shouldBackoff: true,
         turnHealth: "stalled",
       },

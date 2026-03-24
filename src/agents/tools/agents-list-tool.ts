@@ -4,6 +4,7 @@ import {
   DEFAULT_AGENT_ID,
   normalizeAgentId,
   parseAgentSessionKey,
+  resolveAgentIdFromSessionKey,
 } from "../../routing/session-key.js";
 import { resolveAgentConfig } from "../agent-scope.js";
 import type { AnyAgentTool } from "./common.js";
@@ -38,12 +39,11 @@ export function createAgentsListTool(opts?: {
               key: opts.agentSessionKey,
               alias,
               mainKey,
+              requesterSessionKey: opts.agentSessionKey,
             })
           : alias;
       const requesterAgentId = normalizeAgentId(
-        opts?.requesterAgentIdOverride ??
-          parseAgentSessionKey(requesterInternalKey)?.agentId ??
-          DEFAULT_AGENT_ID,
+        opts?.requesterAgentIdOverride ?? resolveAgentIdFromSessionKey(requesterInternalKey),
       );
 
       const allowAgents = resolveAgentConfig(cfg, requesterAgentId)?.subagents?.allowAgents ?? [];

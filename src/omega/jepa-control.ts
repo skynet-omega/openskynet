@@ -5,7 +5,7 @@ import type { OmegaJepaTensionResult } from "./types.js";
 export const OPENSKYNET_OMEGA_JEPA_CONTROL_ENV = "OPENSKYNET_OMEGA_JEPA_CONTROL";
 export const OPENSKYNET_OMEGA_JEPA_WARN_ENV = "OPENSKYNET_OMEGA_JEPA_WARN";
 
-type JepaLikeSignal = Pick<OmegaJepaTensionResult, "confidence" | "error">;
+type JepaLikeSignal = Pick<OmegaJepaTensionResult, "confidence" | "error" | "frustration">;
 
 /**
  * JEPA is observational by default. Control-path use must be explicit.

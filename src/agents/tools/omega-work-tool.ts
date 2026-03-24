@@ -339,7 +339,7 @@ export function createOmegaWorkTool(
       effectiveRoute = enhanceRouteWithLearnedRules({
         task: goalTask,
         proposedRoute: effectiveRoute,
-        failureStreak: sessionKernel.tension.failureStreak,
+        failureStreak: sessionKernel?.tension.failureStreak ?? 0,
         lastErrorKind:
           sessionTimeline.length > 0
             ? sessionTimeline[sessionTimeline.length - 1].outcome?.errorKind

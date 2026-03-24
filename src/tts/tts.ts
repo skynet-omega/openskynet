@@ -39,6 +39,7 @@ import {
   OPENAI_TTS_VOICES,
   resolveOpenAITtsInstructions,
   openaiTTS,
+  alltalkTTS,
   parseTtsDirectives,
   scheduleCleanup,
   summarizeText,
@@ -133,6 +134,10 @@ export type ResolvedTtsConfig = {
     saveSubtitles: boolean;
     proxy?: string;
     timeoutMs?: number;
+  };
+  alltalk: {
+    baseUrl: string;
+    voice: string;
   };
   prefsPath?: string;
   maxTextLength: number;
@@ -322,6 +327,10 @@ export function resolveTtsConfig(cfg: OpenClawConfig): ResolvedTtsConfig {
       saveSubtitles: raw.edge?.saveSubtitles ?? false,
       proxy: raw.edge?.proxy?.trim() || undefined,
       timeoutMs: raw.edge?.timeoutMs,
+    },
+    alltalk: {
+      baseUrl: raw.alltalk?.baseUrl?.trim() || "http://127.0.0.1:7851",
+      voice: raw.alltalk?.voice?.trim() || "female_01.wav",
     },
     prefsPath: raw.prefsPath,
     maxTextLength: raw.maxTextLength ?? DEFAULT_MAX_TEXT_LENGTH,
@@ -531,7 +540,7 @@ export function resolveTtsApiKey(
   return undefined;
 }
 
-export const TTS_PROVIDERS = ["openai", "elevenlabs", "edge"] as const;
+export const TTS_PROVIDERS = ["openai", "elevenlabs", "edge", "alltalk"] as const;
 
 export function resolveTtsProviderOrder(primary: TtsProvider): TtsProvider[] {
   return [primary, ...TTS_PROVIDERS.filter((provider) => provider !== primary)];
@@ -540,6 +549,9 @@ export function resolveTtsProviderOrder(primary: TtsProvider): TtsProvider[] {
 export function isTtsProviderConfigured(config: ResolvedTtsConfig, provider: TtsProvider): boolean {
   if (provider === "edge") {
     return config.edge.enabled;
+  }
+  if (provider === "alltalk") {
+    return true; // AllTalk relies on local connectivity, assume configured if selected
   }
   return Boolean(resolveTtsApiKey(config, provider));
 }
@@ -684,6 +696,33 @@ export async function textToSpeech(params: {
         };
       }
 
+      if (provider === "alltalk") {
+        const audioBuffer = await alltalkTTS({
+          text: params.text,
+          baseUrl: config.alltalk.baseUrl,
+          voice: config.alltalk.voice,
+          timeoutMs: config.timeoutMs,
+        });
+
+        const latencyMs = Date.now() - providerStart;
+
+        const tempRoot = resolvePreferredOpenClawTmpDir();
+        mkdirSync(tempRoot, { recursive: true, mode: 0o700 });
+        const tempDir = mkdtempSync(path.join(tempRoot, "tts-"));
+        const audioPath = path.join(tempDir, `voice-${Date.now()}.wav`);
+        writeFileSync(audioPath, audioBuffer);
+        scheduleCleanup(tempDir);
+
+        return {
+          success: true,
+          audioPath,
+          latencyMs,
+          provider,
+          outputFormat: "wav",
+          voiceCompatible: false,
+        };
+      }
+
       const apiKey = resolveTtsApiKey(config, provider);
       if (!apiKey) {
         errors.push(`${provider}: no API key`);
@@ -776,8 +815,8 @@ export async function textToSpeechTelephony(params: {
   for (const provider of providers) {
     const providerStart = Date.now();
     try {
-      if (provider === "edge") {
-        errors.push("edge: unsupported for telephony");
+      if (provider === "edge" || provider === "alltalk") {
+        errors.push(`${provider}: unsupported for telephony`);
         continue;
       }
 

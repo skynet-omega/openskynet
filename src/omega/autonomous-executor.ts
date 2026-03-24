@@ -15,6 +15,7 @@ import { promisify } from "node:util";
 import type { InnerDriveSignal } from "./inner-life/drives.js";
 import { evaluateInnerDrives } from "./inner-life/drives.js";
 import { runResearchLoop, hasRecentResearchProse } from "./research-loop.js";
+import { compressScienceBase } from "./science-base-compressor.js";
 import type { OmegaSelfTimeKernelState } from "./self-time-kernel.js";
 import { loadOmegaSelfTimeKernel, recordOmegaSessionOutcome } from "./session-context.js";
 
@@ -25,6 +26,7 @@ export type AutonomousActionResult =
   | { kind: "sessions_cleaned"; count: number }
   | { kind: "status_check"; status: string; issues: string[] }
   | { kind: "experiment_proposed"; hypothesis: string; testable: boolean }
+  | { kind: "science_base_compressed"; originalLines: number; newLines: number }
   | { kind: "none"; reason: string };
 
 export type AutonomousExecution = {
@@ -167,10 +169,21 @@ export async function executeAutonomousAction(params: {
       const cleanedCount = await executeSessionCleanup(workspaceRoot);
       const statusCheck = await executeStatusCheck(workspaceRoot);
 
+      // Compresión de la base científica
+      const compressResult = await compressScienceBase({ workspaceRoot });
+
       if (cleanedCount > 0) {
         return {
           kind: "sessions_cleaned",
           count: cleanedCount,
+        };
+      }
+
+      if (compressResult.status === "compressed") {
+        return {
+          kind: "science_base_compressed",
+          originalLines: compressResult.originalLines,
+          newLines: compressResult.newLines,
         };
       }
 
@@ -301,6 +314,9 @@ export function formatAutonomousExecution(exec: AutonomousExecution): string {
       break;
     case "status_check":
       actionText = `Estado: ${exec.action.status} (${exec.action.issues.length} issues)`;
+      break;
+    case "science_base_compressed":
+      actionText = `Comprimió SCIENCE_BASE.md (${exec.action.originalLines} -> ${exec.action.newLines} líneas)`;
       break;
     case "experiment_proposed":
       actionText = `Propuso experimento: ${exec.action.hypothesis}`;

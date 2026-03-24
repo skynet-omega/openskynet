@@ -2,11 +2,11 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { getActiveLearningStrategy } from "./active-learning-strategy.js";
 import { CognitiveRuleEngine } from "./cognitive-rules.js";
-import { getEntropyMinimizationLoop } from "./entropy-minimization-loop.js";
 import {
   getContinuousThinkingEngine,
   type ContinuousThought,
-} from "./experimental/continuous-thinking-engine.js";
+} from "./continuous-thinking-engine.js";
+import { getEntropyMinimizationLoop } from "./entropy-minimization-loop.js";
 import type { FrontalLobeState } from "./frontal/frontal-lobe.js";
 import { RicciGraphAnalytics } from "./graph-analytics.js";
 import { HolographicMemoryManager } from "./holographic-memory.js";

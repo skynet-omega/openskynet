@@ -1,10 +1,7 @@
 import { getGlobalCognitiveContext } from "./cognitive-context.js";
-import { getOmegaPolicySnapshot } from "./heartbeat.js";
-import {
-  formatInternalReflection,
-  loadOmegaOperationalMemorySummary,
-  loadOmegaSelfTimeKernel,
-} from "./index.js";
+import { formatInternalReflection, loadOmegaSelfTimeKernel } from "./index.js";
+import { loadOmegaOperationalMemorySummary } from "./operational-memory.js";
+import { getOmegaPolicySnapshot } from "./policy-engine.js";
 
 export type OmegaInteractivePromptContext = {
   reflectionLines: string[];

@@ -37,6 +37,15 @@ export type OmegaEmpiricalMetrics = {
   background: {
     usefulActions: number;
   };
+  heartbeat: {
+    cyclesStarted: number;
+    cyclesCompleted: number;
+    executiveActions: number;
+    usefulExecutiveActions: number;
+    structuredTerminations: number;
+    textTokenTerminations: number;
+    iterations: number;
+  };
   /** Recovery strategy empirical data — used by world-model.ts to derive routing preferences */
   recovery: {
     strategies: Record<string, { successes: number; failures: number }>;
@@ -62,6 +71,15 @@ function createDefaultOmegaEmpiricalMetrics(): OmegaEmpiricalMetrics {
     },
     background: {
       usefulActions: 0,
+    },
+    heartbeat: {
+      cyclesStarted: 0,
+      cyclesCompleted: 0,
+      executiveActions: 0,
+      usefulExecutiveActions: 0,
+      structuredTerminations: 0,
+      textTokenTerminations: 0,
+      iterations: 0,
     },
     recovery: {
       strategies: {},
@@ -132,6 +150,15 @@ function withDerivedOmegaEmpiricalMetrics(metrics: OmegaEmpiricalMetrics): Omega
     background: {
       usefulActions: clampNonNegativeInteger(metrics.background.usefulActions),
     },
+    heartbeat: {
+      cyclesStarted: clampNonNegativeInteger(metrics.heartbeat.cyclesStarted),
+      cyclesCompleted: clampNonNegativeInteger(metrics.heartbeat.cyclesCompleted),
+      executiveActions: clampNonNegativeInteger(metrics.heartbeat.executiveActions),
+      usefulExecutiveActions: clampNonNegativeInteger(metrics.heartbeat.usefulExecutiveActions),
+      structuredTerminations: clampNonNegativeInteger(metrics.heartbeat.structuredTerminations),
+      textTokenTerminations: clampNonNegativeInteger(metrics.heartbeat.textTokenTerminations),
+      iterations: clampNonNegativeInteger(metrics.heartbeat.iterations),
+    },
     recovery: {
       strategies: metrics.recovery?.strategies ?? {},
     },
@@ -162,6 +189,15 @@ function parseOmegaEmpiricalMetrics(raw: unknown): OmegaEmpiricalMetrics {
     },
     background: {
       usefulActions: clampNonNegativeInteger(parsed.background?.usefulActions),
+    },
+    heartbeat: {
+      cyclesStarted: clampNonNegativeInteger(parsed.heartbeat?.cyclesStarted),
+      cyclesCompleted: clampNonNegativeInteger(parsed.heartbeat?.cyclesCompleted),
+      executiveActions: clampNonNegativeInteger(parsed.heartbeat?.executiveActions),
+      usefulExecutiveActions: clampNonNegativeInteger(parsed.heartbeat?.usefulExecutiveActions),
+      structuredTerminations: clampNonNegativeInteger(parsed.heartbeat?.structuredTerminations),
+      textTokenTerminations: clampNonNegativeInteger(parsed.heartbeat?.textTokenTerminations),
+      iterations: clampNonNegativeInteger(parsed.heartbeat?.iterations),
     },
     recovery: {
       strategies: (parsed as Partial<OmegaEmpiricalMetrics>).recovery?.strategies ?? {},
@@ -255,6 +291,54 @@ export async function recordOmegaBackgroundActionMetrics(params: {
     background: {
       usefulActions:
         metrics.background.usefulActions + clampNonNegativeInteger(params.usefulActions),
+    },
+  }));
+}
+
+export async function recordOmegaRecoveryStrategyMetrics(params: {
+  workspaceRoot: string;
+  strategy: string;
+  success: boolean;
+}): Promise<OmegaEmpiricalMetrics> {
+  return updateOmegaEmpiricalMetrics(params.workspaceRoot, (metrics) => {
+    const strategies = { ...metrics.recovery?.strategies };
+    const stats = strategies[params.strategy] ?? { successes: 0, failures: 0 };
+    strategies[params.strategy] = {
+      successes: stats.successes + (params.success ? 1 : 0),
+      failures: stats.failures + (params.success ? 0 : 1),
+    };
+    return {
+      ...metrics,
+      recovery: {
+        strategies,
+      },
+    };
+  });
+}
+
+export async function recordOmegaHeartbeatCycleMetrics(params: {
+  workspaceRoot: string;
+  started?: boolean;
+  completed?: boolean;
+  executiveAction?: boolean;
+  usefulExecutiveAction?: boolean;
+  structuredTermination?: boolean;
+  textTokenTermination?: boolean;
+  iterations?: number;
+}): Promise<OmegaEmpiricalMetrics> {
+  return updateOmegaEmpiricalMetrics(params.workspaceRoot, (metrics) => ({
+    ...metrics,
+    heartbeat: {
+      cyclesStarted: metrics.heartbeat.cyclesStarted + (params.started ? 1 : 0),
+      cyclesCompleted: metrics.heartbeat.cyclesCompleted + (params.completed ? 1 : 0),
+      executiveActions: metrics.heartbeat.executiveActions + (params.executiveAction ? 1 : 0),
+      usefulExecutiveActions:
+        metrics.heartbeat.usefulExecutiveActions + (params.usefulExecutiveAction ? 1 : 0),
+      structuredTerminations:
+        metrics.heartbeat.structuredTerminations + (params.structuredTermination ? 1 : 0),
+      textTokenTerminations:
+        metrics.heartbeat.textTokenTerminations + (params.textTokenTermination ? 1 : 0),
+      iterations: metrics.heartbeat.iterations + clampNonNegativeInteger(params.iterations),
     },
   }));
 }

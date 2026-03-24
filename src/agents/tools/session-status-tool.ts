@@ -56,6 +56,7 @@ function resolveSessionEntry(params: {
   keyRaw: string;
   alias: string;
   mainKey: string;
+  agentId: string;
 }): { key: string; entry: SessionEntry } | null {
   const keyRaw = params.keyRaw.trim();
   if (!keyRaw) {
@@ -69,13 +70,13 @@ function resolveSessionEntry(params: {
 
   const candidates = new Set<string>([keyRaw, internal]);
   if (!keyRaw.startsWith("agent:")) {
-    candidates.add(`agent:${DEFAULT_AGENT_ID}:${keyRaw}`);
-    candidates.add(`agent:${DEFAULT_AGENT_ID}:${internal}`);
+    candidates.add(`agent:${params.agentId}:${keyRaw}`);
+    candidates.add(`agent:${params.agentId}:${internal}`);
   }
   if (keyRaw === "main") {
     candidates.add(
       buildAgentMainSessionKey({
-        agentId: DEFAULT_AGENT_ID,
+        agentId: params.agentId,
         mainKey: params.mainKey,
       }),
     );
@@ -184,7 +185,7 @@ export function createSessionStatusTool(opts?: {
     description:
       "Show a /status-equivalent session status card (usage + time + cost when available). Use for model-use questions (📊 session_status). Optional: set per-session model override (model=default resets overrides).",
     parameters: SessionStatusToolSchema,
-    execute: async (_toolCallId, args) => {
+    execute: async (_toolCallId: string, args: unknown) => {
       const params = args as Record<string, unknown>;
       const cfg = opts?.config ?? loadConfig();
       const { mainKey, alias, effectiveRequesterKey } = resolveSandboxedSessionToolContext({
@@ -290,6 +291,7 @@ export function createSessionStatusTool(opts?: {
         keyRaw: requestedKeyRaw,
         alias,
         mainKey,
+        agentId: requesterAgentId,
       });
 
       if (!resolved && shouldResolveSessionIdInput(requestedKeyRaw)) {
@@ -310,6 +312,7 @@ export function createSessionStatusTool(opts?: {
             keyRaw: requestedKeyRaw,
             alias,
             mainKey,
+            agentId,
           });
         }
       }

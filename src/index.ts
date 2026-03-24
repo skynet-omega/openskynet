@@ -44,6 +44,7 @@ enableConsoleCapture();
 // Enforce the minimum supported runtime before doing any work.
 assertSupportedRuntime();
 
+import { resolveCliName } from "./cli/cli-name.js";
 import { buildProgram } from "./cli/program.js";
 
 const program = buildProgram();
@@ -82,13 +83,14 @@ if (isMain) {
   // These log the error and exit gracefully instead of crashing without trace.
   installUnhandledRejectionHandler();
 
+  const cliName = resolveCliName();
   process.on("uncaughtException", (error) => {
-    console.error("[openclaw] Uncaught exception:", formatUncaughtError(error));
+    console.error(`[${cliName}] Uncaught exception:`, formatUncaughtError(error));
     process.exit(1);
   });
 
   void program.parseAsync(process.argv).catch((err) => {
-    console.error("[openclaw] CLI failed:", formatUncaughtError(err));
+    console.error(`[${cliName}] CLI failed:`, formatUncaughtError(err));
     process.exit(1);
   });
 }

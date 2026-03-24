@@ -47,31 +47,16 @@ vi.mock("./empirical-metrics.js", () => ({
       routeCounts: {},
     },
     background: { usefulActions: 0 },
-    recovery: { strategies: {} },
     heartbeat: {
       cyclesStarted: 0,
       cyclesCompleted: 0,
-      iterations: 0,
-      turnsCompleted: 0,
-      turnsWithProgress: 0,
       executiveActions: 0,
       usefulExecutiveActions: 0,
       structuredTerminations: 0,
       textTokenTerminations: 0,
-      idleTerminations: 0,
-      maxIterationStops: 0,
-      errors: 0,
-      totalCycleDurationMs: 0,
-      meanCycleDurationMs: 0,
-      totalTurnDurationMs: 0,
-      meanTurnDurationMs: 0,
-      totalSendAgentTurnMs: 0,
-      meanSendAgentTurnMs: 0,
-      totalLoadSnapshotMs: 0,
-      meanLoadSnapshotMs: 0,
-      totalReadLatestReplyMs: 0,
-      meanReadLatestReplyMs: 0,
+      iterations: 0,
     },
+    recovery: { strategies: {} },
   })),
   recordOmegaRouteMetrics: vi.fn(async () => undefined),
   recordOmegaRecoveryStrategyMetrics: vi.fn(async () => undefined),
@@ -159,6 +144,12 @@ describe("omega recovery runner", () => {
       turn: {
         iteration: 3,
         terminationReason: "continue",
+        decision: {
+          shouldContinue: true,
+          stopReason: "continue",
+          replyHeartbeatOk: false,
+          structuredIdleDetected: false,
+        },
         stateDelta: {
           timelineDelta: 0,
           kernelUpdated: false,
@@ -173,6 +164,7 @@ describe("omega recovery runner", () => {
       },
       turnPolicy: {
         turnHealth: "stalled",
+        shouldBackoff: true,
       },
     });
 
@@ -333,43 +325,26 @@ describe("omega recovery runner", () => {
         routeCounts: {},
       },
       background: { usefulActions: 0 },
-      recovery: {
-        strategies: {
-          "target_not_touched|single_target|contained|omega_delegate": {
-            attempts: 3,
-            successes: 3,
-            failures: 0,
-          },
-          "target_not_touched|single_target|contained|sessions_spawn": {
-            attempts: 2,
-            successes: 0,
-            failures: 2,
-          },
-        },
-      },
       heartbeat: {
         cyclesStarted: 0,
         cyclesCompleted: 0,
-        iterations: 0,
-        turnsCompleted: 0,
-        turnsWithProgress: 0,
         executiveActions: 0,
         usefulExecutiveActions: 0,
         structuredTerminations: 0,
         textTokenTerminations: 0,
-        idleTerminations: 0,
-        maxIterationStops: 0,
-        errors: 0,
-        totalCycleDurationMs: 0,
-        meanCycleDurationMs: 0,
-        totalTurnDurationMs: 0,
-        meanTurnDurationMs: 0,
-        totalSendAgentTurnMs: 0,
-        meanSendAgentTurnMs: 0,
-        totalLoadSnapshotMs: 0,
-        meanLoadSnapshotMs: 0,
-        totalReadLatestReplyMs: 0,
-        meanReadLatestReplyMs: 0,
+        iterations: 0,
+      },
+      recovery: {
+        strategies: {
+          "target_not_touched|single_target|contained|omega_delegate": {
+            successes: 3,
+            failures: 0,
+          },
+          "target_not_touched|single_target|contained|sessions_spawn": {
+            successes: 0,
+            failures: 2,
+          },
+        },
       },
     });
 

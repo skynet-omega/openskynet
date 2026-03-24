@@ -716,3 +716,67 @@ export async function edgeTTS(params: {
   });
   await tts.ttsPromise(text, outputPath);
 }
+
+export async function alltalkTTS(params: {
+  text: string;
+  baseUrl: string;
+  voice: string;
+  timeoutMs: number;
+}): Promise<Buffer> {
+  const { text, baseUrl, voice, timeoutMs } = params;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const url = new URL(`${baseUrl}/api/tts-generate`);
+
+    const payload = new URLSearchParams();
+    payload.append("text_input", text);
+    payload.append("text_filtering", "standard");
+    payload.append("character_voice_gen", voice);
+    payload.append("narrator_enabled", "false");
+    payload.append("narrator_voice_gen", "male_01.wav");
+    payload.append("text_not_inside", "character");
+    payload.append("language", "en");
+    payload.append("output_file_name", "myoutputstring");
+    payload.append("output_file_timestamp", "true");
+    payload.append("autoplay", "false");
+    payload.append("autoplay_volume", "0.8");
+
+    const response = await fetch(url.toString(), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: payload.toString(),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`AllTalk API error (${response.status})`);
+    }
+
+    const data = (await response.json()) as { status?: string; output_file_url?: string };
+    if (data.status !== "generate-success" || !data.output_file_url) {
+      throw new Error(`AllTalk API failed to generate TTS: ${JSON.stringify(data)}`);
+    }
+
+    let audioUrl = data.output_file_url;
+    if (!audioUrl.startsWith("http")) {
+      audioUrl = `${baseUrl}${audioUrl.startsWith("/") ? "" : "/"}${audioUrl}`;
+    }
+
+    const audioResponse = await fetch(audioUrl, {
+      signal: controller.signal,
+    });
+
+    if (!audioResponse.ok) {
+      throw new Error(`AllTalk API error fetching audio (${audioResponse.status})`);
+    }
+
+    return Buffer.from(await audioResponse.arrayBuffer());
+  } finally {
+    clearTimeout(timeout);
+  }
+}

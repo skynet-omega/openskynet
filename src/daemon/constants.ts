@@ -18,6 +18,15 @@ export const LEGACY_GATEWAY_SYSTEMD_SERVICE_NAMES: string[] = [
   "moltbot-gateway",
 ];
 
+export function resolveLegacyGatewayLaunchAgentLabels(profile?: string): string[] {
+  const normalized = normalizeGatewayProfile(profile);
+  const labels: string[] = [];
+  if (resolveCliName() === ALT_CLI_NAME) {
+    labels.push(normalized ? `ai.openclaw.${normalized}` : `ai.openclaw.gateway`);
+  }
+  return labels;
+}
+
 function resolveBaseName(): string {
   return resolveCliName();
 }

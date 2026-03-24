@@ -28,6 +28,12 @@ describe("omega operational memory", () => {
       turn: {
         iteration: 1,
         terminationReason: "continue",
+        decision: {
+          shouldContinue: true,
+          stopReason: "continue",
+          replyHeartbeatOk: false,
+          structuredIdleDetected: false,
+        },
         stateDelta: {
           timelineDelta: 1,
           kernelUpdated: true,
@@ -42,6 +48,7 @@ describe("omega operational memory", () => {
       },
       turnPolicy: {
         turnHealth: "progressing",
+        shouldBackoff: false,
       },
     });
 
@@ -68,6 +75,12 @@ describe("omega operational memory", () => {
       turn: {
         iteration: 1,
         terminationReason: "continue",
+        decision: {
+          shouldContinue: true,
+          stopReason: "continue",
+          replyHeartbeatOk: false,
+          structuredIdleDetected: false,
+        },
         stateDelta: {
           timelineDelta: 0,
           kernelUpdated: false,
@@ -82,6 +95,7 @@ describe("omega operational memory", () => {
       },
       turnPolicy: {
         turnHealth: "stalled",
+        shouldBackoff: true,
       },
     });
     await recordOmegaOperationalTurnMemory({
@@ -90,6 +104,12 @@ describe("omega operational memory", () => {
       turn: {
         iteration: 2,
         terminationReason: "reply_heartbeat_ok",
+        decision: {
+          shouldContinue: false,
+          stopReason: "reply_heartbeat_ok",
+          replyHeartbeatOk: true,
+          structuredIdleDetected: false,
+        },
         stateDelta: {
           timelineDelta: 1,
           kernelUpdated: true,
@@ -104,6 +124,7 @@ describe("omega operational memory", () => {
       },
       turnPolicy: {
         turnHealth: "resolved",
+        shouldBackoff: false,
       },
     });
 
@@ -124,6 +145,12 @@ describe("omega operational memory", () => {
         turn: {
           iteration: 1,
           terminationReason: "continue",
+          decision: {
+            shouldContinue: true,
+            stopReason: "continue",
+            replyHeartbeatOk: false,
+            structuredIdleDetected: false,
+          },
           stateDelta: {
             timelineDelta: 0,
             kernelUpdated: false,
@@ -138,6 +165,7 @@ describe("omega operational memory", () => {
         },
         turnPolicy: {
           turnHealth: "stalled",
+          shouldBackoff: true,
         },
       }),
       recordOmegaOperationalTurnMemory({
@@ -146,6 +174,12 @@ describe("omega operational memory", () => {
         turn: {
           iteration: 2,
           terminationReason: "structured_idle",
+          decision: {
+            shouldContinue: false,
+            stopReason: "structured_idle",
+            replyHeartbeatOk: false,
+            structuredIdleDetected: true,
+          },
           stateDelta: {
             timelineDelta: 1,
             kernelUpdated: true,
@@ -160,6 +194,7 @@ describe("omega operational memory", () => {
         },
         turnPolicy: {
           turnHealth: "resolved",
+          shouldBackoff: false,
         },
       }),
     ]);

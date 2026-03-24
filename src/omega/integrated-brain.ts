@@ -1,8 +1,8 @@
-import * as omegaIntegratedReasoner from "./experimental/omega-integrated-reasoning.js";
+import * as omegaIntegratedReasoner from "./omega-integrated-reasoning.js";
 // EXPERIMENTAL: To be decoupled
 const { getOmegaIntegratedReasoner } = omegaIntegratedReasoner;
-import type { IntegratedReasoningState } from "./experimental/omega-integrated-reasoning.js";
 import type { InnerDriveSignal } from "./inner-life/drives.js";
+import type { IntegratedReasoningState } from "./omega-integrated-reasoning.js";
 import type { OmegaOperationalMemorySummary } from "./operational-memory.js";
 import type { OmegaSelfTimeKernelState } from "./self-time-kernel.js";
 
@@ -57,9 +57,8 @@ export async function processIntegratedBrain(params: {
     params.driveSignal,
     kernelState,
     params.jepaTension,
-    params.workspaceRoot,
   );
-  result.state.somaticStress = latencyStress;
+  (result.state as any).somaticStress = latencyStress;
   return result;
 }
 
@@ -79,7 +78,7 @@ export function formatInternalReflection(state: IntegratedReasoningState): strin
     `Resource Allocation: ${metabolism} (Rate: ${state.metabolism.totalMetabolicRate.toFixed(2)})`,
   );
 
-  if (typeof state.somaticStress === "number" && state.somaticStress > 0.7) {
+  if (typeof (state as any).somaticStress === "number" && (state as any).somaticStress > 0.7) {
     lines.push(
       `Somatic Signal: HIGH METABOLIC STRESS (System response latency affecting coherence)`,
     );
@@ -91,8 +90,8 @@ export function formatInternalReflection(state: IntegratedReasoningState): strin
     );
   }
 
-  if (state.projection) {
-    const proj = state.projection;
+  if ((state as any).projection) {
+    const proj = (state as any).projection;
     lines.push(
       `Imaginative Projection: Expected outcome is ${proj.expectedOutcome.toUpperCase()} (Confidence: ${(proj.confidence * 100).toFixed(0)}%)`,
     );
@@ -107,9 +106,10 @@ export function formatInternalReflection(state: IntegratedReasoningState): strin
     );
   }
 
-  if (typeof state.finalDrive.vetoProb === "number") {
-    const prob = (state.finalDrive.vetoProb * 100).toFixed(1);
-    const signal = state.finalDrive.vetoProb < 0.5 ? "🔴 VETO RISK" : "🟢 VIABLE";
+  if (state.finalDrive && typeof (state.finalDrive as any).vetoProb === "number") {
+    const prob = (((state.finalDrive as any).vetoProb as number) * 100).toFixed(1);
+    const signal =
+      ((state.finalDrive as any).vetoProb as number) < 0.5 ? "🔴 VETO RISK" : "🟢 VIABLE";
     lines.push(`Operational Viability: ${prob}% — ${signal}`);
   }
 
