@@ -1,3 +1,5 @@
+import { resolveCliName, ALT_CLI_NAME } from "../cli/cli-name.js";
+
 // Default service labels (canonical + legacy compatibility)
 export const GATEWAY_LAUNCH_AGENT_LABEL = "ai.openclaw.gateway";
 export const GATEWAY_SYSTEMD_SERVICE_NAME = "openclaw-gateway";
@@ -10,12 +12,19 @@ export const NODE_WINDOWS_TASK_NAME = "OpenClaw Node";
 export const NODE_SERVICE_MARKER = "openclaw";
 export const NODE_SERVICE_KIND = "node";
 export const NODE_WINDOWS_TASK_SCRIPT_NAME = "node.cmd";
-export const LEGACY_GATEWAY_LAUNCH_AGENT_LABELS: string[] = [];
+
 export const LEGACY_GATEWAY_SYSTEMD_SERVICE_NAMES: string[] = [
   "clawdbot-gateway",
   "moltbot-gateway",
 ];
-export const LEGACY_GATEWAY_WINDOWS_TASK_NAMES: string[] = [];
+
+function resolveBaseName(): string {
+  return resolveCliName();
+}
+
+function resolveDisplayName(): string {
+  return resolveCliName() === ALT_CLI_NAME ? "OpenSkyNet" : "OpenClaw";
+}
 
 export function normalizeGatewayProfile(profile?: string): string | null {
   const trimmed = profile?.trim();
@@ -32,37 +41,33 @@ export function resolveGatewayProfileSuffix(profile?: string): string {
 
 export function resolveGatewayLaunchAgentLabel(profile?: string): string {
   const normalized = normalizeGatewayProfile(profile);
+  const base = resolveCliName() === ALT_CLI_NAME ? "ai.openskynet" : "ai.openclaw";
   if (!normalized) {
-    return GATEWAY_LAUNCH_AGENT_LABEL;
+    return `${base}.gateway`;
   }
-  return `ai.openclaw.${normalized}`;
-}
-
-export function resolveLegacyGatewayLaunchAgentLabels(profile?: string): string[] {
-  void profile;
-  return [];
+  return `${base}.${normalized}`;
 }
 
 export function resolveGatewaySystemdServiceName(profile?: string): string {
+  const base = resolveBaseName();
   const suffix = resolveGatewayProfileSuffix(profile);
-  if (!suffix) {
-    return GATEWAY_SYSTEMD_SERVICE_NAME;
-  }
-  return `openclaw-gateway${suffix}`;
+  return `${base}-gateway${suffix}`;
 }
 
 export function resolveGatewayWindowsTaskName(profile?: string): string {
+  const base = resolveDisplayName();
   const normalized = normalizeGatewayProfile(profile);
   if (!normalized) {
-    return GATEWAY_WINDOWS_TASK_NAME;
+    return `${base} Gateway`;
   }
-  return `OpenClaw Gateway (${normalized})`;
+  return `${base} Gateway (${normalized})`;
 }
 
 export function formatGatewayServiceDescription(params?: {
   profile?: string;
   version?: string;
 }): string {
+  const base = resolveDisplayName();
   const profile = normalizeGatewayProfile(params?.profile);
   const version = params?.version?.trim();
   const parts: string[] = [];
@@ -73,9 +78,9 @@ export function formatGatewayServiceDescription(params?: {
     parts.push(`v${version}`);
   }
   if (parts.length === 0) {
-    return "OpenClaw Gateway";
+    return `${base} Gateway`;
   }
-  return `OpenClaw Gateway (${parts.join(", ")})`;
+  return `${base} Gateway (${parts.join(", ")})`;
 }
 
 export function resolveGatewayServiceDescription(params: {
@@ -93,21 +98,25 @@ export function resolveGatewayServiceDescription(params: {
 }
 
 export function resolveNodeLaunchAgentLabel(): string {
-  return NODE_LAUNCH_AGENT_LABEL;
+  const base = resolveCliName() === ALT_CLI_NAME ? "ai.openskynet" : "ai.openclaw";
+  return `${base}.node`;
 }
 
 export function resolveNodeSystemdServiceName(): string {
-  return NODE_SYSTEMD_SERVICE_NAME;
+  const base = resolveBaseName();
+  return `${base}-node`;
 }
 
 export function resolveNodeWindowsTaskName(): string {
-  return NODE_WINDOWS_TASK_NAME;
+  const base = resolveDisplayName();
+  return `${base} Node`;
 }
 
 export function formatNodeServiceDescription(params?: { version?: string }): string {
+  const base = resolveDisplayName();
   const version = params?.version?.trim();
   if (!version) {
-    return "OpenClaw Node Host";
+    return `${base} Node Host`;
   }
-  return `OpenClaw Node Host (v${version})`;
+  return `${base} Node Host (v${version})`;
 }

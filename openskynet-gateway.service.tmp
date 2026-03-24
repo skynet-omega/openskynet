@@ -1,0 +1,26 @@
+# /home/daroch/.config/systemd/user/openclaw-gateway.service
+[Unit]
+Description=OpenClaw Gateway (v2026.3.13)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/home/daroch/miniconda3/envs/GPU/bin/node /home/daroch/openskynet/dist/index.js gateway --port 18789
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+TimeoutStartSec=30
+SuccessExitStatus=0 143
+KillMode=control-group
+Environment=HOME=/home/daroch
+Environment=TMPDIR=/tmp
+Environment=PATH=/home/daroch/.nvm/current/bin:/home/daroch/.local/bin:/home/daroch/.npm-global/bin:/home/daroch/bin:/home/daroch/.volta/bin:/home/daroch/.asdf/shims:/home/daroch/.bun/bin:/home/daroch/.fnm/current/bin:/home/daroch/.local/share/pnpm:/usr/local/bin:/usr/bin:/bin
+Environment=OPENCLAW_GATEWAY_PORT=18789
+Environment=OPENCLAW_SYSTEMD_UNIT=openclaw-gateway.service
+Environment="OPENCLAW_WINDOWS_TASK_NAME=OpenClaw Gateway"
+Environment=OPENCLAW_SERVICE_MARKER=openclaw
+Environment=OPENCLAW_SERVICE_KIND=gateway
+Environment=OPENCLAW_SERVICE_VERSION=2026.3.13
+
+[Install]
+WantedBy=default.target

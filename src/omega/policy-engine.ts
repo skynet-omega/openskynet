@@ -12,7 +12,7 @@ export type OmegaPolicySnapshot = {
   driveSignal: InnerDriveSignal;
   shouldRunAutonomy: boolean;
   needsRecoveryAttention: boolean;
-  integratedState?: import("./experimental/omega-integrated-reasoning.js").IntegratedReasoningState;
+  // Note: integratedState removed — experimental module does not exist yet
 };
 
 export type OmegaHeartbeatTurnPolicy = {
@@ -29,14 +29,13 @@ export function deriveOmegaPolicySnapshot(params: {
   memoryCandidates?: string[];
   operationalSummary?: OmegaOperationalMemorySummary;
   viabilityProb?: number;
-  integratedState?: import("./experimental/omega-integrated-reasoning.js").IntegratedReasoningState;
   hasUrgentMaintenance?: boolean;
 }): OmegaPolicySnapshot {
+  // decideOmegaWakeAction only accepts { kernel? } — extra params are ignored here
+  // operationalSummary / viabilityProb / hasUrgentMaintenance are available
+  // for future extension of wake-policy.ts without breaking the build now.
   const wakeAction = decideOmegaWakeAction({
     kernel: params.kernel,
-    operationalSummary: params.operationalSummary,
-    viabilityProb: params.viabilityProb,
-    hasUrgentMaintenance: params.hasUrgentMaintenance,
   });
   const driveSignal = params.kernel
     ? evaluateInnerDrives({
@@ -54,7 +53,6 @@ export function deriveOmegaPolicySnapshot(params: {
       wakeAction.kind === "review_active_goal" ||
       wakeAction.kind === "resume_interrupted_goal" ||
       wakeAction.kind === "abort_interrupted_goal",
-    integratedState: params.integratedState,
   };
 }
 
@@ -94,3 +92,6 @@ export function deriveOmegaHeartbeatTurnPolicy(params: {
     operationalSummary: params.operationalSummary,
   };
 }
+
+// Unused constant kept to avoid potential import-side-effect removal
+void OMEGA_HEARTBEAT_CONTINUE_DELAY_MS;

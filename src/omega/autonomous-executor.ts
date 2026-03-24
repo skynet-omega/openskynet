@@ -2,20 +2,21 @@
  * autonomous-executor.ts
  * ======================
  * Ejecutor de acciones autónomas para OpenSkyNet.
- * 
+ *
  * Este módulo permite que el sistema actúe proactivamente sin depender
  * de que el LLM genere una respuesta. Las drives internas ejecutan
  * código directamente.
  */
 
+import { exec } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { exec } from "node:child_process";
 import { promisify } from "node:util";
-import type { OmegaSelfTimeKernelState } from "./self-time-kernel.js";
 import type { InnerDriveSignal } from "./inner-life/drives.js";
-import { loadOmegaSelfTimeKernel, recordOmegaSessionOutcome } from "./session-context.js";
 import { evaluateInnerDrives } from "./inner-life/drives.js";
+import { runResearchLoop, hasRecentResearchProse } from "./research-loop.js";
+import type { OmegaSelfTimeKernelState } from "./self-time-kernel.js";
+import { loadOmegaSelfTimeKernel, recordOmegaSessionOutcome } from "./session-context.js";
 
 const execAsync = promisify(exec);
 
@@ -46,7 +47,7 @@ async function logAutonomousExecution(
 
 async function collectMemoryFindings(workspaceRoot: string, target: string): Promise<string[]> {
   const findings: string[] = [];
-  
+
   try {
     const memoryPath = path.join(workspaceRoot, target);
     const content = await fs.readFile(memoryPath, "utf-8").catch(() => null);
@@ -62,7 +63,7 @@ async function collectMemoryFindings(workspaceRoot: string, target: string): Pro
   } catch {
     // Ignorar errores de lectura
   }
-  
+
   return findings.slice(0, 5); // Máximo 5 hallazgos
 }
 
@@ -79,20 +80,22 @@ async function executeSessionCleanup(workspaceRoot: string): Promise<number> {
   }
 }
 
-async function executeStatusCheck(workspaceRoot: string): Promise<{ status: string; issues: string[] }> {
+async function executeStatusCheck(
+  workspaceRoot: string,
+): Promise<{ status: string; issues: string[] }> {
   const issues: string[] = [];
-  
+
   try {
     // Verificar gateway
     const { stdout: gatewayStatus } = await execAsync(
       "openclaw gateway status 2>&1 || openskynet gateway status 2>&1 || echo 'unknown'",
       { cwd: workspaceRoot, timeout: 10000 },
     );
-    
+
     if (gatewayStatus.includes("error") || gatewayStatus.includes("not running")) {
       issues.push("Gateway no está ejecutándose");
     }
-    
+
     // Verificar sesiones acumuladas
     const { stdout: sessionsStatus } = await execAsync(
       "openclaw sessions list 2>&1 | wc -l || openskynet sessions list 2>&1 | wc -l || echo 0",
@@ -102,7 +105,7 @@ async function executeStatusCheck(workspaceRoot: string): Promise<{ status: stri
     if (sessionCount > 50) {
       issues.push(`Demasiadas sesiones acumuladas: ${sessionCount}`);
     }
-    
+
     return {
       status: issues.length === 0 ? "healthy" : "degraded",
       issues,
@@ -112,17 +115,21 @@ async function executeStatusCheck(workspaceRoot: string): Promise<{ status: stri
   }
 }
 
-async function proposeExperiment(workspaceRoot: string): Promise<{ hypothesis: string; testable: boolean }> {
+async function proposeExperiment(
+  workspaceRoot: string,
+): Promise<{ hypothesis: string; testable: boolean }> {
   // Leer MEMORY.md para proponer experimento basado en trabajo pendiente
   try {
     const memoryPath = path.join(workspaceRoot, "MEMORY.md");
     const content = await fs.readFile(memoryPath, "utf-8").catch(() => null);
-    
+
     if (content) {
       // Buscar secciones de "Current Strategic Direction" o "Scientific Priority"
       const match = content.match(/##\s*Current Strategic Direction[\s\S]*?(?=##|$)/i);
       if (match) {
-        const lines = match[0].split("\n").filter(l => l.trim().startsWith("- ") || l.trim().startsWith("* "));
+        const lines = match[0]
+          .split("\n")
+          .filter((l: string) => l.trim().startsWith("- ") || l.trim().startsWith("* "));
         if (lines.length > 0) {
           const item = lines[0].replace(/^[-*]\s+/, "").trim();
           return {
@@ -135,7 +142,7 @@ async function proposeExperiment(workspaceRoot: string): Promise<{ hypothesis: s
   } catch {
     // Ignorar
   }
-  
+
   return {
     hypothesis: "Continuar mejora de autonomía operativa",
     testable: true,
@@ -153,20 +160,20 @@ export async function executeAutonomousAction(params: {
   kernel: OmegaSelfTimeKernelState;
 }): Promise<AutonomousActionResult> {
   const { workspaceRoot, signal } = params;
-  
+
   switch (signal.kind) {
     case "homeostasis": {
       // Limpiar sesiones y verificar estado
       const cleanedCount = await executeSessionCleanup(workspaceRoot);
       const statusCheck = await executeStatusCheck(workspaceRoot);
-      
+
       if (cleanedCount > 0) {
         return {
           kind: "sessions_cleaned",
           count: cleanedCount,
         };
       }
-      
+
       if (statusCheck.issues.length > 0) {
         return {
           kind: "status_check",
@@ -174,33 +181,49 @@ export async function executeAutonomousAction(params: {
           issues: statusCheck.issues,
         };
       }
-      
+
       return { kind: "none", reason: "homeostasis_maintained" };
     }
-    
+
     case "curiosity": {
       // Explorar memoria
       const target = signal.target || "MEMORY.md";
       const findings = await collectMemoryFindings(workspaceRoot, target);
-      
+
       return {
         kind: "memory_explored",
         target,
         findings,
       };
     }
-    
+
     case "entropy_alert": {
-      // Proponer experimento
+      // FRENTE C: Loop cerrado de investigación
+      // Antes de proponer experimento, verificar si hay correlación JEPA fuerte.
+      // Si la hay y no hay .prose reciente → generar investigación autónoma.
+      const hasRecent = await hasRecentResearchProse(workspaceRoot);
+      if (!hasRecent) {
+        const researchResult = await runResearchLoop({
+          workspaceRoot,
+          sessionKey: params.sessionKey,
+        });
+        if (researchResult.kind === "prose_written") {
+          return {
+            kind: "experiment_proposed",
+            hypothesis: `[AUTO-RESEARCH] ${researchResult.hypotheses[0] ?? "Correlación JEPA detectada"}`,
+            testable: true,
+          };
+        }
+      }
+      // Fallback: proponer experimento desde MEMORY.md
       const experiment = await proposeExperiment(workspaceRoot);
-      
       return {
         kind: "experiment_proposed",
         hypothesis: experiment.hypothesis,
         testable: experiment.testable,
       };
     }
-    
+
     case "idle":
     default:
       return { kind: "none", reason: "no_drive_active" };
@@ -219,18 +242,18 @@ export async function runAutonomousCycle(params: {
   if (!kernel) {
     return null;
   }
-  
+
   // Evaluar drives
   const signal = evaluateInnerDrives({
     kernel,
     nowMs: Date.now(),
     memoryCandidates: ["MEMORY.md", "memory/"],
   });
-  
+
   if (signal.kind === "idle") {
     return null;
   }
-  
+
   // Ejecutar acción autónoma
   const action = await executeAutonomousAction({
     workspaceRoot: params.workspaceRoot,
@@ -238,21 +261,21 @@ export async function runAutonomousCycle(params: {
     signal,
     kernel,
   });
-  
+
   if (action.kind === "none") {
     return null;
   }
-  
+
   const execution: AutonomousExecution = {
     executedAt: Date.now(),
     driveKind: signal.kind,
     action,
     reported: false,
   };
-  
+
   // Loggear ejecución
   await logAutonomousExecution(params.workspaceRoot, execution);
-  
+
   return execution;
 }
 
@@ -267,7 +290,7 @@ export function formatAutonomousExecution(exec: AutonomousExecution): string {
     entropy_alert: "⚡",
     idle: "💤",
   }[exec.driveKind];
-  
+
   let actionText = "";
   switch (exec.action.kind) {
     case "memory_explored":
@@ -286,6 +309,6 @@ export function formatAutonomousExecution(exec: AutonomousExecution): string {
       actionText = "Sin acción";
       break;
   }
-  
+
   return `[${timestamp}] ${driveEmoji} ${exec.driveKind}: ${actionText}`;
 }

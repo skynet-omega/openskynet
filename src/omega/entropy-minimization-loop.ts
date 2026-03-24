@@ -15,23 +15,23 @@
 export interface Contradiction {
   id: string;
   timestamp: number;
-  
+
   /** Type of contradiction */
   kind: "goal_conflict" | "memory_inconsistency" | "causal_contradiction" | "value_misalignment";
-  
+
   /** What contradicts? */
   element1: Record<string, unknown>;
   element2: Record<string, unknown>;
-  
+
   /** Severity (0-1) */
   severity: number;
-  
+
   /** How long has this existed? */
   ageMs: number;
-  
+
   /** Has it been resolved? */
   resolved: boolean;
-  
+
   /** If resolved, how? */
   resolution?: string;
 }
@@ -39,16 +39,16 @@ export interface Contradiction {
 export interface EntropyState {
   /** All contradictions currently known */
   contradictions: Contradiction[];
-  
+
   /** Overall system coherence (0 = contradictory, 1 = perfectly coherent) */
   coherenceScore: number;
-  
+
   /** Last time entropy was measured */
   lastMeasurementTime: number;
-  
+
   /** Trend: is coherence improving? */
   trend: "improving" | "stable" | "degrading";
-  
+
   /** Total entropy reduction this session */
   cumulativeReduction: number;
 }
@@ -82,17 +82,17 @@ export class EntropyMinimizationLoop {
     }
 
     // Contradiction Type 2: Memory Inconsistencies
-    if (state.memory && typeof state.memory === 'object') {
+    if (state.memory && typeof state.memory === "object") {
       const inconsistencies = this.findMemoryInconsistencies(
-        state.memory as Record<string, unknown>
+        state.memory as Record<string, unknown>,
       );
       newContradictions.push(...inconsistencies);
     }
 
     // Contradiction Type 3: Causal Belief Instability
-    if (state.causalGraph && typeof state.causalGraph === 'object') {
+    if (state.causalGraph && typeof state.causalGraph === "object") {
       const instabilities = this.findCausalInstabilities(
-        state.causalGraph as Record<string, unknown>
+        state.causalGraph as Record<string, unknown>,
       );
       newContradictions.push(...instabilities);
     }
@@ -126,7 +126,7 @@ export class EntropyMinimizationLoop {
         const g2 = goals[j];
 
         // Type guard for goal properties
-        if (typeof g1 !== 'object' || g1 === null || typeof g2 !== 'object' || g2 === null) {
+        if (typeof g1 !== "object" || g1 === null || typeof g2 !== "object" || g2 === null) {
           continue;
         }
         const goal1 = g1 as Record<string, unknown>;
@@ -134,32 +134,36 @@ export class EntropyMinimizationLoop {
 
         // Conflict 1: Both active but competing for resources
         if (goal1.status === "active" && goal2.status === "active") {
-          // If both are marked urgent, that's a conflict
-          if (typeof goal1.urgency === 'number' && typeof goal2.urgency === 'number' &&
-              goal1.urgency > 0.7 && goal2.urgency > 0.7) {
+          // A goal with ≥2 failures is considered "urgent" — it needs resources NOW.
+          // Using failureCount as urgency proxy since OmegaKernelGoal has no `urgency` field.
+          // Two concurrent active goals both with high failure counts = real resource conflict.
+          const goal1FailureCount = typeof goal1.failureCount === "number" ? goal1.failureCount : 0;
+          const goal2FailureCount = typeof goal2.failureCount === "number" ? goal2.failureCount : 0;
+          const goal1IsUrgent = goal1FailureCount >= 2;
+          const goal2IsUrgent = goal2FailureCount >= 2;
+
+          if (goal1IsUrgent && goal2IsUrgent) {
             contradictions.push({
               id: `goal_conflict_${i}_${j}`,
               timestamp: Date.now(),
               kind: "goal_conflict",
-              element1: { id: goal1.id, task: goal1.task },
-              element2: { id: goal2.id, task: goal2.task },
-              severity: 0.6,
+              element1: { id: goal1.id, task: goal1.task, failures: goal1FailureCount },
+              element2: { id: goal2.id, task: goal2.task, failures: goal2FailureCount },
+              severity: 0.6 + Math.min(0.3, (goal1FailureCount + goal2FailureCount) * 0.05),
               ageMs: 0,
               resolved: false,
             });
           }
         }
 
-        // Conflict 2: Goal marked stale but also active (state incoherence)
-        // Note: This condition was always false (g1.status === "stale" && g1.status === "active")
-        // Fixed to check for contradictory states
-        if (goal1.status === "stale" && goal1.status !== "stale") {
+        // Conflict 2: Stale goal coexisting with a newer active goal targeting same work
+        if (goal1.status === "stale" && goal2.status === "active") {
           contradictions.push({
-            id: `status_contradiction_${i}`,
+            id: `stale_vs_active_${i}_${j}`,
             timestamp: Date.now(),
             kind: "goal_conflict",
-            element1: { goalId: goal1.id, status: "stale" },
-            element2: { goalId: goal1.id, status: goal1.status },
+            element1: { goalId: goal1.id, task: goal1.task, status: "stale" },
+            element2: { goalId: goal2.id, task: goal2.task, status: "active" },
             severity: 0.8,
             ageMs: 0,
             resolved: false,
@@ -185,7 +189,7 @@ export class EntropyMinimizationLoop {
 
     const semantic = memory.semantic;
     const episodic = memory.episodic;
-    
+
     if (Array.isArray(semantic) && Array.isArray(episodic)) {
       // Find semantic concepts that conflict with recent episodic data
       for (const concept of semantic) {
@@ -193,9 +197,15 @@ export class EntropyMinimizationLoop {
         const recentEpisodes = episodic.slice(-3); // Last 3 episodes
         for (const episode of recentEpisodes) {
           // Rough check: if concept claims X but episode shows ¬X
-          const conceptRecord = typeof concept === 'object' && concept !== null ? (concept as Record<string, unknown>) : null;
-          const episodeRecord = typeof episode === 'object' && episode !== null ? (episode as Record<string, unknown>) : null;
-          
+          const conceptRecord =
+            typeof concept === "object" && concept !== null
+              ? (concept as Record<string, unknown>)
+              : null;
+          const episodeRecord =
+            typeof episode === "object" && episode !== null
+              ? (episode as Record<string, unknown>)
+              : null;
+
           if (conceptRecord?.name && episodeRecord?.outcome !== conceptRecord?.expectedOutcome) {
             contradictions.push({
               id: `memory_inconsistency_${conceptRecord.name}_episode`,
@@ -227,23 +237,32 @@ export class EntropyMinimizationLoop {
     if (Array.isArray(edges) && edges.length > 0) {
       // Look for edges that have conflicting evidence
       for (const edge of edges) {
-        const edgeRecord = typeof edge === 'object' && edge !== null ? (edge as Record<string, unknown>) : null;
+        const edgeRecord =
+          typeof edge === "object" && edge !== null ? (edge as Record<string, unknown>) : null;
         if (!edgeRecord) continue;
-        
+
         // If an edge has strong support both FOR and AGAINST, that's unstable
-        const supportFor = typeof edgeRecord.supportFor === 'number' ? edgeRecord.supportFor : 0;
-        const supportAgainst = typeof edgeRecord.supportAgainst === 'number' ? edgeRecord.supportAgainst : 0;
-        
+        const supportFor = typeof edgeRecord.supportFor === "number" ? edgeRecord.supportFor : 0;
+        const supportAgainst =
+          typeof edgeRecord.supportAgainst === "number" ? edgeRecord.supportAgainst : 0;
+
         if (supportFor > 0 && supportAgainst > 0) {
           if (supportFor > 3 && supportAgainst > 3) {
             contradictions.push({
               id: `causal_instability_${edgeRecord.source}_${edgeRecord.target}`,
               timestamp: Date.now(),
               kind: "causal_contradiction",
-              element1: { edge: `${edgeRecord.source} → ${edgeRecord.target}`, support: supportFor },
-              element2: { edge: `${edgeRecord.source} → ${edgeRecord.target}`, against: supportAgainst },
+              element1: {
+                edge: `${edgeRecord.source} → ${edgeRecord.target}`,
+                support: supportFor,
+              },
+              element2: {
+                edge: `${edgeRecord.source} → ${edgeRecord.target}`,
+                against: supportAgainst,
+              },
               severity: 0.7,
-              ageMs: Date.now() - (typeof edgeRecord.firstSeen === 'number' ? edgeRecord.firstSeen : 0),
+              ageMs:
+                Date.now() - (typeof edgeRecord.firstSeen === "number" ? edgeRecord.firstSeen : 0),
               resolved: false,
             });
           }
@@ -266,7 +285,10 @@ export class EntropyMinimizationLoop {
     // Or: Claims to value "stability" but made high-risk decisions
 
     if (state.identity && state.goals && state.turnCount && Array.isArray(state.goals)) {
-      const recentGoals = state.goals.filter((g: Record<string, unknown>) => (state.turnCount as number) - ((g.updatedTurn as number) || 0) < 20);
+      const recentGoals = state.goals.filter(
+        (g: Record<string, unknown>) =>
+          (state.turnCount as number) - ((g.updatedTurn as number) || 0) < 20,
+      );
 
       // If recently pursuing many goals but claimed to value "focus"
       if (recentGoals.length > 3) {

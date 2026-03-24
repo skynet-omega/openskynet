@@ -11,12 +11,16 @@ import {
   recordOmegaSessionOutcome,
   taskMatchesOmegaInterruptedGoalRecovery,
 } from "../../omega/index.js";
+import { applyLearnedRules } from "../../omega/learned-rules/index.js";
 import type { GatewayMessageChannel } from "../../utils/message-channel.js";
 import type { SpawnedToolContext } from "../spawned-context.js";
 import type { AnyAgentTool } from "./common.js";
 import { jsonResult, readStringParam } from "./common.js";
 import { createOmegaDelegateTool } from "./omega-delegate-tool.js";
-import { OMEGA_VALIDATION_SCHEMA_FIELDS, readOmegaValidationToolParams } from "./omega-validation.js";
+import {
+  OMEGA_VALIDATION_SCHEMA_FIELDS,
+  readOmegaValidationToolParams,
+} from "./omega-validation.js";
 import { createSessionsSendTool } from "./sessions-send-tool.js";
 import { createSessionsSpawnTool } from "./sessions-spawn-tool.js";
 
@@ -84,10 +88,7 @@ function buildOmegaCorrectiveRetryTask(params: {
   return lines.join("\n");
 }
 
-async function resolveOmegaWakeAction(params: {
-  workspaceRoot: string;
-  sessionKey: string;
-}) {
+async function resolveOmegaWakeAction(params: { workspaceRoot: string; sessionKey: string }) {
   const kernel = await loadOmegaSelfTimeKernel(params);
   return decideOmegaWakeAction({ kernel });
 }
@@ -182,6 +183,28 @@ function decideOmegaWorkRoute(params: {
   return "sessions_send";
 }
 
+/**
+ * Aplica reglas causales aprendidas sobre la ruta candidata.
+ * Si una regla empírica tiene mayor tasa de éxito histórico para esta
+ * combinación de contexto, sobreescribe la ruta base.
+ */
+function enhanceRouteWithLearnedRules(params: {
+  task: string;
+  proposedRoute: OmegaWorkRoute;
+  failureStreak: number;
+  lastErrorKind?: string;
+  targets: string[];
+}): OmegaWorkRoute {
+  return applyLearnedRules({
+    task: params.task,
+    proposedRoute:
+      params.proposedRoute as import("../../omega/learned-rules/index.js").LearnedRouteKind,
+    failureStreak: params.failureStreak,
+    lastErrorKind: params.lastErrorKind,
+    targets: params.targets,
+  }) as OmegaWorkRoute;
+}
+
 export function createOmegaWorkTool(
   opts?: {
     agentSessionKey?: string;
@@ -250,16 +273,15 @@ export function createOmegaWorkTool(
       const effectiveValidation = {
         expectsJson:
           validation.expectsJson ||
-          (validation.expectedKeys.length === 0 &&
-            (matchedRecovery?.requiredKeys.length ?? 0) > 0),
+          (validation.expectedKeys.length === 0 && (matchedRecovery?.requiredKeys.length ?? 0) > 0),
         expectedKeys:
           validation.expectedKeys.length > 0
             ? validation.expectedKeys
-            : matchedRecovery?.requiredKeys ?? [],
+            : (matchedRecovery?.requiredKeys ?? []),
         expectedPaths:
           validation.expectedPaths.length > 0
             ? validation.expectedPaths
-            : matchedRecovery?.remainingTargets ?? [],
+            : (matchedRecovery?.remainingTargets ?? []),
       };
       const requiresValidation =
         effectiveValidation.expectsJson ||
@@ -312,8 +334,19 @@ export function createOmegaWorkTool(
         interactionKind: interaction.kind,
         timeoutSeconds,
       });
-      let effectiveRoute =
-        frontal.kind === "escalate_isolated_repair" ? "sessions_spawn" : route;
+      let effectiveRoute = frontal.kind === "escalate_isolated_repair" ? "sessions_spawn" : route;
+
+      effectiveRoute = enhanceRouteWithLearnedRules({
+        task: goalTask,
+        proposedRoute: effectiveRoute,
+        failureStreak: sessionKernel.tension.failureStreak,
+        lastErrorKind:
+          sessionTimeline.length > 0
+            ? sessionTimeline[sessionTimeline.length - 1].outcome?.errorKind
+            : undefined,
+        targets: effectiveValidation.expectedPaths,
+      });
+
       if (matchedRecovery?.suggestedRoute === "sessions_spawn") {
         effectiveRoute = "sessions_spawn";
       } else if (
@@ -454,7 +487,8 @@ export function createOmegaWorkTool(
             execution: {
               route: "sessions_spawn",
               runId:
-                typeof (retryResult.details as Record<string, unknown> | undefined)?.runId === "string"
+                typeof (retryResult.details as Record<string, unknown> | undefined)?.runId ===
+                "string"
                   ? ((retryResult.details as Record<string, unknown>).runId as string)
                   : undefined,
               trigger: "direct",

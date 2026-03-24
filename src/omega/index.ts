@@ -1,4 +1,9 @@
-export type { OmegaSmokeResult, OmegaStructuredTask, OmegaValidationResult, OmegaJepaTensionResult } from "./types.js";
+export type {
+  OmegaSmokeResult,
+  OmegaStructuredTask,
+  OmegaValidationResult,
+  OmegaJepaTensionResult,
+} from "./types.js";
 export {
   formatOmegaRecoveryEpisodeRecall,
   loadOmegaRecoveryEpisodeRecall,
@@ -39,7 +44,18 @@ export {
 export {
   applyOmegaHeartbeatExecutiveAction,
   buildOmegaHeartbeatPrompt,
+  deriveOmegaHeartbeatContinuationDelay,
+  deriveOmegaHeartbeatTurnDecision,
+  executeOmegaHeartbeatTurnWithDeps,
+  runOneHeartbeatCycleWithDeps,
+  runAutonomousLoop,
+  type OmegaHeartbeatCycleDeps,
+  type OmegaHeartbeatCycleResult,
   type OmegaHeartbeatExecutiveResult,
+  type OmegaHeartbeatRuntimeSnapshot,
+  type OmegaHeartbeatTurnDecision,
+  type OmegaHeartbeatTurnMetric,
+  type OmegaHeartbeatTurnResult,
 } from "./heartbeat.js";
 export {
   deriveOmegaSelfTimeKernel,
@@ -83,3 +99,26 @@ export {
   type AutonomousExecution,
 } from "./autonomous-executor.js";
 
+export {
+  runResearchLoop,
+  hasRecentResearchProse,
+  type ResearchLoopResult,
+} from "./research-loop.js";
+
+export {
+  loadScienceBaseInvariants,
+  buildScienceBasePromptSection,
+  formatScienceBasePromptBlock,
+  type ScienceBaseEntry,
+} from "./science-base-reader.js";
+
+export {
+  registerLearnedRule,
+  applyLearnedRules,
+  recordLearnedRuleOutcome,
+  pruneIneffectiveRules,
+  getLearnedRulesStats,
+  type LearnedRoutingRule,
+  type LearnedRuleContext,
+  type LearnedRouteKind,
+} from "./learned-rules/index.js";

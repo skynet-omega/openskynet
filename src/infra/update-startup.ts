@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { resolveCliName } from "../cli/cli-name.js";
 import { formatCliCommand } from "../cli/command-format.js";
 import type { loadConfig } from "../config/config.js";
 import { resolveStateDir } from "../config/paths.js";
@@ -265,7 +266,7 @@ async function runAutoUpdateCommand(params: {
     }
   }
   if (argv.length === 0) {
-    argv.push("openclaw", ...baseArgs);
+    argv.push(resolveCliName(), ...baseArgs);
   }
 
   try {

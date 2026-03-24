@@ -37,6 +37,10 @@ export type OmegaEmpiricalMetrics = {
   background: {
     usefulActions: number;
   };
+  /** Recovery strategy empirical data — used by world-model.ts to derive routing preferences */
+  recovery: {
+    strategies: Record<string, { successes: number; failures: number }>;
+  };
 };
 
 function createDefaultOmegaEmpiricalMetrics(): OmegaEmpiricalMetrics {
@@ -59,6 +63,9 @@ function createDefaultOmegaEmpiricalMetrics(): OmegaEmpiricalMetrics {
     background: {
       usefulActions: 0,
     },
+    recovery: {
+      strategies: {},
+    },
   };
 }
 
@@ -74,9 +81,7 @@ function clampNonNegativeInteger(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
 }
 
-function normalizeRouteCounts(
-  value: unknown,
-): Partial<Record<OmegaEmpiricalRoute, number>> {
+function normalizeRouteCounts(value: unknown): Partial<Record<OmegaEmpiricalRoute, number>> {
   if (!value || typeof value !== "object") {
     return {};
   }
@@ -97,9 +102,7 @@ function normalizeRouteCounts(
   return counts;
 }
 
-function withDerivedOmegaEmpiricalMetrics(
-  metrics: OmegaEmpiricalMetrics,
-): OmegaEmpiricalMetrics {
+function withDerivedOmegaEmpiricalMetrics(metrics: OmegaEmpiricalMetrics): OmegaEmpiricalMetrics {
   const validatedOutcomes = clampNonNegativeInteger(metrics.validation.validatedOutcomes);
   const preventedFalseSuccesses = clampNonNegativeInteger(
     metrics.validation.preventedFalseSuccesses,
@@ -109,15 +112,15 @@ function withDerivedOmegaEmpiricalMetrics(
 
   return {
     version: OMEGA_EMPIRICAL_METRICS_VERSION,
-    updatedAt: typeof metrics.updatedAt === "number" && Number.isFinite(metrics.updatedAt)
-      ? metrics.updatedAt
-      : 0,
+    updatedAt:
+      typeof metrics.updatedAt === "number" && Number.isFinite(metrics.updatedAt)
+        ? metrics.updatedAt
+        : 0,
     validation: {
       recordedOutcomes: clampNonNegativeInteger(metrics.validation.recordedOutcomes),
       validatedOutcomes,
       preventedFalseSuccesses,
-      falseSuccessRate:
-        validatedOutcomes > 0 ? preventedFalseSuccesses / validatedOutcomes : 0,
+      falseSuccessRate: validatedOutcomes > 0 ? preventedFalseSuccesses / validatedOutcomes : 0,
     },
     routing: {
       toolTasks,
@@ -128,6 +131,9 @@ function withDerivedOmegaEmpiricalMetrics(
     },
     background: {
       usefulActions: clampNonNegativeInteger(metrics.background.usefulActions),
+    },
+    recovery: {
+      strategies: metrics.recovery?.strategies ?? {},
     },
   };
 }
@@ -144,9 +150,7 @@ function parseOmegaEmpiricalMetrics(raw: unknown): OmegaEmpiricalMetrics {
     validation: {
       recordedOutcomes: clampNonNegativeInteger(parsed.validation?.recordedOutcomes),
       validatedOutcomes: clampNonNegativeInteger(parsed.validation?.validatedOutcomes),
-      preventedFalseSuccesses: clampNonNegativeInteger(
-        parsed.validation?.preventedFalseSuccesses,
-      ),
+      preventedFalseSuccesses: clampNonNegativeInteger(parsed.validation?.preventedFalseSuccesses),
       falseSuccessRate: 0,
     },
     routing: {
@@ -158,6 +162,9 @@ function parseOmegaEmpiricalMetrics(raw: unknown): OmegaEmpiricalMetrics {
     },
     background: {
       usefulActions: clampNonNegativeInteger(parsed.background?.usefulActions),
+    },
+    recovery: {
+      strategies: (parsed as Partial<OmegaEmpiricalMetrics>).recovery?.strategies ?? {},
     },
   });
 }
@@ -229,8 +236,7 @@ export async function recordOmegaRouteMetrics(params: {
       toolTasks: metrics.routing.toolTasks + 1,
       llmCallsEstimated:
         metrics.routing.llmCallsEstimated + clampNonNegativeInteger(params.llmCallsEstimated),
-      llmCallsSaved:
-        metrics.routing.llmCallsSaved + clampNonNegativeInteger(params.llmCallsSaved),
+      llmCallsSaved: metrics.routing.llmCallsSaved + clampNonNegativeInteger(params.llmCallsSaved),
       meanLlmCallsPerToolTask: metrics.routing.meanLlmCallsPerToolTask,
       routeCounts: {
         ...metrics.routing.routeCounts,

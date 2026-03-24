@@ -110,8 +110,10 @@ export function resolveRuntimeServiceVersion(
 
   return (
     firstNonEmpty(
+      env["OPENSKYNET_VERSION"],
       env["OPENCLAW_VERSION"],
       runtimeVersion,
+      env["OPENSKYNET_SERVICE_VERSION"],
       env["OPENCLAW_SERVICE_VERSION"],
       env["npm_package_version"],
     ) ?? fallback

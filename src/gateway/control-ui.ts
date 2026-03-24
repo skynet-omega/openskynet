@@ -380,15 +380,22 @@ export function handleControlUiHttpRequest(
           argv1: process.argv[1],
           cwd: process.cwd(),
         });
+
   if (!root) {
+    console.error(
+      `[CONTROL-UI-DEBUG] resolveControlUiRootSync failed. argv1: ${process.argv[1]}, cwd: ${process.cwd()}, moduleUrl: ${import.meta.url}`,
+    );
     respondControlUiAssetsUnavailable(res);
     return true;
   }
 
   const rootReal = (() => {
     try {
-      return fs.realpathSync(root);
+      const resolved = fs.realpathSync(root);
+      console.log(`[CONTROL-UI-DEBUG] Resolved root: ${root}, realpath: ${resolved}`);
+      return resolved;
     } catch (error) {
+      console.error(`[CONTROL-UI-DEBUG] fs.realpathSync failed for ${root}`, error);
       if (isExpectedSafePathError(error)) {
         return null;
       }

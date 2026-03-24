@@ -306,7 +306,7 @@ export async function ensureControlUiAssetsBuilt(
     return {
       ok: false,
       built: false,
-      message: `${hint}. Build them with \`pnpm ui:build\` (auto-installs UI deps).`,
+      message: `${hint}. Build them with \`pnpm prepack\` (which runs \`pnpm build && pnpm ui:build\` in the correct order).`,
     };
   }
 

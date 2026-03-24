@@ -285,8 +285,13 @@ export async function checkDepsStatus(params: {
 
 export async function fetchNpmLatestVersion(params?: {
   timeoutMs?: number;
+  packageName?: string;
 }): Promise<RegistryStatus> {
-  const res = await fetchNpmTagVersion({ tag: "latest", timeoutMs: params?.timeoutMs });
+  const res = await fetchNpmTagVersion({
+    tag: "latest",
+    timeoutMs: params?.timeoutMs,
+    packageName: params?.packageName,
+  });
   return {
     latestVersion: res.version,
     error: res.error,
@@ -296,12 +301,14 @@ export async function fetchNpmLatestVersion(params?: {
 export async function fetchNpmTagVersion(params: {
   tag: string;
   timeoutMs?: number;
+  packageName?: string;
 }): Promise<NpmTagStatus> {
   const timeoutMs = params?.timeoutMs ?? 3500;
   const tag = params.tag;
+  const packageName = params.packageName || "openclaw";
   try {
     const res = await fetchWithTimeout(
-      `https://registry.npmjs.org/openclaw/${encodeURIComponent(tag)}`,
+      `https://registry.npmjs.org/${encodeURIComponent(packageName)}/${encodeURIComponent(tag)}`,
       {},
       Math.max(250, timeoutMs),
     );
@@ -446,6 +453,16 @@ function comparePrerelease(a: string[] | null, b: string[] | null): number {
   return 0;
 }
 
+async function readPackageName(root: string): Promise<string | null> {
+  try {
+    const raw = await fs.readFile(path.join(root, "package.json"), "utf8");
+    const parsed = JSON.parse(raw) as { name?: string };
+    return parsed.name || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function checkUpdateStatus(params: {
   root: string | null;
   timeoutMs?: number;
@@ -454,12 +471,16 @@ export async function checkUpdateStatus(params: {
 }): Promise<UpdateCheckResult> {
   const timeoutMs = params.timeoutMs ?? 6000;
   const root = params.root ? path.resolve(params.root) : null;
+  const packageName = root ? await readPackageName(root) : null;
+
   if (!root) {
     return {
       root: null,
       installKind: "unknown",
       packageManager: "unknown",
-      registry: params.includeRegistry ? await fetchNpmLatestVersion({ timeoutMs }) : undefined,
+      registry: params.includeRegistry
+        ? await fetchNpmLatestVersion({ timeoutMs, packageName: packageName || undefined })
+        : undefined,
     };
   }
 
@@ -476,7 +497,9 @@ export async function checkUpdateStatus(params: {
       })
     : undefined;
   const deps = await checkDepsStatus({ root, manager: pm });
-  const registry = params.includeRegistry ? await fetchNpmLatestVersion({ timeoutMs }) : undefined;
+  const registry = params.includeRegistry
+    ? await fetchNpmLatestVersion({ timeoutMs, packageName: packageName || undefined })
+    : undefined;
 
   return {
     root,

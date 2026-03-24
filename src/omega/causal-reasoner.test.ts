@@ -37,7 +37,7 @@ describe("CausalReasoner", () => {
     const indirect = plan.expectedEffects.find((effect) => effect.variable === "throughput");
 
     expect(direct?.confidence).toBe(1);
-    expect(indirect?.confidence).toBeLessThan(direct?.confidence ?? 0);
+    expect(indirect?.confidence).toBeLessThan(0.8);
     expect(plan.potentialBackfires.some((risk) => risk.includes("background_load"))).toBe(true);
   });
 });

@@ -1,6 +1,20 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { getActiveLearningStrategy } from "./active-learning-strategy.js";
+import { runAutonomousCycle } from "./autonomous-executor.js";
+import { getContinuousThinkingEngine } from "./continuous-thinking-engine.js";
+import { getEntropyMinimizationLoop } from "./entropy-minimization-loop.js";
 import { decideOmegaWakeAction } from "./frontal/wake-policy.js";
+import { evaluateInnerDrives, buildAutonomousDirectivePrompt } from "./inner-life/index.js";
+import {
+  enhanceDriveWithJepaTension,
+  parseJepaTensionFromKernelTimeline,
+} from "./jepa-drive-enhancement.js";
+import { logJepaSample, analyzeJepaCorrelation } from "./jepa-empirical-logger.js";
+import {
+  loadOmegaOperationalMemoryTail,
+  summarizeOmegaOperationalMemory,
+} from "./operational-memory.js";
 import { resumeInterruptedOmegaGoal } from "./recovery-runner.js";
 import {
   focusActiveOmegaGoalTargets,
@@ -10,12 +24,7 @@ import {
   pruneStaleOmegaGoals,
   pruneSupersededOmegaGoals,
 } from "./session-context.js";
-import { evaluateInnerDrives, buildAutonomousDirectivePrompt } from "./inner-life/index.js";
-import { logJepaSample, analyzeJepaCorrelation } from "./jepa-empirical-logger.js";
-import { enhanceDriveWithJepaTension, parseJepaTensionFromKernelTimeline } from "./jepa-drive-enhancement.js";
-import { getContinuousThinkingEngine } from "./continuous-thinking-engine.js";
-import { getEntropyMinimizationLoop } from "./entropy-minimization-loop.js";
-import { getActiveLearningStrategy } from "./active-learning-strategy.js";
+import { deriveFocusedActiveTargets } from "./session-context.js";
 
 /**
  * Recolecta candidatos de memoria para exploración por la drive de curiosidad.
@@ -23,7 +32,7 @@ import { getActiveLearningStrategy } from "./active-learning-strategy.js";
  */
 async function collectMemoryCandidates(workspaceRoot: string): Promise<string[]> {
   const candidates: string[] = [];
-  
+
   // MEMORY.md siempre es candidato
   const memoryMdPath = path.join(workspaceRoot, "MEMORY.md");
   try {
@@ -32,7 +41,7 @@ async function collectMemoryCandidates(workspaceRoot: string): Promise<string[]>
   } catch {
     // No existe, ignorar
   }
-  
+
   // Archivos en memory/
   const memoryDir = path.join(workspaceRoot, "memory");
   try {
@@ -45,7 +54,7 @@ async function collectMemoryCandidates(workspaceRoot: string): Promise<string[]>
   } catch {
     // Directorio no existe, ignorar
   }
-  
+
   return candidates;
 }
 
@@ -89,6 +98,13 @@ export type OmegaHeartbeatExecutiveResult =
       goalTask: string;
       failureStreak: number;
       errorKind?: string;
+    }
+  | {
+      /** Goal atascado fue reencuadrado con targets residuales para evitar retry ciego. */
+      kind: "reframed_stalled_goal";
+      wakeAction: ReturnType<typeof decideOmegaWakeAction>;
+      goalTask: string;
+      focusedTargets: string[];
     };
 
 export async function buildOmegaHeartbeatPrompt(params: {
@@ -113,11 +129,11 @@ export async function buildOmegaHeartbeatPrompt(params: {
       // PHASE 1: CONTINUOUS THINKING - Generar pensamientos genuinos del sistema
       const thinkingEngine = getContinuousThinkingEngine();
       const newThoughts = thinkingEngine.think(kernel);
-      
+
       // PHASE 2: ENTROPY MINIMIZATION - Detectar contradicciones automáticamente
       const entropyLoop = getEntropyMinimizationLoop();
       const contradictions = entropyLoop.detectContradictions(kernel);
-      
+
       // PHASE 3: ACTIVE LEARNING - Generar hipótesis cuando la entropía es alta
       const learningStrategy = getActiveLearningStrategy();
       for (const thought of newThoughts) {
@@ -130,47 +146,76 @@ export async function buildOmegaHeartbeatPrompt(params: {
           });
         }
       }
-      
+
       // PHASE 4: TEST HYPOTHESES - Probar hipótesis empíricamente usando JEPA Loss History
       const hypothesesState = learningStrategy.getState();
-      const untestedHypotheses = hypothesesState.activeHypotheses.filter(h => !h.tested);
-      
+      const untestedHypotheses = hypothesesState.activeHypotheses.filter((h) => !h.tested);
+
       if (untestedHypotheses.length > 0) {
         // Ejecuta un test asíncrono sobre la correlación real de frustración
         const jepaEvaluation = await analyzeJepaCorrelation(params.workspaceRoot);
-        
+
         for (const hypothesis of untestedHypotheses.slice(0, 2)) {
           // Actualización Bayesiana informada:
           // Si hay una correlación clara detectada (>0.1 score), consideramos que la hipótesis del log fue validada
-          const confirmed = jepaEvaluation.correlationScore !== null && jepaEvaluation.correlationScore > 0.1;
-          const evidence = `jepa_correlation:${jepaEvaluation.correlationScore?.toFixed(2) ?? 'null'}, events:${jepaEvaluation.totalEvents}`;
-          
-          learningStrategy.updateHypothesis(
-            hypothesis.id,
-            evidence,
-            confirmed
-          );
+          const confirmed =
+            jepaEvaluation.correlationScore !== null && jepaEvaluation.correlationScore > 0.1;
+          const evidence = `jepa_correlation:${jepaEvaluation.correlationScore?.toFixed(2) ?? "null"}, events:${jepaEvaluation.totalEvents}`;
+
+          learningStrategy.updateHypothesis(hypothesis.id, evidence, confirmed);
         }
       }
-      
+
       // PHASE 5: TRADITIONAL DRIVES - Para compatibilidad con sistema existente
       const memoryCandidates = await collectMemoryCandidates(params.workspaceRoot);
       let driveSignal = evaluateInnerDrives({ kernel, nowMs: Date.now(), memoryCandidates });
-      
+
       // PLAN B: Enhance drive with JEPA tension metrics
       // Si JEPA detecta frustración, puede elevar urgencia o activar drives
       const sessionTimeline = await loadOmegaSessionTimeline(params);
       const jepaTension = parseJepaTensionFromKernelTimeline(sessionTimeline);
       driveSignal = enhanceDriveWithJepaTension(driveSignal, jepaTension);
-      
+
       if (driveSignal.kind !== "idle") {
         const autonomousPrompt = buildAutonomousDirectivePrompt({ signal: driveSignal, kernel });
         if (autonomousPrompt) {
           return autonomousPrompt;
         }
       }
+
+      // PHASE 6: INTERNAL THOUGHTS → disponibles para próximo ciclo
+      // (No genera prompt en modo heartbeat_ok, pero registra para observabilidad)
+      void thinkingEngine.getStats();
     }
     return undefined;
+  }
+
+  // Budget pressure: si hay ≥3 turns stalled sin progreso, diferir
+  const opTailForPrompt = await loadOmegaOperationalMemoryTail(params);
+  const opSummaryForPrompt = summarizeOmegaOperationalMemory(opTailForPrompt);
+  if (opSummaryForPrompt.recentStalledTurns >= 3 && opSummaryForPrompt.recentResolvedTurns === 0) {
+    // Deferred: no generar prompt, el sistema está bajo presión de budget
+    return undefined;
+  }
+
+  // Probe experiment: failure streak elevado → proponer experimento quirúrgico
+  // Se activa con ≥2 failures del mismo tipo, con o sin goal activo
+  if (
+    kernel &&
+    (kernel.tension.failureStreak >= 2 || kernel.tension.repeatedFailureKinds.length >= 2)
+  ) {
+    const lines = [
+      "[OMEGA Initiative Contract]",
+      "The system has detected repeated failures without an active recovery goal.",
+      "Run a probe_experiment: a minimal, isolated test to identify the root cause.",
+      "",
+      "SURGICAL EXPERIMENT CONSTRAINTS:",
+      "- NO REPAIR: Do not fix the underlying issue. Only diagnose.",
+      "- Scope: ≤2 files, ≤20 lines of change",
+      "- Output: a falsifiable finding (success/failure with evidence)",
+      `- Failure kinds observed: ${kernel.tension.repeatedFailureKinds.join(", ") || "unknown"}`,
+    ];
+    return lines.join("\n");
   }
 
   const lines = [
@@ -222,18 +267,24 @@ export async function buildOmegaHeartbeatPrompt(params: {
 
   if (wakeAction.kind === "prune_superseded_goals") {
     lines.push(`Superseded goals to prune: ${wakeAction.goalTasks.join(" | ")}`);
-    lines.push("Prefer silent cleanup when newer verified writes already superseded the blocked work.");
+    lines.push(
+      "Prefer silent cleanup when newer verified writes already superseded the blocked work.",
+    );
   }
 
   if (wakeAction.kind === "focus_active_goal_targets") {
     lines.push(`Active goal: ${wakeAction.goalTask}`);
     lines.push(`Focus only on remaining targets: ${wakeAction.goalTargets.join(" | ")}`);
-    lines.push("Do not reopen already covered targets if newer verified writes already touched them.");
+    lines.push(
+      "Do not reopen already covered targets if newer verified writes already touched them.",
+    );
   }
 
   if (wakeAction.kind === "prune_shadowed_goals") {
     lines.push(`Shadowed goals to prune: ${wakeAction.goalTasks.join(" | ")}`);
-    lines.push("Prefer the newer active subgoal when it already covers the remaining unresolved targets.");
+    lines.push(
+      "Prefer the newer active subgoal when it already covers the remaining unresolved targets.",
+    );
   }
 
   lines.push("If no user-facing update is needed after inspection, reply HEARTBEAT_OK.");
@@ -313,6 +364,26 @@ export async function applyOmegaHeartbeatExecutiveAction(params: {
     }
   }
 
+  // Reframe stalled goal: si hay ≥2 turns stalled y hay goal activo con targets
+  // residuales, reencuadrar para evitar retry ciego
+  const opTail = await loadOmegaOperationalMemoryTail(params);
+  const opSummary = summarizeOmegaOperationalMemory(opTail);
+  if (opSummary.recentStalledTurns >= 2 && kernel?.activeGoalId) {
+    const activeGoal = kernel.goals.find(
+      (g) => g.id === kernel.activeGoalId && g.status === "active",
+    );
+    if (activeGoal && activeGoal.targets.length > 0) {
+      const focusedTargets = deriveFocusedActiveTargets(kernel);
+      const residualTargets = focusedTargets.length > 0 ? focusedTargets : activeGoal.targets;
+      return {
+        kind: "reframed_stalled_goal",
+        wakeAction,
+        goalTask: activeGoal.task,
+        focusedTargets: residualTargets,
+      };
+    }
+  }
+
   return {
     kind: "none",
     wakeAction,
@@ -335,89 +406,439 @@ function logOmega(message: string): void {
 }
 
 /**
- * AUTONOMOUS LOOP - Ejecuta cada N minutos sin interacción humana
- * 
- * El agente PIENSA continuamente:
- * - Cada ciclo: lee su estado, evalúa drives, genera hipótesis
- * - Detecta contradicciones, resuelve automáticamente
- * - Guarda aprendizajes en memory/ para próximos ciclos
- * - No espera a que Gonzalo pregunta algo
- * 
+ * AUTONOMOUS LOOP — Ejecuta cada N minutos sin interacción humana.
+ *
+ * Cada ciclo:
+ * 1. Aplica acciones de gobernanza (pruning, recovery) sin LLM
+ * 2. Evalúa drives internas y ejecuta acciones concretas (explorar memoria,
+ *    limpiar sesiones, proponer experimentos) sin LLM
+ * 3. Genera prompt de razonamiento (disponible para el agente en su próximo turn)
+ *
+ * El agente pensante (LLM) no necesita estar activo para que el loop funcione:
+ * runAutonomousCycle actúa directamente sobre el FS y el estado omega.
+ *
  * @param params Configuración del workspace
  * @param intervalMinutes Intervalo entre ciclos (default: 5 min)
  */
-export async function runAutonomousLoop(params: {
-  workspaceRoot: string;
-  sessionKey: string;
-}, intervalMinutes = 5): Promise<never> {
+export async function runAutonomousLoop(
+  params: { workspaceRoot: string; sessionKey: string },
+  intervalMinutes = 5,
+): Promise<never> {
   const intervalMs = intervalMinutes * 60 * 1000;
   let cycleCount = 0;
-  
-  logOmega(`🚀 INICIANDO LOOP AUTÓNOMO (cada ${intervalMinutes} min)`);
-  logOmega(`Workdir: ${params.workspaceRoot}`);
-  logOmega(`Session: ${params.sessionKey}`);
-  
-  // Loop infinito: piensa cada N minutos
+  const log = (msg: string) => console.log(`[${new Date().toISOString()}] [OMEGA LOOP] ${msg}`);
+
+  log(`🚀 LOOP AUTÓNOMO ACTIVO (cada ${intervalMinutes} min)`);
+  log(`Workspace: ${params.workspaceRoot} | Session: ${params.sessionKey}`);
+
+  // Loop infinito: actúa cada N minutos
   while (true) {
     cycleCount++;
     const cycleStart = Date.now();
-    
+
     try {
-      logOmega(`\\n━━━━━ CICLO #${cycleCount} INICIADO ━━━━━`);
-      
-      // 1. PENSAMIENTO: Genera prompt de autonomía
-      const prompt = await buildOmegaHeartbeatPrompt(params);
-      
-      if (!prompt) {
-        logOmega(`✓ No hay trabajo. Estado OK.`);
+      log(`\n━━━ CICLO #${cycleCount} ━━━`);
+
+      // FASE 1: Gobernanza ejecutiva (sin LLM)
+      const execResult = await applyOmegaHeartbeatExecutiveAction(params);
+      if (execResult.kind !== "none") {
+        log(`✅ Gobernanza: ${execResult.kind}`);
+      }
+
+      // FASE 2: Drives autónomas (sin LLM) — explora, limpia, propone
+      const autonomousCycle = await runAutonomousCycle(params);
+      if (autonomousCycle) {
+        log(`🤖 Drive [${autonomousCycle.driveKind}]: ${JSON.stringify(autonomousCycle.action)}`);
       } else {
-        logOmega(`📝 Prompt generado (${prompt.length} chars)`);
-        logOmega(`💬 PENSAMIENTO: ${prompt.split('\\n')[0]}`);
-        
-        // 2. EJECUCIÓN: Aquí iría la llamada al LLM
-        // (Actualmente solo log, se integra con LLM después)
-        logOmega(`⚙️  [TODO: Ejecutar con LLM]`);
+        log(`💤 Drives: idle`);
       }
-      
-      // 3. GOBERNANZA: Ejecuta acciones que no requieren LLM
-      const executiveResult = await applyOmegaHeartbeatExecutiveAction(params);
-      if (executiveResult.kind !== "none") {
-        logOmega(`✅ Acción ejecutada: ${executiveResult.kind}`);
+
+      // FASE 3: Prompt de razonamiento (disponible para el LLM en próximo turn)
+      const prompt = await buildOmegaHeartbeatPrompt(params);
+      if (prompt) {
+        log(`🧠 Prompt listo (${prompt.length} chars): ${prompt.split("\n")[0]}`);
+      } else {
+        log(`✓ Sin trabajo pendiente. Estado OK.`);
       }
-      
-      const cycleDuration = ((Date.now() - cycleStart) / 1000).toFixed(2);
-      logOmega(`✓ Ciclo completado en ${cycleDuration}s`);
-      logOmega(`━━━━━ CICLO #${cycleCount} FINALIZADO ━━━━━\\n`);
-      
+
+      const elapsed = ((Date.now() - cycleStart) / 1000).toFixed(2);
+      log(`✓ Ciclo #${cycleCount} completado en ${elapsed}s`);
     } catch (error) {
-      logOmega(`❌ ERROR en ciclo #${cycleCount}:`);
-      logOmega(`   ${error instanceof Error ? error.message : String(error)}`);
+      log(
+        `❌ Error en ciclo #${cycleCount}: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
-    
-    // Espera N minutos hasta próximo ciclo
-    logOmega(`⏰ Próximo ciclo en ${intervalMinutes} min...`);
+
+    log(`⏰ Próximo ciclo en ${intervalMinutes} min...`);
     await sleep(intervalMs);
   }
 }
 
 /**
- * Versión rápida para testing: 1 ciclo, no loop
+ * Versión rápida para testing: 1 ciclo, no loop (sin deps)
  */
 export async function runOneHeartbeatCycle(params: {
   workspaceRoot: string;
   sessionKey: string;
 }): Promise<void> {
-  logOmega(`🧠 Ejecutando UN ciclo de heartbeat`);
-  
   const prompt = await buildOmegaHeartbeatPrompt(params);
+  const now = new Date().toISOString();
   if (prompt) {
-    console.log("\\n=== PROMPT GENERADO ===");
-    console.log(prompt);
-    console.log("=== FIN PROMPT ===");
+    console.log(`[${now}] [OMEGA LOOP] 📝 Prompt generado (${prompt.length} chars)`);
   } else {
-    logOmega(`✓ Sin trabajo. Estado OK.`);
+    console.log(`[${now}] [OMEGA LOOP] ✓ Sin trabajo. Estado OK.`);
   }
-  
   const executiveResult = await applyOmegaHeartbeatExecutiveAction(params);
-  logOmega(`Resultado: ${executiveResult.kind}`);
+  console.log(`[${now}] [OMEGA LOOP] Resultado: ${executiveResult.kind}`);
+}
+
+// ── Dependency-injection types ────────────────────────────────────────────────
+
+/**
+ * Snapshot del runtime omega en un punto temporal.
+ */
+export interface OmegaHeartbeatRuntimeSnapshot {
+  timeline: import("./session-context.js").OmegaSessionTimelineEntry[];
+  kernel: import("./self-time-kernel.js").OmegaSelfTimeKernelState | undefined;
+}
+
+/**
+ * Dependencias inyectables para el ciclo del heartbeat.
+ * Permite testear sin LLM real, sin FS, sin red.
+ */
+export interface OmegaHeartbeatCycleDeps {
+  /** Genera el prompt que se enviará al agente */
+  buildPrompt: (params: {
+    workspaceRoot: string;
+    sessionKey: string;
+  }) => Promise<string | undefined>;
+  /** Lee snapshot del estado actual (kernel + timeline) */
+  loadRuntimeSnapshot: (params: {
+    workspaceRoot: string;
+    sessionKey: string;
+  }) => Promise<OmegaHeartbeatRuntimeSnapshot>;
+  /** Envía el prompt al agente (sesiones, cron, etc.) */
+  sendAgentTurn: (params: {
+    workspaceRoot: string;
+    sessionKey: string;
+    prompt: string;
+  }) => Promise<void>;
+  /** Appends al log de consciencia sin bloquear el turno */
+  appendConsciousnessLog: (params: { workspaceRoot: string; entry: string }) => Promise<void>;
+  /** Aplica acción ejecutiva (pruning, resumption) */
+  applyExecutiveAction: (params: {
+    workspaceRoot: string;
+    sessionKey: string;
+  }) => Promise<OmegaHeartbeatExecutiveResult>;
+  /** Lee la última respuesta del agente para detectar HEARTBEAT_OK */
+  readLatestReply: (params: {
+    workspaceRoot: string;
+    sessionKey: string;
+  }) => Promise<string | undefined>;
+  /** Registra métricas de un turno */
+  recordMetric: (params: {
+    workspaceRoot: string;
+    entry: OmegaHeartbeatTurnMetric;
+  }) => Promise<void>;
+  /** Crea directorios necesarios si no existen */
+  ensureDirectories: (params: { workspaceRoot: string }) => Promise<void>;
+  /** Sleep entre iteraciones */
+  sleep: (ms: number) => Promise<void>;
+}
+
+export interface OmegaHeartbeatTurnMetric {
+  kind: "heartbeat_iteration";
+  iteration: number;
+  terminationReason: string;
+  progressObserved: boolean;
+  latencyBreakdown: {
+    sendAgentTurnMs: number;
+    loadSnapshotMs: number;
+    readLatestReplyMs: number;
+    totalMs: number;
+  };
+}
+
+// ── Turn decision ─────────────────────────────────────────────────────────────
+
+export interface OmegaHeartbeatTurnDecision {
+  shouldContinue: boolean;
+  stopReason: "structured_idle" | "reply_heartbeat_ok" | "no_progress" | "active_goal" | "continue";
+  replyHeartbeatOk: boolean;
+  structuredIdleDetected: boolean;
+}
+
+/**
+ * Decide si continuar el loop o detenerse.
+ * Pura: solo lee estado, no escribe nada.
+ */
+export function deriveOmegaHeartbeatTurnDecision(params: {
+  previousTimelineLength: number;
+  previousKernelUpdatedAt: number | undefined;
+  latestReply?: string | undefined;
+  nextSnapshot: OmegaHeartbeatRuntimeSnapshot;
+}): OmegaHeartbeatTurnDecision {
+  const { previousTimelineLength, previousKernelUpdatedAt, latestReply, nextSnapshot } = params;
+
+  const newTimelineLength = nextSnapshot.timeline.length;
+  const kernelUpdated =
+    nextSnapshot.kernel !== undefined && nextSnapshot.kernel.updatedAt !== previousKernelUpdatedAt;
+  const timelineDelta = newTimelineLength - previousTimelineLength;
+  const progressObserved = timelineDelta > 0 || kernelUpdated;
+
+  const replyHeartbeatOk = typeof latestReply === "string" && latestReply.includes("HEARTBEAT_OK");
+
+  // Idle estructurado: el kernel actualizó Y tiene goal completion o tension OK
+  // Sin goal activo pendiente → sistema genuinamente idle
+  const kernel = nextSnapshot.kernel;
+  const hasActivePendingGoal =
+    kernel?.activeGoalId !== undefined &&
+    (kernel?.tension?.pendingCorrection === true || (kernel?.tension?.openGoalCount ?? 0) > 0);
+
+  const structuredIdleDetected = progressObserved && !hasActivePendingGoal && !replyHeartbeatOk;
+
+  // El heartbeat se detiene cuando:
+  // 1. La respuesta del agente dice HEARTBEAT_OK
+  if (replyHeartbeatOk) {
+    return {
+      shouldContinue: false,
+      stopReason: "reply_heartbeat_ok",
+      replyHeartbeatOk: true,
+      structuredIdleDetected: false,
+    };
+  }
+
+  // 2. El estado estructural ya muestra idle (kernel actualizó, sin pending)
+  if (structuredIdleDetected) {
+    return {
+      shouldContinue: false,
+      stopReason: "structured_idle",
+      replyHeartbeatOk: false,
+      structuredIdleDetected: true,
+    };
+  }
+
+  return {
+    shouldContinue: true,
+    stopReason: "continue",
+    replyHeartbeatOk: false,
+    structuredIdleDetected: false,
+  };
+}
+
+// ── Continuation delay ────────────────────────────────────────────────────────
+
+/**
+ * Calcula el delay entre iteraciones según el progreso observado.
+ * Si hay progreso real → delay corto (sistema activo).
+ * Si hay backoff → delay largo (sistema atascado).
+ */
+export function deriveOmegaHeartbeatContinuationDelay(params: {
+  terminationReason: string;
+  progressObserved: boolean;
+}): number {
+  if (params.terminationReason === "continue" && params.progressObserved) {
+    return 2_000; // 2s: hay progreso, seguir rápido
+  }
+  if (params.terminationReason === "continue") {
+    return 7_500; // 7.5s: sin progreso, backoff
+  }
+  return 0;
+}
+
+// ── Turn executor ─────────────────────────────────────────────────────────────
+
+export interface OmegaHeartbeatTurnResult {
+  iteration: number;
+  terminationReason: string;
+  latestReply?: string;
+  decision: OmegaHeartbeatTurnDecision;
+  stateDelta: {
+    timelineDelta: number;
+    kernelUpdated: boolean;
+    progressObserved: boolean;
+  };
+  latencyBreakdown: {
+    sendAgentTurnMs: number;
+    loadSnapshotMs: number;
+    readLatestReplyMs: number;
+    totalMs: number;
+  };
+}
+
+/**
+ * Ejecuta un turno del heartbeat con dependencias inyectadas.
+ * Patrón: send → wait → snapshot → decide → metric
+ */
+export async function executeOmegaHeartbeatTurnWithDeps(
+  params: {
+    workspaceRoot: string;
+    sessionKey: string;
+    iteration: number;
+    prompt: string;
+    previousSnapshot: OmegaHeartbeatRuntimeSnapshot;
+  },
+  deps: OmegaHeartbeatCycleDeps,
+): Promise<OmegaHeartbeatTurnResult> {
+  const totalStart = Date.now();
+  const { workspaceRoot, sessionKey, iteration, prompt, previousSnapshot } = params;
+
+  // 1. Enviar turno al agente
+  const sendStart = Date.now();
+  await deps.sendAgentTurn({ workspaceRoot, sessionKey, prompt });
+  const sendAgentTurnMs = Date.now() - sendStart;
+
+  // 2. Leer snapshot post-turno
+  const snapshotStart = Date.now();
+  const nextSnapshot = await deps.loadRuntimeSnapshot({ workspaceRoot, sessionKey });
+  const loadSnapshotMs = Date.now() - snapshotStart;
+
+  // 3. Calcular deltas
+  const previousTimelineLength = previousSnapshot.timeline.length;
+  const newTimelineLength = nextSnapshot.timeline.length;
+  const timelineDelta = newTimelineLength - previousTimelineLength;
+  const kernelUpdated =
+    nextSnapshot.kernel !== undefined &&
+    nextSnapshot.kernel.updatedAt !== previousSnapshot.kernel?.updatedAt;
+  const progressObserved = timelineDelta > 0 || kernelUpdated;
+
+  // 4. Decisión estructural (sin leer reply aún)
+  let decision = deriveOmegaHeartbeatTurnDecision({
+    previousTimelineLength,
+    previousKernelUpdatedAt: previousSnapshot.kernel?.updatedAt,
+    nextSnapshot,
+  });
+
+  // 5. Si el estado es ambiguo, leer la respuesta del agente
+  let latestReply: string | undefined;
+  let readLatestReplyMs = 0;
+  if (decision.shouldContinue || (!decision.structuredIdleDetected && !decision.replyHeartbeatOk)) {
+    const replyStart = Date.now();
+    latestReply = await deps.readLatestReply({ workspaceRoot, sessionKey });
+    readLatestReplyMs = Date.now() - replyStart;
+
+    if (latestReply !== undefined) {
+      decision = deriveOmegaHeartbeatTurnDecision({
+        previousTimelineLength,
+        previousKernelUpdatedAt: previousSnapshot.kernel?.updatedAt,
+        latestReply,
+        nextSnapshot,
+      });
+    }
+  }
+
+  const totalMs = Date.now() - totalStart;
+  const terminationReason = decision.shouldContinue ? "continue" : decision.stopReason;
+
+  // 6. Registrar métrica
+  void deps
+    .recordMetric({
+      workspaceRoot,
+      entry: {
+        kind: "heartbeat_iteration",
+        iteration,
+        terminationReason,
+        progressObserved,
+        latencyBreakdown: { sendAgentTurnMs, loadSnapshotMs, readLatestReplyMs, totalMs },
+      },
+    })
+    .catch(() => undefined);
+
+  return {
+    iteration,
+    terminationReason,
+    latestReply,
+    decision,
+    stateDelta: { timelineDelta, kernelUpdated, progressObserved },
+    latencyBreakdown: { sendAgentTurnMs, loadSnapshotMs, readLatestReplyMs, totalMs },
+  };
+}
+
+// ── Cycle orchestrator ────────────────────────────────────────────────────────
+
+export interface OmegaHeartbeatCycleResult {
+  iterations: number;
+  stopReason: string;
+  lastWakeActionKind: string;
+}
+
+/**
+ * Ejecuta un ciclo completo del heartbeat con dependencias inyectadas.
+ *
+ * Flujo:
+ * 1. Aplica acción ejecutiva (pruning, resumption) — puede terminar sin LLM
+ * 2. Si hay prompt disponible → itera: send → snapshot → decide
+ * 3. Registra métricas del ciclo completo
+ */
+export async function runOneHeartbeatCycleWithDeps(
+  params: { workspaceRoot: string; sessionKey: string },
+  deps: OmegaHeartbeatCycleDeps,
+): Promise<OmegaHeartbeatCycleResult> {
+  const { workspaceRoot, sessionKey } = params;
+
+  await deps.ensureDirectories({ workspaceRoot });
+
+  // Fase 1: acción ejecutiva (no requiere LLM)
+  const execResult = await deps.applyExecutiveAction({ workspaceRoot, sessionKey });
+  const lastWakeActionKind = execResult.wakeAction.kind;
+
+  // Terminación estructurada: executive recovery completó sin necesitar LLM
+  if (
+    execResult.kind === "resumed_interrupted_goal" ||
+    execResult.kind === "pruned_stale_goals" ||
+    execResult.kind === "pruned_superseded_goals" ||
+    execResult.kind === "pruned_shadowed_goals" ||
+    execResult.kind === "focused_active_goal_targets" ||
+    execResult.kind === "aborted_interrupted_goal" ||
+    execResult.kind === "reframed_stalled_goal"
+  ) {
+    return { iterations: 0, stopReason: "structured_idle", lastWakeActionKind };
+  }
+
+  // Fase 2: generar prompt para ciclo de razonamiento
+  const prompt = await deps.buildPrompt({ workspaceRoot, sessionKey });
+  if (!prompt) {
+    return { iterations: 0, stopReason: "no_prompt", lastWakeActionKind };
+  }
+
+  // Log de consciencia (no bloquea el turno)
+  void deps
+    .appendConsciousnessLog({
+      workspaceRoot,
+      entry: `[${new Date().toISOString()}] CYCLE_START prompt_chars=${prompt.length}`,
+    })
+    .catch(() => undefined);
+
+  // Fase 3: loop de iteraciones
+  let iterations = 0;
+  let stopReason = "max_iterations";
+  const MAX_ITERATIONS = 8;
+
+  let snapshot = await deps.loadRuntimeSnapshot({ workspaceRoot, sessionKey });
+
+  for (let i = 1; i <= MAX_ITERATIONS; i++) {
+    iterations = i;
+    const turnResult = await executeOmegaHeartbeatTurnWithDeps(
+      { workspaceRoot, sessionKey, iteration: i, prompt, previousSnapshot: snapshot },
+      deps,
+    );
+
+    snapshot = await deps.loadRuntimeSnapshot({ workspaceRoot, sessionKey });
+
+    if (!turnResult.decision.shouldContinue) {
+      stopReason = turnResult.terminationReason;
+      break;
+    }
+
+    // Delay entre iteraciones
+    const delay = deriveOmegaHeartbeatContinuationDelay({
+      terminationReason: turnResult.terminationReason,
+      progressObserved: turnResult.stateDelta.progressObserved,
+    });
+    if (delay > 0) {
+      await deps.sleep(delay);
+    }
+  }
+
+  return { iterations, stopReason, lastWakeActionKind };
 }

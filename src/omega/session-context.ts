@@ -8,6 +8,7 @@ import {
   syncOmegaEpisodeMemoryDigest,
 } from "./episodic-recall.js";
 import { deriveOmegaSessionSelfState, type OmegaSessionSelfState } from "./event-model.js";
+import { buildScienceBasePromptSection } from "./science-base-reader.js";
 import {
   deriveOmegaSelfTimeKernel,
   type OmegaKernelCausalEdge,
@@ -1049,6 +1050,19 @@ export async function buildOmegaSessionContextPrompt(params: {
     }
   }
 
+  // ── OMEGA Learned Invariants: inyectar patrones causales desde SCIENCE_BASE.md
+  // Esto simula "soft weight modification": el LLM activa sesgando decisiones
+  // en base a patrones empíricamente verificados en sesiones anteriores.
+  const scienceBaseBlock = await buildScienceBasePromptSection({
+    workspaceRoot: params.workspaceRoot,
+    relevantTask: params.task,
+    limit: 6,
+  });
+  if (scienceBaseBlock) {
+    lines.push("");
+    lines.push(scienceBaseBlock);
+  }
+
   return lines.join("\n");
 }
 
@@ -1135,6 +1149,73 @@ export async function recordOmegaSessionOutcome(params: {
       outcome: params.outcome,
     }).catch(() => undefined);
   }
+
+  // ── FRENTE A: Memoria Causal Útil ──────────────────────────────────────────
+  // Si el outcome fue exitoso y modificó archivos, registrar una regla causal
+  // en SCIENCE_BASE.md. El sistema "aprende qué funciona" acumulativamente.
+  if (
+    params.outcome.status === "ok" &&
+    params.outcome.observedChangedFiles &&
+    params.outcome.observedChangedFiles.length > 0
+  ) {
+    void appendScienceBaseRule({
+      workspaceRoot: params.workspaceRoot,
+      task: params.task,
+      observedChangedFiles: params.outcome.observedChangedFiles,
+      sessionKey: canonicalSessionKey,
+    }).catch(() => undefined);
+  }
+}
+
+/**
+ * FRENTE A: Memoria Causal Útil
+ *
+ * Appends a verified causal flow rule to SCIENCE_BASE.md.
+ * Each entry represents: "To achieve [task], write to [files]."
+ * These invariants accumulate across sessions, making the system smarter over time.
+ *
+ * Format: Markdown table row for easy diffing and parsing.
+ */
+async function appendScienceBaseRule(params: {
+  workspaceRoot: string;
+  task: string;
+  observedChangedFiles: string[];
+  sessionKey: string;
+}): Promise<void> {
+  const scienceBasePath = path.join(params.workspaceRoot, "SCIENCE_BASE.md");
+  const timestamp = new Date().toISOString().slice(0, 19).replace("T", " ");
+  const files = params.observedChangedFiles.slice(0, 5).join(", "); // máximo 5
+
+  // Crear entrada de regla causal
+  const rule = `| ${timestamp} | ${params.task.slice(0, 80)} | ${files} | ${params.sessionKey} |\n`;
+
+  // Asegurar que existe el archivo con header
+  let existing = "";
+  try {
+    existing = await fs.readFile(scienceBasePath, "utf-8");
+  } catch {
+    // Archivo no existe — crear con header
+    const header = [
+      "# SCIENCE_BASE — Reglas Causales Verificadas",
+      "",
+      "> Generado automáticamente por Omega. Cada fila = patrón de éxito verificado.",
+      "> Formato: tarea → archivos modificados.",
+      "",
+      "| Timestamp | Tarea | Archivos Modificados | Sesión |",
+      "|-----------|-------|---------------------|--------|",
+      "",
+    ].join("\n");
+    existing = header;
+  }
+
+  // Evitar duplicados exactos (misma tarea + mismos archivos)
+  if (existing.includes(files) && existing.includes(params.task.slice(0, 40))) {
+    return;
+  }
+
+  // Insertar antes del último bloque vacío o al final
+  const newContent = existing.trimEnd() + "\n" + rule;
+  await fs.writeFile(scienceBasePath, newContent, "utf-8");
 }
 
 export function summarizeValidationOutcome(
