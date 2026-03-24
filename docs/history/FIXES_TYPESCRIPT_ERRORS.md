@@ -9,6 +9,7 @@
 **Error:** `Type '"tool_use"' is not assignable to type 'OmegaInteractionKind | undefined'`
 
 **Cambio requerido:**
+
 ```typescript
 // ANTES:
 lastInteractionKind: "tool_use",
@@ -26,10 +27,11 @@ lastInteractionKind: "mixed_turn",
 ```
 
 **Contexto:** Los valores válidos están definidos en `src/omega/interaction-model.ts`:
+
 ```typescript
 export type OmegaInteractionKind =
   | "direct_instruction"
-  | "corrective_feedback"  
+  | "corrective_feedback"
   | "verification_request"
   | "analysis_request"
   | "mixed_turn";
@@ -46,6 +48,7 @@ Elige el que mejor represente una herramienta siendo utilizada (probablemente `"
 **Error:** `'prompt' is possibly 'undefined'`
 
 **Cambio requerido:**
+
 ```typescript
 // ANTES:
 expect(prompt).toContain("[OMEGA Similar Episodes]");
@@ -78,6 +81,7 @@ expect(prompt!.length).toBeGreaterThan(2000);
 **Archivo:** `src/omega/task-transaction.ts`  
 **Líneas:** 327-333  
 **Errores múltiples:**
+
 1. Line 327: `Type 'string' is not assignable to type '"resume" | "none" | "abort" | "reroute"'`
 2. Line 330: `A type predicate's type must be assignable to its parameter's type`
 3. Line 332: Type mismatch in array assignment
@@ -86,6 +90,7 @@ expect(prompt!.length).toBeGreaterThan(2000);
 **Lectura del contexto necesaria antes de fix.** Este requiere más análisis del código circundante. El problema parece estar en la función `deriveRecoveryStep` alrededor de línea 327.
 
 **Patrón general para este error:**
+
 ```typescript
 // EL PROBLEMA: Varias líneas asignan tipos incorrectos
 const recoveryStep: OmegaTaskTransactionRecoveryStep = {
@@ -120,6 +125,7 @@ if (left !== undefined && right !== undefined) {
 Los errores en `deliver.test-helpers.ts` y `deliver.test.ts` reflejan un problema más profundo con mocks de tipos complejos.
 
 **Patrón:**
+
 ```
 error TS2556: A spread argument must either have a tuple type or be passed to a rest parameter.
 ```
@@ -148,7 +154,7 @@ export const fakeSetTimeout = vi.fn<[callback: Function, ms?: number], NodeJS.Ti
 ## Checklist de Fixes
 
 - [ ] Arreglar `drives.test.ts(26)` - Change "tool_use"
-- [ ] Arreglar `stress-memory.test.ts(145)` - Add null check  
+- [ ] Arreglar `stress-memory.test.ts(145)` - Add null check
 - [ ] Arreglar `task-transaction.ts(327-333)` - Review type predicate & literals
 - [ ] Arreglar `deliver.test-helpers.ts` (7 errors) - Tuple type fixes
 - [ ] Arreglar `deliver.test.ts` (2 errors) - Mock type compatibility
@@ -162,6 +168,7 @@ export const fakeSetTimeout = vi.fn<[callback: Function, ms?: number], NodeJS.Ti
 ## Scripts para Validación
 
 ### Un solo error:
+
 ```bash
 cd src/omega
 cat inner-life/drives.test.ts | head -30
@@ -169,12 +176,14 @@ cat inner-life/drives.test.ts | head -30
 ```
 
 ### Todos los errores:
+
 ```bash
 pnpm build 2>&1 | tee /tmp/ts-errors.log
 # Canalizar todos los errores para análisis
 ```
 
 ### Verificar que fixes funcionan:
+
 ```bash
 # Après arreglar cada error:
 pnpm build --filter omega   # o solo compilar esa parte
@@ -186,7 +195,7 @@ pnpm build --filter omega   # o solo compilar esa parte
 
 1. **`"tool_use"` nunca fue válido** - Alguien escribió el test con un valor que nunca existió en el enum
 2. **`prompt` validation crítica** - Sin ella, el test puede fallar en runtime
-3. **`kind` literal union** - El código parece generar strings dinámicos pero asigmarlos a un tipo restringido  
+3. **`kind` literal union** - El código parece generar strings dinámicos pero asigmarlos a un tipo restringido
 4. **Mock types** - Los problemas de spread argument sugieren que algunos mocks no tienen tipos precisos
 
 ---
@@ -205,3 +214,4 @@ pnpm test src/omega/
 
 # 5. Final check: ¿Sistema realmente vivo?
 pnpm test        # Todos los tests
+```

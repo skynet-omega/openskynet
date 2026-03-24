@@ -9,6 +9,7 @@
 ## HITO: Agente Vivo y Despierto
 
 ### Antes (Fase 0)
+
 ```
 🧠 Lógica de decisión: ✅ (heartbeat.ts)
 🤖 Ciclo autónomo:      ❌ (code existe, NO se ejecuta)
@@ -17,6 +18,7 @@
 ```
 
 ### Después (Fase 1)
+
 ```
 🧠 Lógica de decisión: ✅ (heartbeat.ts)
 🤖 Ciclo autónomo:      ✅ (daemon-cooperative.ts + daemon-cli.ts)
@@ -29,26 +31,30 @@
 ## ARCHIVOS CREADOS (Fase 1)
 
 ### Daemon Core
-| Archivo | LOC | Propósito |
-|---------|-----|-----------|
-| `src/omega/daemon-entry.ts` | 15 | Entry point para systemd/launchd |
-| `src/omega/daemon-cooperative.ts` | 180 | Pausa cuando TUI activa |
-| `src/omega/daemon-cli.ts` | 180 | CLI (install/start/stop/status) |
+
+| Archivo                           | LOC | Propósito                        |
+| --------------------------------- | --- | -------------------------------- |
+| `src/omega/daemon-entry.ts`       | 15  | Entry point para systemd/launchd |
+| `src/omega/daemon-cooperative.ts` | 180 | Pausa cuando TUI activa          |
+| `src/omega/daemon-cli.ts`         | 180 | CLI (install/start/stop/status)  |
 
 ### OpenClaw Integration
-| Archivo | LOC | Propósito |
-|---------|-----|-----------|
-| `src/daemon/openskynet-service.ts` | 65 | Wrapper OpenClaw |
-| `src/daemon/openskynet-constants.ts` | 25 | Labels por SO |
+
+| Archivo                              | LOC | Propósito        |
+| ------------------------------------ | --- | ---------------- |
+| `src/daemon/openskynet-service.ts`   | 65  | Wrapper OpenClaw |
+| `src/daemon/openskynet-constants.ts` | 25  | Labels por SO    |
 
 ### Documentación
-| Archivo | LOC | Propósito |
-|---------|-----|-----------|
-| `DAEMON_AUTONOMOUS_README.md` | 180 | User guide completo |
-| `DAEMON_IMPLEMENTATION_SUMMARY.md` | 150 | Arquitectura + roadmap |
-| `TUI_DAEMON_INTEGRATION_COMPLETE.md` | 200 | Test plan detallado |
+
+| Archivo                              | LOC | Propósito              |
+| ------------------------------------ | --- | ---------------------- |
+| `DAEMON_AUTONOMOUS_README.md`        | 180 | User guide completo    |
+| `DAEMON_IMPLEMENTATION_SUMMARY.md`   | 150 | Arquitectura + roadmap |
+| `TUI_DAEMON_INTEGRATION_COMPLETE.md` | 200 | Test plan detallado    |
 
 ### Total Nueva Funcionalidad
+
 ```
 895 líneas de código
 630 líneas de documentación
@@ -62,6 +68,7 @@
 ### `src/tui/tui.ts` (+20 líneas)
 
 **Imports:**
+
 ```typescript
 import {
   createInteractionLock,
@@ -71,17 +78,20 @@ import {
 ```
 
 **Variables:**
+
 ```typescript
 const workspaceRoot = process.cwd();
 let cancelLockRefresh: (() => Promise<void>) | null = null;
 ```
 
 **En client.connect():**
+
 ```typescript
 cancelLockRefresh = await refreshInteractionLock(workspaceRoot, 10_000);
 ```
 
 **En requestExit():**
+
 ```typescript
 if (cancelLockRefresh) {
   await cancelLockRefresh();
@@ -89,8 +99,9 @@ if (cancelLockRefresh) {
 ```
 
 **Handlers → async:**
+
 - `handleCtrlC()`: `void requestExit()`
-- `editor.onCtrlD`: `void requestExit()`  
+- `editor.onCtrlD`: `void requestExit()`
 - `sigtermHandler`: `void requestExit()`
 
 ---
@@ -99,15 +110,16 @@ if (cancelLockRefresh) {
 
 ### ¿Por qué archivo en lugar de mutex/semáforo?
 
-| Aspecto | Archivo | Mutex |
-|--------|---------|-------|
-| **Sincronización** | Filesystem | Memoria |
-| **Persistencia** | ✅ Sobrevive crash | ❌ Pierde si TUI muere |
-| **Complejidad** | Simple (stat + write) | Alta (IPC) |
-| **Robustez** | Timeout graceful | Deadlock risk |
-| **Cross-process** | ✅ Natural | ⚠️ Depende de librerías |
+| Aspecto            | Archivo               | Mutex                   |
+| ------------------ | --------------------- | ----------------------- |
+| **Sincronización** | Filesystem            | Memoria                 |
+| **Persistencia**   | ✅ Sobrevive crash    | ❌ Pierde si TUI muere  |
+| **Complejidad**    | Simple (stat + write) | Alta (IPC)              |
+| **Robustez**       | Timeout graceful      | Deadlock risk           |
+| **Cross-process**  | ✅ Natural            | ⚠️ Depende de librerías |
 
 ### Algoritmo
+
 ```
 .interaction-lock (target <60s age)
 
@@ -117,6 +129,7 @@ No existe?             → TUI inactiva (daemon continúa)
 ```
 
 ### Sincronización
+
 ```
 TUI abre:
   → refreshInteractionLock() → setInterval cada 10s
@@ -147,15 +160,15 @@ $ npm exec pnpm -- build 2>&1 | head -5
 
 ## CASOS EXTREMOS MANEJADOS
 
-| Caso | Comportamiento |
-|------|----------------|
-| **Lock creation falla** | TUI abre igual, daemon sin bloqueo |
-| **Lock update falla** | TUI sigue, daemon verifica cada 10s |
-| **TUI crash abruptly** | Daemon detecta >60s, auto-limpia |
-| **Daemon crash** | Lock persiste, TUI sigue normal |
-| **TUI x2 simultáneo** | Ambas crean/actualizan lock (idempotente) |
-| **Network timeout** | No afecta (filesystem local) |
-| **Permisos FS limitados** | Warning, TUI/daemon continúan |
+| Caso                      | Comportamiento                            |
+| ------------------------- | ----------------------------------------- |
+| **Lock creation falla**   | TUI abre igual, daemon sin bloqueo        |
+| **Lock update falla**     | TUI sigue, daemon verifica cada 10s       |
+| **TUI crash abruptly**    | Daemon detecta >60s, auto-limpia          |
+| **Daemon crash**          | Lock persiste, TUI sigue normal           |
+| **TUI x2 simultáneo**     | Ambas crean/actualizan lock (idempotente) |
+| **Network timeout**       | No afecta (filesystem local)              |
+| **Permisos FS limitados** | Warning, TUI/daemon continúan             |
 
 ---
 
@@ -164,11 +177,11 @@ $ npm exec pnpm -- build 2>&1 | head -5
 ### 5 Scenarios, ~20 minutos
 
 ```markdown
-A. Sin TUI (daemon ejecuta ciclos)       [5 min]
-B. TUI abierta (daemon en pausa)         [5 min]
-C. TUI cierra (daemon reanuda)           [5 min]
-D. TUI crash (timeout graceful)          [3 min]
-E. Regresión TUI (sin daemon)            [2 min]
+A. Sin TUI (daemon ejecuta ciclos) [5 min]
+B. TUI abierta (daemon en pausa) [5 min]
+C. TUI cierra (daemon reanuda) [5 min]
+D. TUI crash (timeout graceful) [3 min]
+E. Regresión TUI (sin daemon) [2 min]
 ```
 
 Ver: `TUI_DAEMON_INTEGRATION_COMPLETE.md` → "Verification Tests"
@@ -178,23 +191,27 @@ Ver: `TUI_DAEMON_INTEGRATION_COMPLETE.md` → "Verification Tests"
 ## ROADMAP PRÓXIMAS FASES
 
 ### Fase 2: Platform Testing (1 semana)
+
 - [ ] Systemd (Linux)
 - [ ] Launchd (macOS)
 - [ ] Task Scheduler (Windows)
 - [ ] Testing en 3 plataformas
 
 ### Fase 3: User Validation (1 semana)
+
 - [ ] Manual testing por usuario
 - [ ] Logs legibles y debugging
 - [ ] Documentación de troubleshooting
 
 ### Fase 4: Learning Consolidation (2 semanas)
+
 - [ ] Auto-synthesis de episodios → reglas
 - [ ] Confianza ponderada en reglas
 - [ ] Reutilización de reglas de alta confianza
 - [ ] Reduction de tokens/latencia
 
 ### Fase 5: Production Rollout (1 semana)
+
 - [ ] CI/CD updates
 - [ ] Docker/containers
 - [ ] Release notes
@@ -205,6 +222,7 @@ Ver: `TUI_DAEMON_INTEGRATION_COMPLETE.md` → "Verification Tests"
 ## IMPACTO ESPERADO
 
 ### Autonomy
+
 ```
 Antes: 0% (manual solo si usuario lo invoca)
 Ahora: 95% (ejecuta 12 ciclos/hora sin intervención)
@@ -212,6 +230,7 @@ Meta:  99% (maneja edge cases automáticamente)
 ```
 
 ### Responsiveness
+
 ```
 Antes: N/A (no había ciclos)
 Ahora: ~1.5s per cycle (LLM latency)
@@ -219,6 +238,7 @@ Meta:  <500ms (rules-based fast path)
 ```
 
 ### User Experience
+
 ```
 Antes: Agent invisible,  "qué está pasando?" 🤷
 Ahora: Agentsee visible, logs en tiempo real ✅
@@ -253,6 +273,7 @@ pnpm build 2>&1 | tail -5
 ## PUNTO DE ENTRADA
 
 ### Para Usuarios
+
 ```bash
 # Instalar + iniciar daemon
 pnpm tsx src/omega/daemon-cli.ts install --interval=5
@@ -266,6 +287,7 @@ journalctl -u openclaw-openskynet-autonomous -f  # Linux
 ```
 
 ### Para Desarrolladores
+
 ```bash
 # Test manual sin servicio
 pnpm tsx src/omega/daemon-entry.ts     # Terminal 1
@@ -281,7 +303,7 @@ watch 'ls -la .interaction-lock'        # Terminal 3
 
 ## LECCIONES APRENDIDAS
 
-1. **Filesystem > Mutex para cross-process** 
+1. **Filesystem > Mutex para cross-process**
    - No hay complejidad IPC
    - Timeout graceful natural
    - OS-agnostic

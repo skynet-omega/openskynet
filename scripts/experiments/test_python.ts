@@ -16,7 +16,7 @@ async function test() {
     const jepa = await runJepaTensionBridge(repoRoot, {
       t: 100,
       v: [1, 2, 3],
-      m: { test: 1 }
+      m: { test: 1 },
     } as any);
     console.log("JEPA result:", JSON.stringify(jepa, null, 2));
   } catch (err) {

@@ -18,6 +18,7 @@
 ## QUICK START
 
 ### Opción A: Instalar como Daemon (Boot)
+
 ```bash
 # Registra en systemd/launchd/schtasks
 pnpm tsx src/omega/daemon-cli.ts install
@@ -30,6 +31,7 @@ pnpm tsx src/omega/daemon-cli.ts status
 ```
 
 ### Opción B: Ejecutar Manual (Desarrollo)
+
 ```bash
 # En una terminal
 pnpm tsx src/omega/daemon-entry.ts
@@ -39,6 +41,7 @@ pnpm openskynet tui
 ```
 
 ### Opción C: Una Sola Ejecución
+
 ```bash
 pnpm tsx src/omega/run-autonomous.ts --once
 ```
@@ -103,15 +106,15 @@ Check ✓   Check ✓   Check ✓   TUI cierra
 
 ## ARCHIVOS
 
-| Ruta | Propósito | LOC |
-|------|-----------|-----|
-| `src/omega/daemon-entry.ts` | Entry point (systemd/launchd) | 15 |
-| `src/omega/daemon-cooperative.ts` | Lógica lock-based | 180 |
-| `src/omega/daemon-cli.ts` | CLI (install/start/stop/status) | 180 |
-| `src/daemon/openskynet-service.ts` | OpenClaw integration | 65 |
-| `src/daemon/openskynet-constants.ts` | Labels por plataforma | 25 |
-| `DAEMON_AUTONOMOUS_README.md` | User guide | 180 |
-| `DAEMON_IMPLEMENTATION_SUMMARY.md` | Este archivo | - |
+| Ruta                                 | Propósito                       | LOC |
+| ------------------------------------ | ------------------------------- | --- |
+| `src/omega/daemon-entry.ts`          | Entry point (systemd/launchd)   | 15  |
+| `src/omega/daemon-cooperative.ts`    | Lógica lock-based               | 180 |
+| `src/omega/daemon-cli.ts`            | CLI (install/start/stop/status) | 180 |
+| `src/daemon/openskynet-service.ts`   | OpenClaw integration            | 65  |
+| `src/daemon/openskynet-constants.ts` | Labels por plataforma           | 25  |
+| `DAEMON_AUTONOMOUS_README.md`        | User guide                      | 180 |
+| `DAEMON_IMPLEMENTATION_SUMMARY.md`   | Este archivo                    | -   |
 
 ---
 
@@ -124,10 +127,10 @@ La TUI necesita pausar el daemon cuando está activa:
 ```typescript
 // En src/cli/tui-cli.ts (o similar):
 
-import { 
-  createInteractionLock, 
+import {
+  createInteractionLock,
   releaseInteractionLock,
-  refreshInteractionLock 
+  refreshInteractionLock,
 } from "../omega/daemon-cooperative.js";
 
 // Al abrir TUI:
@@ -161,6 +164,7 @@ schtasks /query /tn "OpenClawOpenSkyNetAutonomous"
 ### 3️⃣ **REAL CYCLE LOGIC** (Ya integrado)
 
 El daemon ahora llama a `runOneHeartbeatCycle()` que ejecuta:
+
 - ✅ buildOmegaHeartbeatPrompt()
 - ✅ applyOmegaHeartbeatExecutiveAction()
 
@@ -169,6 +173,7 @@ Nada más que hacer aquí.
 ### 4️⃣ **LEARNING CONSOLIDATION** (Phase Follow-up)
 
 Los episodios se guardan en `memory/omega-episodes/`. Próxima fase:
+
 - Auto-synthesis de reglas IF-THEN
 - Update confidence scores
 - Reutilización de reglas de alta confianza
@@ -184,7 +189,7 @@ pnpm tsx src/omega/daemon-cli.ts install --interval=10
 # Workspace root (default cwd)
 WORKSPACE_ROOT=/path/to/project pnpm tsx src/omega/daemon-entry.ts
 
-# Session key para logs  
+# Session key para logs
 SESSION_KEY=myagent pnpm tsx src/omega/daemon-entry.ts
 ```
 
@@ -223,7 +228,7 @@ grep -n "export.*runOneHeartbeatCycle" src/omega/heartbeat.ts
 ## STATUS ROAD MAP
 
 - [x] Daemon core implementation
-- [x] OpenClaw service integration  
+- [x] OpenClaw service integration
 - [x] CLI (install/start/stop/status)
 - [x] Cooperative lock mechanism
 - [x] Real cycle execution (calls runOneHeartbeatCycle)
@@ -237,6 +242,7 @@ grep -n "export.*runOneHeartbeatCycle" src/omega/heartbeat.ts
 ## CONTACTO / TESTING
 
 📋 **Para testear:**
+
 1. Lee `DAEMON_AUTONOMOUS_README.md` (instrucciones completas)
 2. Instala daemon: `pnpm tsx src/omega/daemon-cli.ts install`
 3. Inicia: `pnpm tsx src/omega/daemon-cli.ts start`
@@ -247,6 +253,7 @@ grep -n "export.*runOneHeartbeatCycle" src/omega/heartbeat.ts
 🎯 **Bloqueador:** TUI necesita integración Lock (paso 1️⃣ arriba)
 
 📊 **Métricas esperadas:**
+
 - Ciclos ejecutados por hora: 12 (si no hay TUI)
 - Latencia por ciclo: ~1-2 segundos (depende LLM)
 - CPU cuando parado: <1%

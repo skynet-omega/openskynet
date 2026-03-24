@@ -9,7 +9,7 @@
 
 - ✅ Estructura `documentation/` creada con 4 subcarpetas
 - ✅ `documentation/INDEX.md` — punto de entrada para cualquiera
-- ✅ `documentation/ONBOARDING.md` — guía de 5 minutos para nuevos  
+- ✅ `documentation/ONBOARDING.md` — guía de 5 minutos para nuevos
 - ✅ Scripts automáticos listos (bash + PowerShell)
 - ✅ Documentación de migración lista
 
@@ -27,18 +27,21 @@
 #### Step 1: Elige bash o PowerShell
 
 **Bash (Linux/Mac):**
+
 ```bash
 cd /home/daroch/openskynet
 bash documentation/MIGRATION_SCRIPT.sh
 ```
 
 **PowerShell (Windows):**
+
 ```powershell
 cd \\wsl.localhost\Ubuntu\home\daroch\openskynet
 powershell -File documentation\MIGRATION_SCRIPT.ps1
 ```
 
 #### Step 2: Verifica y commit
+
 ```bash
 git status  # Verifica los cambios
 git add .
@@ -53,11 +56,13 @@ git push
 ### OPCIÓN B: HACERLO MÁS TARDE
 
 Puede ejecutar los scripts **en cualquier momento**:
+
 - Hoy, mañana, próxima semana
 - Los scripts esperarán
 - Es 100% reversible
 
 **Qué hacer mientras:**
+
 - Nuevos devs usan → `documentation/INDEX.md`
 - Los archivos siguen en root (funcionan igual)
 - Cuando tengas tiempo: ejecuta script + commit
@@ -75,7 +80,7 @@ Los archivos siguen desorganizados. Nuevos devs seguirán confundidos con 92 .md
 Responde rápido:
 
 - [ ] ¿Tengo 5 minutos libre AHORA? → **OPCIÓN A**
-- [ ] ¿Puedo hacerlo después? → **OPCIÓN B**  
+- [ ] ¿Puedo hacerlo después? → **OPCIÓN B**
 - [ ] ¿Realmente necesito hacerlo? → **SÍ** (mejora UX brutal)
 
 ---
@@ -85,6 +90,7 @@ Responde rápido:
 **→ OPCIÓN A: Hacerlo AHORA**
 
 **Por qué:**
+
 1. Toma 5 minutos
 2. De inmediato, nuevos devs tienen claridad
 3. Es reversible (no hay riesgo)
@@ -96,14 +102,16 @@ Responde rápido:
 ## 🎓 El impacto
 
 ### Antes (hoy)
+
 ```
 Nuevo dev: "¿Dónde empiezo?"
-Tú: "Lee SOUL.md... no, espera, primero lee INDEX.md... 
+Tú: "Lee SOUL.md... no, espera, primero lee INDEX.md...
     bueno, abre documentation/INDEX.md..."
 Nuevo dev: 😕
 ```
 
 ### Después (en 5 minutos)
+
 ```
 Nuevo dev: "¿Dónde empiezo?"
 Tú: "Abre documentation/ONBOARDING.md"
@@ -123,7 +131,7 @@ Tu respuesta a "¿cómo se diferencia OpenSkyNet de [otro agente]?" pasa de:
 A:
 
 ```
-"Corre: documentation/ONBOARDING.md (5 min) 
+"Corre: documentation/ONBOARDING.md (5 min)
 Te explica todo claro."
 ```
 
@@ -134,6 +142,7 @@ Te explica todo claro."
 Elige UNO:
 
 **Si tienes 5 min ahora:**
+
 ```bash
 bash documentation/MIGRATION_SCRIPT.sh
 git commit -m "docs: reorganize"
@@ -142,6 +151,7 @@ git push
 ```
 
 **Si NO tienes tiempo:**
+
 ```
 Hazlo después. Los scripts esperarán.
 Mientras: nuevos devs usan documentation/INDEX.md
@@ -152,6 +162,7 @@ Mientras: nuevos devs usan documentation/INDEX.md
 ## 📞 Si hay dudas
 
 Todos los detalles están en:
+
 - [`DOCUMENTATION_REORGANIZATION.md`](DOCUMENTATION_REORGANIZATION.md) — Explicación completa
 - [`REORGANIZATION_COMPLETE.md`](REORGANIZATION_COMPLETE.md) — Checklist
 - [`VISUAL_TRANSFORMATION.md`](VISUAL_TRANSFORMATION.md) — Visual antes/después
@@ -164,7 +175,7 @@ Elige tu camino:
 
 **→ Hazlo ahora:** [`bash documentation/MIGRATION_SCRIPT.sh`](#opción-a-hacer-la-migración-ahora-recomendado-)
 
-**→ Hazlo después:** Abre esto mañana y ejecuta los scripts  
+**→ Hazlo después:** Abre esto mañana y ejecuta los scripts
 
 **→ Necesito más info:** Lee [`DOCUMENTATION_REORGANIZATION.md`](DOCUMENTATION_REORGANIZATION.md)
 

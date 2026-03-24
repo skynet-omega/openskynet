@@ -7,6 +7,7 @@
 ### 1. `src/tui/tui.ts` (Integración)
 
 **Imports agregados:**
+
 ```typescript
 import {
   createInteractionLock,
@@ -16,12 +17,14 @@ import {
 ```
 
 **Variables de estado (línea ~380):**
+
 ```typescript
 const workspaceRoot = process.cwd();
 let cancelLockRefresh: (() => Promise<void>) | null = null;
 ```
 
 **Al conectar con gateway (línea ~550):**
+
 ```typescript
 // Create interaction lock for daemon coordination
 try {
@@ -32,6 +35,7 @@ try {
 ```
 
 **Función requestExit modificada (ahora async):**
+
 ```typescript
 const requestExit = async () => {
   if (exitRequested) {
@@ -55,6 +59,7 @@ const requestExit = async () => {
 ```
 
 **Cambios en handlers de eventos → `void requestExit()`:**
+
 - Línea ~942: `if (decision.action === "exit")` → `void requestExit()`
 - Línea ~952: `editor.onCtrlD` → `void requestExit()`
 - Línea ~1031: `sigtermHandler` → `void requestExit()`
@@ -99,13 +104,13 @@ requestExit() se llama
 
 ## ARCHIVOS INVOLUCRADOS
 
-| Archivo | Cambios |
-|---------|---------|
-| `src/tui/tui.ts` | ✅ Integración lock create/release/refresh |
-| `src/omega/daemon-cooperative.ts` | ✅ Ya exporta las funciones necesarias |
-| `src/omega/heartbeat.ts` | ✅ Ya ejecuta runOneHeartbeatCycle() |
-| `src/omega/daemon-cli.ts` | ✅ CLI para manejar el daemon |
-| `.interaction-lock` | 🔒 Archivo temporal (creado/borrado por TUI) |
+| Archivo                           | Cambios                                      |
+| --------------------------------- | -------------------------------------------- |
+| `src/tui/tui.ts`                  | ✅ Integración lock create/release/refresh   |
+| `src/omega/daemon-cooperative.ts` | ✅ Ya exporta las funciones necesarias       |
+| `src/omega/heartbeat.ts`          | ✅ Ya ejecuta runOneHeartbeatCycle()         |
+| `src/omega/daemon-cli.ts`         | ✅ CLI para manejar el daemon                |
+| `.interaction-lock`               | 🔒 Archivo temporal (creado/borrado por TUI) |
 
 ---
 
@@ -152,6 +157,7 @@ ls -la .interaction-lock  # → No such file
 ```
 
 **Esperado:**
+
 - Daemon ejecuta ciclos cada 5 min ✅
 - Logs: `[DAEMON] 🤖 Ciclo #1 - Daemon activo` ✅
 
@@ -168,6 +174,7 @@ watch 'ls -la .interaction-lock'  # → Archivo existe, timestamp actualizado ca
 ```
 
 **Esperado:**
+
 - `.interaction-lock` existe y se actualiza cada 10s ✅
 - Daemon logs muestran: `[DAEMON] 🧑 Interacción detectada. Pausa...` ✅
 - Daemon NO ejecuta ciclos mientras TUI está abierta ✅
@@ -185,6 +192,7 @@ watch 'ls -la .interaction-lock'  # → Desaparece inmediatamente
 ```
 
 **Esperado:**
+
 - `.interaction-lock` desaparece cuando TUI cierra ✅
 - Daemon logs: Dentro de 10s ve lock desapareció ✅
 - Daemon reanuda ciclos cada 5 min ✅
@@ -202,6 +210,7 @@ watch 'ls -la .interaction-lock'  # → Queda viejo (>60s), luego desaparece
 ```
 
 **Esperado:**
+
 - `.interaction-lock` permanece ~60s ✅
 - Daemon detecta >60s viejo → borra automáticamente ✅
 - Daemon continúa sin bloquear ✅
@@ -225,6 +234,7 @@ ls .interaction-lock  # → ERROR (no existe) ✅
 ```
 
 **Esperado:**
+
 - TUI abre normalmente ✅
 - TUI funciona exactamente igual que antes ✅
 - No hay errores de lock ✅
@@ -233,14 +243,14 @@ ls .interaction-lock  # → ERROR (no existe) ✅
 
 ## COMPORTAMIENTO EN CASOS BORDE
 
-| Caso | Comportamiento |
-|------|----------------|
-| **Lock creation falla** | TUI abre, daemon continúa (no bloqueado) |
-| **Lock release falla** | TUI cierra normalmente, daemon verifica en 60s |
-| **Daemon no existe** | TUI abre, funciona normal (lock se ignora) |
-| **TUI abierta x2** | Segundo intento actualiza lock (idempotente) |
-| **Lock >60s viejo** | Daemon lo borra automáticamente |
-| **Network timeout** | Cada componente es independiente |
+| Caso                    | Comportamiento                                 |
+| ----------------------- | ---------------------------------------------- |
+| **Lock creation falla** | TUI abre, daemon continúa (no bloqueado)       |
+| **Lock release falla**  | TUI cierra normalmente, daemon verifica en 60s |
+| **Daemon no existe**    | TUI abre, funciona normal (lock se ignora)     |
+| **TUI abierta x2**      | Segundo intento actualiza lock (idempotente)   |
+| **Lock >60s viejo**     | Daemon lo borra automáticamente                |
+| **Network timeout**     | Cada componente es independiente               |
 
 ---
 
@@ -249,21 +259,25 @@ ls .interaction-lock  # → ERROR (no existe) ✅
 ### Logs esperados
 
 **TUI abre:**
+
 ```
 [TUI] ✅ Lock creado - Daemon pausado
 ```
 
 **Daemon pausa (ve lock):**
+
 ```
 [DAEMON] 🧑 Interacción detectada. Pausa (recheck en 10s)...
 ```
 
 **TUI cierra:**
+
 ```
 [TUI] 🔓 Lock liberado - Daemon reanuda
 ```
 
 **Daemon reanuda:**
+
 ```
 [DAEMON] 🤖 Ciclo #N - Daemon activo
 [DAEMON] ✓ Ciclo N completado

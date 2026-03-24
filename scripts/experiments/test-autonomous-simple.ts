@@ -9,16 +9,16 @@ import { runOneHeartbeatCycle } from "../src/omega/heartbeat.js";
 
 async function test() {
   console.log("🧪 TEST: Verificando que heartbeat funciona...\n");
-  
+
   const workspaceRoot = process.cwd();
   const sessionKey = "openskynet";
-  
+
   try {
     await runOneHeartbeatCycle({
       workspaceRoot,
       sessionKey,
     });
-    
+
     console.log("\n✅ TEST PASÓ: runOneHeartbeatCycle ejecutó sin errores");
     process.exit(0);
   } catch (error) {

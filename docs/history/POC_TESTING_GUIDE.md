@@ -10,28 +10,30 @@ This document explains three **Proof of Concept** solutions to test before perma
 
 ## 🎯 The Problem
 
-| Model | Issue | Cause |
-|-------|-------|-------|
-| Qwen3.5:latest | ❌ Invents file paths, function names | Limited reasoning with small params (20B) |
-| GPT-OSS-20b | ❌ Hallucinated code, wrong API calls | Context window insufficient (4K-8K) |
-| Kimi-K2.5:cloud | ✅ Correct responses, no hallucinations | Large model (100B+), better training |
+| Model           | Issue                                   | Cause                                     |
+| --------------- | --------------------------------------- | ----------------------------------------- |
+| Qwen3.5:latest  | ❌ Invents file paths, function names   | Limited reasoning with small params (20B) |
+| GPT-OSS-20b     | ❌ Hallucinated code, wrong API calls   | Context window insufficient (4K-8K)       |
+| Kimi-K2.5:cloud | ✅ Correct responses, no hallucinations | Large model (100B+), better training      |
 
 ---
 
 ## 🧪 Three POCs to Test
 
 ### POC-1: Dynamic Temperature Tuning
+
 **File:** `src/agents/poc-1-dynamic-tuning.ts`
 
-| What | Details |
-|------|---------|
-| **Problem it solves** | Small models use generic temperature (0.7) causing randomness |
-| **Solution** | Automatically set temperature=0.1 for models < 16K context (very cold, less creative but more precise) |
-| **Expected impact** | -25% hallucinations, +5ms latency |
-| **Complexity** | LOW (just 20 lines in ollama-stream.ts) |
-| **Effort** | EASY (1 function call added) |
+| What                  | Details                                                                                                |
+| --------------------- | ------------------------------------------------------------------------------------------------------ |
+| **Problem it solves** | Small models use generic temperature (0.7) causing randomness                                          |
+| **Solution**          | Automatically set temperature=0.1 for models < 16K context (very cold, less creative but more precise) |
+| **Expected impact**   | -25% hallucinations, +5ms latency                                                                      |
+| **Complexity**        | LOW (just 20 lines in ollama-stream.ts)                                                                |
+| **Effort**            | EASY (1 function call added)                                                                           |
 
 **How it works:**
+
 ```
 Model: Qwen3.5 (4K context)
   → Calculate: temperature = 0.1, top_p = 0.6
@@ -41,17 +43,19 @@ Model: Qwen3.5 (4K context)
 ---
 
 ### POC-2: Grounding Validator
+
 **File:** `src/agents/poc-2-grounding-validator.ts`
 
-| What | Details |
-|------|---------|
-| **Problem it solves** | Detect hallucinations BEFORE delivering response |
-| **Solution** | Validate responses against filesystem and codebase reality |
-| **Expected impact** | -40% hallucinated file paths, -30% invented function names |
-| **Complexity** | MEDIUM (regex + file existence checks) |
-| **Effort** | MODERATE (integrate into subagent-spawn.ts) |
+| What                  | Details                                                    |
+| --------------------- | ---------------------------------------------------------- |
+| **Problem it solves** | Detect hallucinations BEFORE delivering response           |
+| **Solution**          | Validate responses against filesystem and codebase reality |
+| **Expected impact**   | -40% hallucinated file paths, -30% invented function names |
+| **Complexity**        | MEDIUM (regex + file existence checks)                     |
+| **Effort**            | MODERATE (integrate into subagent-spawn.ts)                |
 
 **How it works:**
+
 ```
 Response: "I modified src/agents/fake-module.ts"
   ↓ Validation
@@ -63,17 +67,19 @@ Response: "I modified src/agents/fake-module.ts"
 ---
 
 ### POC-3: Compressed System Prompts
+
 **File:** `src/agents/poc-3-compressed-prompts.ts`
 
-| What | Details |
-|------|---------|
-| **Problem it solves** | Large prompts waste tokens on small models (4K context) |
-| **Solution** | Generate minimal, task-specific prompts instead of 2000-token generic ones |
-| **Expected impact** | -20% tokens used, +15% task accuracy on small models |
-| **Complexity** | LOW (string generation) |
-| **Effort** | EASY (template functions) |
+| What                  | Details                                                                    |
+| --------------------- | -------------------------------------------------------------------------- |
+| **Problem it solves** | Large prompts waste tokens on small models (4K context)                    |
+| **Solution**          | Generate minimal, task-specific prompts instead of 2000-token generic ones |
+| **Expected impact**   | -20% tokens used, +15% task accuracy on small models                       |
+| **Complexity**        | LOW (string generation)                                                    |
+| **Effort**            | EASY (template functions)                                                  |
 
 **How it works:**
+
 ```
 Original prompt: 2000 tokens
   ↓ Generate compressed
@@ -87,12 +93,14 @@ Compressed prompt: 400 tokens
 ## 🚀 How to Run Tests
 
 ### Prerequisites
+
 ```bash
 cd /home/daroch/openskynet
 pnpm install  # If not done already
 ```
 
 ### Run All POC Tests
+
 ```bash
 # Using pnpm + tsx
 pnpm exec tsx src/agents/poc-test-runner.ts
@@ -102,11 +110,12 @@ bun src/agents/poc-test-runner.ts
 ```
 
 ### Run Individual POC
+
 ```bash
 # POC-1 only
 pnpm exec tsx -e "import { testPOC1DynamicTuning } from './src/agents/poc-1-dynamic-tuning.js'; testPOC1DynamicTuning();"
 
-# POC-2 only  
+# POC-2 only
 pnpm exec tsx -e "import { testPOC2Grounding } from './src/agents/poc-2-grounding-validator.js'; testPOC2Grounding();"
 
 # POC-3 only
@@ -163,11 +172,12 @@ RESULTS SUMMARY
 Once POC tests pass, do **actual runtime testing** with your models:
 
 ### Test Setup
+
 ```bash
 # Terminal 1: Start ollama locally
 ollama serve
 
-# Terminal 2: Start gateway  
+# Terminal 2: Start gateway
 openclaw gateway run --port 18789 --verbose
 
 # Terminal 3: Run tests
@@ -177,12 +187,14 @@ openclaw agent --message "Implement a function to validate email addresses" \
 ```
 
 ### What to Measure
+
 1. **Response time:** How long does each model take?
 2. **Hallucinations:** Count invented file paths/function names
 3. **Accuracy:** Does the response solve the actual problem?
 4. **Token efficiency:** How many tokens were consumed?
 
 ### Report Template
+
 ```
 POC-1 (Dynamic Tuning) Test Results:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -207,12 +219,12 @@ Recommendation: ✅ KEEP - Significant improvement
 
 After running tests, decide which POC to **keep permanently** based on:
 
-| Factor | Weight | Measurement |
-|--------|--------|---|
-| Hallucination reduction | 40% | Compare before/after error counts |
-| Implementation complexity | 25% | Lines of code changed, dependencies added |
-| Performance impact | 20% | Latency overhead per request |
-| Side effects | 15% | Does it break existing functionality? |
+| Factor                    | Weight | Measurement                               |
+| ------------------------- | ------ | ----------------------------------------- |
+| Hallucination reduction   | 40%    | Compare before/after error counts         |
+| Implementation complexity | 25%    | Lines of code changed, dependencies added |
+| Performance impact        | 20%    | Latency overhead per request              |
+| Side effects              | 15%    | Does it break existing functionality?     |
 
 **Minimum threshold to keep:** 20% hallucination reduction with <10ms overhead
 
@@ -223,6 +235,7 @@ After running tests, decide which POC to **keep permanently** based on:
 If POC-1 wins (most likely):
 
 ### Step 1: Modify `ollama-stream.ts`
+
 ```typescript
 // Line ~450, in createOllamaStreamFn() function:
 
@@ -237,25 +250,29 @@ const tuning = calculateDynamicTuning({
 });
 
 const ollamaOptions: Record<string, unknown> = { num_ctx: defaultNumCtx };
-ollamaOptions.temperature = tuning.temperature;  // CHANGED
-ollamaOptions.top_p = tuning.top_p;              // ADDED
-if (tuning.presence_penalty !== undefined) {     // ADDED
+ollamaOptions.temperature = tuning.temperature; // CHANGED
+ollamaOptions.top_p = tuning.top_p; // ADDED
+if (tuning.presence_penalty !== undefined) {
+  // ADDED
   ollamaOptions.presence_penalty = tuning.presence_penalty;
 }
 ```
 
 ### Step 2: Run Tests
+
 ```bash
 pnpm test src/agents/ollama-stream.test.ts
 ```
 
 ### Step 3: Verify No Regressions
+
 ```bash
 pnpm test  # Full test suite
 pnpm lint
 ```
 
 ### Step 4: Commit & PR
+
 ```bash
 git add src/agents/ollama-stream.ts src/agents/poc-1-dynamic-tuning.ts
 git commit -m "feat: add dynamic temperature tuning for small models
@@ -267,6 +284,7 @@ git commit -m "feat: add dynamic temperature tuning for small models
 ```
 
 ### Step 5: Delete POCs (Clean Up)
+
 ```bash
 # Keep only the winner implementation
 rm src/agents/poc-2-grounding-validator.ts
@@ -280,12 +298,12 @@ rm src/agents/poc-test-runner.ts
 
 ## ⚠️ Potential Issues & Solutions
 
-| Issue | Solution |
-|-------|----------|
-| Tests fail on Windows WSL2 | Use `bun` instead of `pnpm tsx` |
-| Out of memory on large iterations | Lower `iterations` count in benchmarks |
-| File not found errors | Ensure paths are absolute or relative to cwd |
-| Temperature ignored by Ollama | Check `~/.ollama/models` for model variant |
+| Issue                             | Solution                                     |
+| --------------------------------- | -------------------------------------------- |
+| Tests fail on Windows WSL2        | Use `bun` instead of `pnpm tsx`              |
+| Out of memory on large iterations | Lower `iterations` count in benchmarks       |
+| File not found errors             | Ensure paths are absolute or relative to cwd |
+| Temperature ignored by Ollama     | Check `~/.ollama/models` for model variant   |
 
 ---
 
@@ -302,11 +320,11 @@ If tests fail or results are unexpected:
 
 ## 📚 Summary
 
-| File | Purpose |
-|------|---------|
-| `poc-1-dynamic-tuning.ts` | Auto-adjust temperature based on model size |
-| `poc-2-grounding-validator.ts` | Validate responses against filesystem reality |
-| `poc-3-compressed-prompts.ts` | Generate minimal prompts for small models |
-| `poc-test-runner.ts` | Master test runner, produces comparison report |
+| File                           | Purpose                                        |
+| ------------------------------ | ---------------------------------------------- |
+| `poc-1-dynamic-tuning.ts`      | Auto-adjust temperature based on model size    |
+| `poc-2-grounding-validator.ts` | Validate responses against filesystem reality  |
+| `poc-3-compressed-prompts.ts`  | Generate minimal prompts for small models      |
+| `poc-test-runner.ts`           | Master test runner, produces comparison report |
 
 **Next Step:** Run `pnpm exec tsx src/agents/poc-test-runner.ts` and report results! 🚀

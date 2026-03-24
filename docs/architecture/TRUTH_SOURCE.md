@@ -7,6 +7,7 @@
 ## 🏆 HIERARQUÍA DE VERDAD (de más a menos confiable)
 
 ### 1️⃣ CÓDIGO QUE SE EJECUTA AHORA
+
 **Confianza:** 100%
 
 ```typescript
@@ -15,6 +16,7 @@
 ```
 
 **Cómo verificar:**
+
 ```bash
 $ pnpm test               # Ejecuta código actual
 $ git diff HEAD~1         # Ve qué cambió
@@ -22,6 +24,7 @@ $ cat src/omega/*.ts      # Lee el código fuente
 ```
 
 **Ejemplos:**
+
 - "¿Funciona meta-controller?" → Busca en código. No está. No funciona.
 - "¿Heartbeat ejecuta cada 1s?" → Lee heartbeat.ts línea X. Sí.
 - "¿POC-1 está integrado?" → Busca en ollama-stream.ts. Sí.
@@ -29,6 +32,7 @@ $ cat src/omega/*.ts      # Lee el código fuente
 ---
 
 ### 2️⃣ TEST RESULTS (pnpm test)
+
 **Confianza:** 95%
 
 ```bash
@@ -38,11 +42,13 @@ $ pnpm test
 ```
 
 **Qué significa:**
+
 - ✅ Test passing = Ese code path funciona
 - ❌ Test failing = Ese code path no funciona
 - ⏭️ Test skipped = Ignorado (probablemente conocido)
 
 **Cómo confiar:**
+
 - Lee el test: `src/omega/heartbeat.test.ts`
 - ¿El test ejecuta el code path? Sí → Confía
 - ¿El test es frágil/mock? Verificar, pero probablemente sí funciona
@@ -50,51 +56,61 @@ $ pnpm test
 ---
 
 ### 3️⃣ CURRENT_STATE.md (este repo)
+
 **Confianza:** 90%
 
 Snapshot actual de qué funciona y qué está roto.
 
 **Cuándo leer:**
+
 - Entrar nuevo al proyecto
 - Decidir qué hacer a continuación
 - Entender estado actual
 
 **Cuándo ignorar:**
+
 - Si dice algo que contradice el código → El código tiene razón
 - Si tiene fecha vieja → Puede estar desactualizado
 
 ---
 
 ### 4️⃣ ARCHITECTURE_DECISIONS.md
+
 **Confianza:** 85%
 
 Explica POR QUÉ se tomaron decisiones (ADR format).
 
 **Cuándo leer:**
+
 - Entender QUÉ pasó (no QUÉ hay ahora)
 - Aprendes por qué Tier 1 fue eliminado
 - Entiendes trade-offs
 
 **Limitación:**
+
 - Explica el pasado, no el presente
 - Si decisión cambió, PDR podría estar desactualizado
 
 ---
 
 ### 5️⃣ API_REFERENCE.md
+
 **Confianza:** 80%
 
 Lista funciones públicas y cómo usarlas.
 
 **Cuándo leer:**
+
 - Sabes que quieres llamar función X
 - Necesitas signature + ejemplo
 
 **Limitación:**
+
 - Puede haber funciones nuevas no documentadas
 - Ejemplos podrían ser idealizados
 
 **Verificar:**
+
 ```bash
 $ grep -n "export function xyz" src/omega/x.ts
 # Ve el código real
@@ -103,21 +119,25 @@ $ grep -n "export function xyz" src/omega/x.ts
 ---
 
 ### 6️⃣ CODEBASE_MAP.json
+
 **Confianza:** 75%
 
 Mapa de estructura (machine-readable).
 
 **Cuándo leer:**
+
 - Necesitas ubicación de archivo X
 - Quieres entender dependencias
 
 **Limitación:**
+
 - Puede estar desactualizado después de refactor
 - Verificar con `git ls-files`
 
 ---
 
 ### 7️⃣ Comentarios en el código
+
 **Confianza:** 70%
 
 ```typescript
@@ -125,10 +145,12 @@ Mapa de estructura (machine-readable).
 ```
 
 **Por qué baja confianza?**
+
 - A veces los comentarios no se actualizan
 - Pero son útiles para entender intención
 
 **Usar para:**
+
 - Entender POR QUÉ una línea existe
 - Entender trade-offs
 
@@ -136,13 +158,13 @@ Mapa de estructura (machine-readable).
 
 ### 🚫 NUNCA CONFÍES EN (Baja Confianza)
 
-| Fuente | Confianza | Razón |
-|--------|-----------|-------|
-| Docs viejas | 20% | Rápido desactualizadas |
-| README (root) | 40% | Puede referir a OpenClaw, no OpenSkyNet |
-| Propuestas/IDEAS | 10% | Planeado pero no implementado |
-| Slack/Discord | 5% | Conversación, no histórico |
-| Memory files | 60% | Notas de trabajo, pueden ser incompletas |
+| Fuente           | Confianza | Razón                                    |
+| ---------------- | --------- | ---------------------------------------- |
+| Docs viejas      | 20%       | Rápido desactualizadas                   |
+| README (root)    | 40%       | Puede referir a OpenClaw, no OpenSkyNet  |
+| Propuestas/IDEAS | 10%       | Planeado pero no implementado            |
+| Slack/Discord    | 5%        | Conversación, no histórico               |
+| Memory files     | 60%       | Notas de trabajo, pueden ser incompletas |
 
 ---
 
@@ -224,12 +246,12 @@ Cuando un agente llega y está confundido:
 
 ## 🔑 REGLAS DE ORO
 
-| Regla | Explicación |
-|-------|------------|
-| **Código expira, documentación expira más rápido** | Docs son notas. Código es ejecución. |
-| **Tests nunca mienten** | Si pasa un test, funciona. Si falla, está roto. |
-| **Git history es la verdad final** | ¿Qué pasó? `git log`. ¿Cuándo cambió? `git blame`. |
-| **Cuando hay duda, ejecuta** | `pnpm test`, `pnpm build`, `pnpm dev --verbose`. |
+| Regla                                                  | Explicación                                              |
+| ------------------------------------------------------ | -------------------------------------------------------- |
+| **Código expira, documentación expira más rápido**     | Docs son notas. Código es ejecución.                     |
+| **Tests nunca mienten**                                | Si pasa un test, funciona. Si falla, está roto.          |
+| **Git history es la verdad final**                     | ¿Qué pasó? `git log`. ¿Cuándo cambió? `git blame`.       |
+| **Cuando hay duda, ejecuta**                           | `pnpm test`, `pnpm build`, `pnpm dev --verbose`.         |
 | **CURRENT_STATE.md es snapshot, no sistema operativo** | Es una foto del presente. Pero puede estar 1 hora atrás. |
 
 ---
@@ -268,6 +290,7 @@ Ahí está la verdad. Punto final.
 ---
 
 **RECUERDA:**
+
 - ✅ Confía en el código que se ejecuta
 - ✅ Confía en los tests que pasan
 - ✅ Cuestiona todo lo demás agradablemente
