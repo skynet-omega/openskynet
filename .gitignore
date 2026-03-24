@@ -1,0 +1,128 @@
+!.agent/workflows/
+# Agent credentials and memory (NEVER COMMIT)
+# Android build artifacts
+# Bun build artifacts
+# Development logs (phase 7 cleanup)
+# Generated protocol schema (produced via pnpm protocol:gen)
+# Local iOS signing overrides
+# Local untracked files
+# Mise configuration files
+# OpenSkyNet Operational
+# Synthing
+# Vendor build artifacts
+# Xcode build directories (xcodebuild output)
+# fastlane (iOS)
+# fastlane build artifacts (local)
+# local tooling
+# provisioning profiles (local)
+**/*.bun-build
+**/.DS_Store
+**/.classpath
+**/.gradle/
+**/.project
+**/.settings/
+**/.stfolder/
+**/ModuleCache/
+**/node_modules/
+*.bun-build
+*.log
+*.pyc
+.*.log
+.DS_Store
+.agent/
+.agent/*.json
+.agents
+.agents/
+.ant-colony/
+.bundle.hash
+.claude/
+.dev-state
+.env
+.idea
+.local/
+.pnpm-store
+.serena/
+.tgz
+.tsbuildinfo
+.worktrees/
+/local/
+/memory/
+Core/
+Swabble/build/
+__pycache__/
+_papelera/
+apps/android/.cxx/
+apps/android/.gradle/
+apps/android/.kotlin/
+apps/android/app/build/
+apps/ios/*.dSYM.zip
+apps/ios/*.ipa
+apps/ios/*.mobileprovision
+apps/ios/*.xcfilelist
+apps/ios/*.xcodeproj/
+apps/ios/*.xcworkspace/
+apps/ios/.derivedData/
+apps/ios/.local-signing.xcconfig
+apps/ios/.swiftpm/
+apps/ios/Clawdbot.xcodeproj/
+apps/ios/Clawdbot.xcodeproj/**
+apps/ios/LocalSigning.xcconfig
+apps/ios/build/
+apps/ios/fastlane/.env
+apps/ios/fastlane/Preview.html
+apps/ios/fastlane/README.md
+apps/ios/fastlane/logs/
+apps/ios/fastlane/report.xml
+apps/ios/fastlane/screenshots/
+apps/ios/fastlane/test_output/
+apps/macos/.build-local/
+apps/macos/.build/
+apps/macos/.build/**
+apps/macos/.swiftpm/
+apps/shared/MoltbotKit/.build/
+apps/shared/MoltbotKit/.swiftpm/
+apps/shared/OpenClawKit/.build/
+apps/shared/OpenClawKit/.swiftpm/
+apps/shared/OpenClawKit/Package.resolved
+apps/shared/OpenClawKit/build/
+bin/
+bin/clawdbot-mac
+bin/docs-list
+bun.lock
+bun.lockb
+coverage
+dist
+dist/
+dist/protocol.schema.json
+docker-compose.extra.yml
+docker-compose.override.yml
+docs/.local/
+docs/superpowers
+docs/superpowers/plans/2026-03-10-collapsed-side-nav.md
+docs/superpowers/specs/2026-03-10-collapsed-side-nav-design.md
+mise.toml
+node_modules
+node_modules/
+
+# OpenSkyNet Specific Ignores
+.openskynet/
+memory/
+reports/
+venv/
+.venv/
+python/__pycache__/
+vendor/
+.interaction-lock
+.mailmap
+.detect-secrets.cfg
+.secrets.baseline
+*.Zone.Identifier
+package-lock.json
+packages/dashboard-next/.next/
+packages/dashboard-next/out/
+pnpm-lock.yaml
+skills-lock.json
+src/canvas-host/a2ui/*.bundle.js
+src/canvas-host/a2ui/*.map
+tmp/
+tsc

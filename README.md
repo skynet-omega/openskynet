@@ -17,13 +17,14 @@ Active development and issues are tracked at:
 
 ## 🚀 Key Differences from OpenClaw
 
-While OpenSkyNet inherits the powerful routing and tool architecture of OpenClaw, it introduces the **Omega Engine**, providing:
+While **OpenClaw** is a powerful, general-purpose multi-agent framework for routing and tool execution, **OpenSkyNet** is a fully realized, single **Autonomous Entity** built on top of it. It introduces the **Omega Engine**, shifting the paradigm from a reactive assistant to a proactive, biologically-inspired researcher:
 
-- **Neural Logic Engine (NLE)**: A deterministic logical inference engine to compute truth values in the latent space.
-- **Proactive Homeostasis**: Self-maintenance and autonomous waking capabilities based on internal "tension" and unfulfilled goals.
-- **Causal Memory (SCIENCE_BASE)**: A system for empirical learning. The agent extracts successful invariants and injects them into future sessions.
-- **Autonomous Research Loop**: Instead of halting on failure, the system automatically writes falsifiable `.prose` hypotheses triggered by internal semantic anomalies (JEPA).
-- **Learned Rules Sandbox**: Dynamic routing corrections based on historical outcomes.
+- **Biological Inspiration (Drosophila Model)**: The architecture mimics cognitive processes, including frustration, energy bounds, and attention decay, rather than just executing endless loops.
+- **Inner Life & Proactive Homeostasis**: OpenSkyNet has "internal drives" (tension). It does not wait for user prompts to act; it can wake itself up to perform self-maintenance or resume unfulfilled goals based on internal tension.
+- **Neural Logic Engine (NLE)**: A deterministic logical inference engine that computes truth values and contradictions in the latent space before taking physical action.
+- **Causal Memory (SCIENCE_BASE)**: Unlike traditional RAG (Retrieval-Augmented Generation) which just fetches old text, OpenSkyNet performs empirical learning. It extracts successful invariants from past tasks and injects them as forced rules into future sessions.
+- **Autonomous Research Loop**: Instead of halting on an error and asking the user, the system automatically writes falsifiable `.prose` hypotheses triggered by internal semantic anomalies (evaluated by a JEPA-like mechanism) and tests them.
+- **Learned Rules Sandbox**: Dynamic, persistent routing corrections based on historical outcomes. If a tool fails twice, the system learns to route around the problem permanently.
 
 ---
 
