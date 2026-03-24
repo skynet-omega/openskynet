@@ -26,6 +26,41 @@ While **OpenClaw** is a powerful, general-purpose multi-agent framework for rout
 - **Autonomous Research Loop**: Instead of halting on an error and asking the user, the system automatically writes falsifiable `.prose` hypotheses triggered by internal semantic anomalies (evaluated by a JEPA-like mechanism) and tests them.
 - **Learned Rules Sandbox**: Dynamic, persistent routing corrections based on historical outcomes. If a tool fails twice, the system learns to route around the problem permanently.
 
+### OpenSkyNet Empirical Architecture
+
+The following diagram represents the **literal, currently implemented** execution flow of the Omega Engine in the repository:
+
+```mermaid
+graph TD
+    %% Base Infrastructure
+    User(User Prompt / Cron) --> Router{OpenClaw Gateway}
+    Router --> |Standard| Agent[Reactive Agent]
+
+    %% Omega Autonomous Flow
+    Router --> |Omega Work| Heartbeat[Self-Time Kernel Heartbeat]
+
+    subgraph Omega Engine
+        Heartbeat --> Drives[Evaluate Inner Drives & Tension]
+        Drives --> |Needs Maintenance / High JEPA Error| Policy[Policy Engine]
+
+        Policy --> |Action Required| Memory[Inject SCIENCE_BASE in Context]
+        Memory --> Action[Execute Tool / Sub-Agent]
+
+        Action --> |Success| Extract[Extract Invariants]
+        Extract --> ScienceBase[(SCIENCE_BASE.md)]
+
+        Action --> |Failure / Anomaly| Research[Autonomous Research Loop]
+        Research --> Prose[Write Falsifiable .prose Hypothesis]
+        Prose --> Action
+
+        Action --> |Repeated Failure| Routing[Learned Rules Sandbox]
+        Routing --> Rule[Update Dynamic Routing]
+    end
+
+    Rule -.-> |Overrides Tool Call| Action
+    ScienceBase -.-> |Empirical Context| Memory
+```
+
 ---
 
 ## 🛠️ Installation
