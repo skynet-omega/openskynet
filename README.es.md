@@ -30,6 +30,7 @@ Consulte los scripts en `scripts/install.sh` para entornos Linux/WSL.
 
 ## Gracias a OpenClaw
 
-## 🦞 openclaw (https://openclaw.ai/)
+- **Autor**: Gonzalo Daroch I.
+- Proyecto base: **[OpenClaw](https://openclaw.ai/)**
 
 _OpenSkyNet: Turn ambiguous ideas into tested, useful, reproducible progress._

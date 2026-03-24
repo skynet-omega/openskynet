@@ -76,6 +76,7 @@ _Note: Make sure to review the `.env.example` and set up your required API keys 
 
 ## 📚 Acknowledgments & Documentation
 
+- **Author**: Gonzalo Daroch I.
 - For deep-dive architectural decisions, check the `docs/architecture` and `docs/history` folders.
 - Special thanks to **[OpenClaw](https://openclaw.ai/)** for providing the fundamental plumbing and robust multi-agent architecture this project is built upon.
 
