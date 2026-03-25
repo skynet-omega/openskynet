@@ -37,4 +37,16 @@ describe("omega critic", () => {
       errorKind: "low_value_result",
     });
   });
+
+  it("accepts HEARTBEAT_OK as a substantive reply to avoid low_value_result", () => {
+    const critique = critiqueOmegaOutcome({
+      task: "maintain system",
+      reply: "HEARTBEAT_OK",
+      observedChangedFiles: [],
+      expectedPaths: [],
+    });
+
+    expect(critique.verdict).toBe("useful");
+    expect(critique.reasons).toContain("substantive_reply");
+  });
 });
