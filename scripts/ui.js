@@ -48,7 +48,7 @@ function which(cmd) {
 function resolveRunner() {
   const pnpm = which("pnpm");
   if (pnpm) {
-    return { cmd: pnpm, kind: "pnpm" };
+    return { cmd: process.execPath, args: [pnpm], kind: "pnpm" };
   }
   return null;
 }
@@ -57,6 +57,8 @@ export function shouldUseShellForCommand(cmd, platform = process.platform) {
   if (platform !== "win32") {
     return false;
   }
+  // Ignore shell check for process.execPath
+  if (cmd === process.execPath) return false;
   const extension = path.extname(cmd).toLowerCase();
   return WINDOWS_SHELL_EXTENSIONS.has(extension);
 }
@@ -179,7 +181,7 @@ export function main(argv = process.argv.slice(2)) {
   }
 
   if (action === "install") {
-    run(runner.cmd, ["install", ...rest]);
+    run(runner.cmd, [...(runner.args || []), "install", ...rest]);
     return;
   }
 
@@ -187,10 +189,10 @@ export function main(argv = process.argv.slice(2)) {
     const installEnv =
       action === "build" ? { ...process.env, NODE_ENV: "production" } : process.env;
     const installArgs = action === "build" ? ["install", "--prod"] : ["install"];
-    runSync(runner.cmd, installArgs, installEnv);
+    runSync(runner.cmd, [...(runner.args || []), ...installArgs], installEnv);
   }
 
-  run(runner.cmd, ["run", script, ...rest]);
+  run(runner.cmd, [...(runner.args || []), "run", script, ...rest]);
 }
 
 const isDirectExecution = (() => {
@@ -201,3 +203,6 @@ const isDirectExecution = (() => {
 if (isDirectExecution) {
   main();
 }
+
+console.log("UI SCRIPT RUNNING WITH NODE:", process.version);
+console.log("UI SCRIPT PATH:", process.env.PATH);
