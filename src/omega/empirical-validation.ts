@@ -1,7 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { createOmegaFrontalTool } from "../agents/tools/omega-frontal-tool.js";
-import { FrontalLobeManager } from "./frontal/frontal-lobe.js";
 import { RicciGraphAnalytics } from "./graph-analytics.js";
 
 async function testEmpiricalThoughtArchitecture() {

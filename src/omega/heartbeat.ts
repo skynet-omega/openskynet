@@ -3,19 +3,7 @@ import * as path from "node:path";
 import { getActiveLearningStrategy } from "./active-learning-strategy.js";
 import { runAutonomousCycle } from "./autonomous-executor.js";
 import { getContinuousThinkingEngine } from "./continuous-thinking-engine.js";
-import { loadOmegaDurableMemory } from "./durable-memory.js";
-import {
-  loadOmegaEmpiricalMetrics,
-  recordOmegaBackgroundActionMetrics,
-  recordOmegaHeartbeatCycleMetrics,
-  recordOmegaRouteMetrics,
-  recordOmegaValidationMetrics,
-  resolveOmegaEmpiricalMetricsFile,
-  type OmegaEmpiricalMetrics,
-  type OmegaEmpiricalRoute,
-} from "./empirical-metrics.js";
 import { getEntropyMinimizationLoop } from "./entropy-minimization-loop.js";
-import { syncOmegaExecutiveObserverState } from "./executive-state.js";
 import { decideOmegaWakeAction } from "./frontal/wake-policy.js";
 import { evaluateInnerDrives, buildAutonomousDirectivePrompt } from "./inner-life/index.js";
 import {
@@ -28,13 +16,10 @@ import {
   summarizeOmegaOperationalMemory,
 } from "./operational-memory.js";
 import {
-  loadOmegaProblemAgenda,
-  syncOmegaProblemAgenda,
   deriveOmegaAgendaExecutionContract,
 } from "./problem-agenda.js";
 import {
   resumeInterruptedOmegaGoal,
-  type OmegaAutonomousRecoveryResult,
 } from "./recovery-runner.js";
 import { queryScienceBase } from "./science-base-rag.js";
 import {
@@ -44,10 +29,8 @@ import {
   pruneShadowedOmegaGoals,
   pruneStaleOmegaGoals,
   pruneSupersededOmegaGoals,
-  loadOmegaSessionRuntimeSnapshot,
 } from "./session-context.js";
 import { deriveFocusedActiveTargets } from "./session-context.js";
-import { type OmegaSessionTaskFailure } from "./session-task.js";
 
 /**
  * Recolecta candidatos de memoria para exploración por la drive de curiosidad.
@@ -147,50 +130,6 @@ export async function buildOmegaHeartbeatPrompt(params: {
   }
 
   if (wakeAction.kind === "heartbeat_ok") {
-    // PHASE 0: EXECUTIVE ARBITRATION
-    // Consulta al ejecutivo si hay tareas de mantenimiento o anomalías proactivas
-    const executive = await syncOmegaExecutiveObserverState(params);
-    if (executive.runtime.dispatchPlan.shouldDispatchLlmTurn) {
-      const plan = executive.runtime.dispatchPlan;
-      const lines = [
-        "[OMEGA Executive Dispatch]",
-        `Action: ${plan.selectedAction}`,
-        `Reason: ${plan.rationale.join(" | ")}`,
-        `Selected work item: ${plan.selectedWorkItemId}`,
-      ];
-
-      if (
-        plan.selectedAction === "maintain" &&
-        plan.selectedWorkItemId?.startsWith("maintenance:failure:")
-      ) {
-        const classKey = plan.selectedWorkItemId.slice("maintenance:".length);
-        const contract = deriveOmegaAgendaExecutionContract(classKey);
-        lines.push("");
-        lines.push("[OMEGA Initiative Contract]");
-        lines.push(`Problem class: ${classKey}`);
-
-        // Include evidence from Durable Memory if available
-        const durableMemory = await loadOmegaDurableMemory(params);
-        const relevantEvidence = durableMemory.find((m) => `failure:${m.errorKind}` === classKey);
-        if (relevantEvidence) {
-          lines.push(
-            `Evidence: ${relevantEvidence.task} -> ${relevantEvidence.targets.join(", ")}`,
-          );
-        }
-
-        lines.push(`Hypothesis: ${contract.hypothesis}`);
-        lines.push(`Deliverable: ${contract.deliverable}`);
-        lines.push(`Success criteria: ${contract.successCriteria}`);
-        if (contract.experimentMode) {
-          lines.push(`Experiment mode: ${contract.experimentMode}`);
-        }
-      }
-
-      lines.push("");
-      lines.push("If no user-facing update is needed after inspection, reply HEARTBEAT_OK.");
-      return lines.join("\n");
-    }
-
     // Sin tensión de tarea: ejecutar ciclo completo de autonomía
     if (kernel) {
       // PHASE 1: CONTINUOUS THINKING - Generar pensamientos genuinos del sistema
@@ -199,7 +138,7 @@ export async function buildOmegaHeartbeatPrompt(params: {
 
       // PHASE 2: ENTROPY MINIMIZATION - Detectar contradicciones automáticamente
       const entropyLoop = getEntropyMinimizationLoop();
-      const contradictions = entropyLoop.detectContradictions(kernel);
+      entropyLoop.detectContradictions(kernel);
 
       // PHASE 3: ACTIVE LEARNING - Generar hipótesis cuando la entropía es alta
       const learningStrategy = getActiveLearningStrategy();
@@ -379,6 +318,21 @@ export async function buildOmegaHeartbeatPrompt(params: {
     }
   }
 
+  // Handle Agenda Contract
+  if (wakeAction.kind === "maintain" && wakeAction.selectedWorkItemId?.startsWith("maintenance:agenda:")) {
+    const classKey = wakeAction.selectedWorkItemId.slice("maintenance:agenda:".length);
+    const contract = deriveOmegaAgendaExecutionContract(classKey);
+    lines.push("");
+    lines.push("[OMEGA Initiative Contract]");
+    lines.push(`Problem class: ${classKey}`);
+    lines.push(`Hypothesis: ${contract.hypothesis}`);
+    lines.push(`Deliverable: ${contract.deliverable}`);
+    lines.push(`Success criteria: ${contract.successCriteria}`);
+    if (contract.experimentMode === "probe_experiment") {
+      lines.push("Experiment mode: probe_experiment (Isolated diagnosis)");
+    }
+  }
+
   lines.push("");
   lines.push("If no user-facing update is needed after inspection, reply HEARTBEAT_OK.");
   return lines.join("\n");
@@ -446,14 +400,13 @@ export async function applyOmegaHeartbeatExecutiveAction(params: {
       requesterAgentIdOverride: params.requesterAgentIdOverride,
     });
     if (resumed.kind === "resumed_interrupted_goal") {
-      const exec = resumed.execution;
       return {
         kind: "resumed_interrupted_goal",
         wakeAction,
         route: resumed.route,
-        status: exec.ok ? "ok" : (exec as OmegaSessionTaskFailure).status,
-        errorKind: exec.ok ? undefined : (exec as OmegaSessionTaskFailure).errorKind,
-        observedChangedFiles: exec.observedChangedFiles,
+        status: resumed.execution.ok ? "ok" : resumed.execution.status,
+        errorKind: resumed.execution.ok ? undefined : resumed.execution.errorKind,
+        observedChangedFiles: resumed.execution.observedChangedFiles,
       };
     }
   }
@@ -489,14 +442,6 @@ export async function applyOmegaHeartbeatExecutiveAction(params: {
  */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/**
- * Helper: log con timestamp
- */
-function logOmega(message: string): void {
-  const now = new Date().toISOString();
-  console.log(`[${now}] [OMEGA LOOP] ${message}`);
 }
 
 /**
@@ -660,7 +605,6 @@ export interface OmegaHeartbeatTurnDecision {
   stopReason: "structured_idle" | "reply_heartbeat_ok" | "no_progress" | "active_goal" | "continue";
   replyHeartbeatOk: boolean;
   structuredIdleDetected: boolean;
-  kind?: string;
 }
 
 /**
@@ -700,7 +644,6 @@ export function deriveOmegaHeartbeatTurnDecision(params: {
       stopReason: "reply_heartbeat_ok",
       replyHeartbeatOk: true,
       structuredIdleDetected: false,
-      kind: "reply_heartbeat_ok",
     };
   }
 
@@ -711,7 +654,6 @@ export function deriveOmegaHeartbeatTurnDecision(params: {
       stopReason: "structured_idle",
       replyHeartbeatOk: false,
       structuredIdleDetected: true,
-      kind: "structured_idle",
     };
   }
 
@@ -720,7 +662,6 @@ export function deriveOmegaHeartbeatTurnDecision(params: {
     stopReason: "continue",
     replyHeartbeatOk: false,
     structuredIdleDetected: false,
-    kind: "continue",
   };
 }
 
@@ -876,17 +817,9 @@ export async function runOneHeartbeatCycleWithDeps(
 
   await deps.ensureDirectories({ workspaceRoot });
 
-  void recordOmegaHeartbeatCycleMetrics({ workspaceRoot, started: true }).catch(() => undefined);
-
   // Fase 1: acción ejecutiva (no requiere LLM)
   const execResult = await deps.applyExecutiveAction({ workspaceRoot, sessionKey });
   const lastWakeActionKind = execResult.wakeAction.kind;
-
-  void recordOmegaHeartbeatCycleMetrics({
-    workspaceRoot,
-    executiveAction: true,
-    usefulExecutiveAction: execResult.kind !== "none",
-  }).catch(() => undefined);
 
   // Terminación estructurada: executive recovery completó sin necesitar LLM
   if (
@@ -898,20 +831,12 @@ export async function runOneHeartbeatCycleWithDeps(
     execResult.kind === "aborted_interrupted_goal" ||
     execResult.kind === "reframed_stalled_goal"
   ) {
-    void recordOmegaHeartbeatCycleMetrics({
-      workspaceRoot,
-      completed: true,
-      structuredTermination: true,
-    }).catch(() => undefined);
     return { iterations: 0, stopReason: "structured_idle", lastWakeActionKind };
   }
 
   // Fase 2: generar prompt para ciclo de razonamiento
   const prompt = await deps.buildPrompt({ workspaceRoot, sessionKey });
   if (!prompt) {
-    void recordOmegaHeartbeatCycleMetrics({ workspaceRoot, completed: true }).catch(
-      () => undefined,
-    );
     return { iterations: 0, stopReason: "no_prompt", lastWakeActionKind };
   }
 
@@ -926,12 +851,9 @@ export async function runOneHeartbeatCycleWithDeps(
   // Fase 3: loop de iteraciones
   let iterations = 0;
   let stopReason = "max_iterations";
-  const MAX_ITERATIONS = 2; // Reduced from 8 to prevent quota exhaustion loops
+  const MAX_ITERATIONS = 8;
 
   let snapshot = await deps.loadRuntimeSnapshot({ workspaceRoot, sessionKey });
-  if (!snapshot) {
-    return { iterations: 0, stopReason: "snapshot_load_failure", lastWakeActionKind };
-  }
 
   for (let i = 1; i <= MAX_ITERATIONS; i++) {
     iterations = i;
@@ -940,12 +862,7 @@ export async function runOneHeartbeatCycleWithDeps(
       deps,
     );
 
-    const nextSnapshot = await deps.loadRuntimeSnapshot({ workspaceRoot, sessionKey });
-    if (!nextSnapshot) {
-      stopReason = "snapshot_load_failure";
-      break;
-    }
-    snapshot = nextSnapshot;
+    snapshot = await deps.loadRuntimeSnapshot({ workspaceRoot, sessionKey });
 
     if (!turnResult.decision.shouldContinue) {
       stopReason = turnResult.terminationReason;
@@ -962,35 +879,5 @@ export async function runOneHeartbeatCycleWithDeps(
     }
   }
 
-  void recordOmegaHeartbeatCycleMetrics({
-    workspaceRoot,
-    completed: true,
-    textTokenTermination: stopReason === "reply_heartbeat_ok",
-    iterations,
-  }).catch(() => undefined);
-
   return { iterations, stopReason, lastWakeActionKind };
-}
-
-/**
- * Snapshots y utilidades para tests
- */
-export function createDefaultHeartbeatDeps(
-  overrides: Partial<OmegaHeartbeatCycleDeps> = {},
-): OmegaHeartbeatCycleDeps {
-  return {
-    buildPrompt: async () => undefined,
-    loadRuntimeSnapshot: async () => ({ timeline: [], kernel: undefined }),
-    sendAgentTurn: async () => undefined,
-    appendConsciousnessLog: async () => undefined,
-    applyExecutiveAction: async () => ({
-      kind: "none" as const,
-      wakeAction: { kind: "heartbeat_ok" as const, reason: "none" },
-    }),
-    readLatestReply: async () => undefined,
-    recordMetric: async () => undefined,
-    ensureDirectories: async () => undefined,
-    sleep: async () => undefined,
-    ...overrides,
-  };
 }
