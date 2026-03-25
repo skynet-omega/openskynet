@@ -17,7 +17,6 @@ import {
   type OmegaKernelTrackedFile,
   type OmegaSelfTimeKernelState,
 } from "./self-time-kernel.js";
-import type { OmegaSessionTaskValidationSummary } from "./session-task.js";
 import {
   cloneOmegaTaskTransactions,
   parseOmegaTaskTransactions,
@@ -26,6 +25,7 @@ import {
   type OmegaTaskTransaction,
   type OmegaTaskTransactionExecutionSnapshot,
 } from "./task-transaction.js";
+import type { OmegaSessionTaskValidationSummary } from "./types.js";
 
 const OMEGA_SESSION_HISTORY_LIMIT = 32;
 const OMEGA_PROMPT_HISTORY_LIMIT = 3;
@@ -44,6 +44,7 @@ export type OmegaSessionOutcomeSnapshot = {
   structuredOk?: boolean;
   writeOk?: boolean;
   localityScore?: number;
+  protectedPreservationRate?: number;
 };
 
 export type OmegaSessionTimelineEntry = {

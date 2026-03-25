@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
-import { callGateway } from "../gateway/call.js";
 import { readLatestAssistantReply } from "../agents/tools/agent-step.js";
+import { callGateway } from "../gateway/call.js";
 import { collectObservedWriteChanges, createObservedWriteBaseline } from "./observed-write.js";
 import {
   recordOmegaSessionOutcome,
@@ -8,18 +8,11 @@ import {
   type OmegaSessionValidationSnapshot,
 } from "./session-context.js";
 import type { OmegaTaskTransactionExecutionSnapshot } from "./task-transaction.js";
+import {
+  type OmegaSessionTaskValidationRequest,
+  type OmegaSessionTaskValidationSummary,
+} from "./types.js";
 import { validateObservedWrite, validateStructuredOmegaResult } from "./validator.js";
-
-export type OmegaSessionTaskValidationSummary = {
-  structured?: ReturnType<typeof validateStructuredOmegaResult>;
-  write?: ReturnType<typeof validateObservedWrite>;
-};
-
-export type OmegaSessionTaskValidationRequest = {
-  expectsJson?: boolean;
-  expectedKeys?: string[];
-  expectedPaths?: string[];
-};
 
 export type OmegaSessionTaskSuccess = {
   ok: true;
@@ -45,8 +38,7 @@ async function startOmegaAgentRun(params: {
   sendParams: Record<string, unknown>;
   sessionKey: string;
 }): Promise<
-  | { ok: true; runId: string }
-  | { ok: false; status: "error"; runId: string; error: string }
+  { ok: true; runId: string } | { ok: false; status: "error"; runId: string; error: string }
 > {
   try {
     const response = await callGateway<{ runId?: string }>({

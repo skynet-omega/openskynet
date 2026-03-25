@@ -206,8 +206,7 @@ export async function buildIdleOmegaHeartbeatPrompt(params: {
 
   if (speculativeIdleEnabled) {
     const thinkingEngine = getContinuousThinkingEngine();
-    lobeState = thinkingEngine.getState().frontalLobe;
-    thoughts = await thinkingEngine.think(params.kernel, params.workspaceRoot);
+    thoughts = thinkingEngine.think(params.kernel);
     graphFocus = RicciGraphAnalytics.getFocusRecommendation(params.kernel);
     contradictions = getEntropyMinimizationLoop().detectContradictions(params.kernel);
 

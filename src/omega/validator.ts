@@ -51,12 +51,32 @@ export function validateStructuredOmegaResult(
 export function validateObservedWrite(params: {
   expectedPaths: string[];
   observedChangedFiles: string[];
+  watchedPaths?: string[];
 }): OmegaValidationResult {
   const expected = params.expectedPaths.map((item) => item.trim()).filter(Boolean);
   const observed = params.observedChangedFiles.map((item) => item.trim()).filter(Boolean);
+  const watched = (params.watchedPaths ?? [])
+    .map((item) => item.trim())
+    .filter((item) => item && !expected.includes(item));
+
   const matchedExpectedPaths = expected.filter((path) =>
     observed.some((item) => item === path || item.endsWith(path)),
   );
+
+  const unexpectedWrites = observed.filter(
+    (item) => !expected.includes(item) && watched.some((w) => item === w || item.endsWith(w)),
+  );
+
+  if (unexpectedWrites.length > 0) {
+    return {
+      ok: false,
+      errorKind: "unexpected_collateral_writes" as any,
+      message: "OMEGA detected writes on watched paths not in the target set.",
+      expectedPaths: expected,
+      observedChangedFiles: observed,
+    };
+  }
+
   if (matchedExpectedPaths.length === 0) {
     return {
       ok: false,

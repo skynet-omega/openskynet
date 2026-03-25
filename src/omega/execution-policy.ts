@@ -1,5 +1,5 @@
 import type { OmegaExecutiveDispatchPlan } from "./executive-runtime.js";
-import type { OmegaInterruptedGoalRecovery } from "./recovery.js";
+import type { OmegaInterruptedGoalRecovery } from "./types.js";
 import type { OmegaWorldModelSnapshot } from "./world-model.js";
 
 export type OmegaExecutionRoute = "omega_delegate" | "sessions_spawn";
@@ -49,7 +49,7 @@ export function buildOmegaRecoveryStrategyKey(params: {
         : params.recovery.expectsJson
           ? "structured_only"
           : "general";
-  const collateral = params.recovery.collateralPaths.length > 0 ? "collateral" : "contained";
+  const collateral = "contained";
   const errorKind = params.recovery.lastErrorKind ?? "unknown";
   return `${errorKind}|${scope}|${collateral}|${params.route}`;
 }
@@ -235,7 +235,6 @@ export function chooseOmegaRecoveryRoute(params: {
 
   if (
     params.recovery.remainingTargets.length === 1 &&
-    params.recovery.collateralPaths.length === 0 &&
     params.recentStalledTurns === 0 &&
     params.recovery.failureStreak <= 1
   ) {

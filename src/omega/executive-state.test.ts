@@ -89,6 +89,10 @@ describe("omega executive state", () => {
       turn: {
         iteration: 1,
         terminationReason: "continue",
+        decision: {
+          kind: "dispatch_turn",
+          reason: "normal_operation",
+        },
         stateDelta: {
           timelineDelta: 0,
           kernelUpdated: false,
@@ -102,9 +106,8 @@ describe("omega executive state", () => {
         },
       },
       turnPolicy: {
-        continueDelayMs: 7500,
-        shouldBackoff: true,
         turnHealth: "stalled",
+        shouldBackoff: false,
       },
     });
     await recordOmegaOperationalTurnMemory({
@@ -113,6 +116,10 @@ describe("omega executive state", () => {
       turn: {
         iteration: 2,
         terminationReason: "continue",
+        decision: {
+          kind: "dispatch_turn",
+          reason: "normal_operation",
+        },
         stateDelta: {
           timelineDelta: 0,
           kernelUpdated: false,
@@ -126,9 +133,8 @@ describe("omega executive state", () => {
         },
       },
       turnPolicy: {
-        continueDelayMs: 7500,
-        shouldBackoff: true,
         turnHealth: "stalled",
+        shouldBackoff: false,
       },
     });
 

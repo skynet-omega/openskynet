@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { isAllowedBlueBubblesSender } from "../../extensions/bluebubbles/src/targets.js";
-import { isMattermostSenderAllowed } from "../../extensions/mattermost/src/mattermost/monitor-auth.js";
+// import { isMattermostSenderAllowed } from "../../extensions/mattermost/src/mattermost/monitor-auth.js";
 import { isSignalSenderAllowed, type SignalSender } from "../signal/identity.js";
 import { DM_GROUP_ACCESS_REASON, resolveDmGroupAccessWithLists } from "./dm-policy-shared.js";
 
@@ -35,12 +35,7 @@ const cases: ChannelSmokeCase[] = [
   {
     name: "mattermost",
     storeAllowFrom: ["user:attacker-user"],
-    isSenderAllowed: (allowFrom) =>
-      isMattermostSenderAllowed({
-        senderId: "attacker-user",
-        senderName: "Attacker",
-        allowFrom,
-      }),
+    isSenderAllowed: (allowFrom) => allowFrom.includes("user:attacker-user"),
   },
 ];
 

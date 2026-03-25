@@ -1,19 +1,28 @@
+import { execSync } from "node:child_process";
 import { logVerbose } from "../../globals.js";
 import {
   getLastTtsAttempt,
+  getTtsLanguage,
+  getTtsFormat,
   getTtsMaxLength,
   getTtsProvider,
+  getTtsVoice,
   isSummarizationEnabled,
+  setTtsAutoMode,
   isTtsEnabled,
   isTtsProviderConfigured,
   resolveTtsApiKey,
+  resolveTtsAutoMode,
   resolveTtsConfig,
   resolveTtsPrefsPath,
   setLastTtsAttempt,
   setSummarizationEnabled,
   setTtsEnabled,
+  setTtsLanguage,
+  setTtsFormat,
   setTtsMaxLength,
   setTtsProvider,
+  setTtsVoice,
   textToSpeech,
 } from "../../tts/tts.js";
 import type { ReplyPayload } from "../types.js";
@@ -48,13 +57,19 @@ function ttsUsage(): ReplyPayload {
       `**Commands:**\n` +
       `• /tts on — Enable automatic TTS for replies\n` +
       `• /tts off — Disable TTS\n` +
+      `• /tts always|inbound|tagged — Set auto-TTS mode\n` +
       `• /tts status — Show current settings\n` +
       `• /tts provider [name] — View/change provider\n` +
+      `• /tts idiom [es|en] — View/change language (AllTalk)\n` +
+      `• /tts voice [name] — View/change voice (AllTalk)\n` +
+      `• /tts format [opus|wav] — View/change output format (AllTalk)\n` +
+      `• /tts log — Show recent AllTalk service logs\n` +
       `• /tts limit [number] — View/change text limit\n` +
       `• /tts summary [on|off] — View/change auto-summary\n` +
       `• /tts audio <text> — Generate audio from text\n\n` +
       `**Providers:**\n` +
       `• edge — Free, fast (default)\n` +
+      `• alltalk — Local AllTalk server\n` +
       `• openai — High quality (requires API key)\n` +
       `• elevenlabs — Premium voices (requires API key)\n\n` +
       `**Text Limit (default: 1500, max: 4096):**\n` +
@@ -62,6 +77,8 @@ function ttsUsage(): ReplyPayload {
       `• Summary ON: AI summarizes, then generates audio\n` +
       `• Summary OFF: Truncates text, then generates audio\n\n` +
       `**Examples:**\n` +
+      `/tts tagged\n` +
+      `/tts provider alltalk\n` +
       `/tts provider edge\n` +
       `/tts limit 2000\n` +
       `/tts audio Hello, this is a test!`,
@@ -101,6 +118,14 @@ export const handleTtsCommands: CommandHandler = async (params, allowTextCommand
   if (action === "off") {
     setTtsEnabled(prefsPath, false);
     return { shouldContinue: false, reply: { text: "🔇 TTS disabled." } };
+  }
+
+  if (action === "always" || action === "inbound" || action === "tagged") {
+    setTtsAutoMode(prefsPath, action);
+    return {
+      shouldContinue: false,
+      reply: { text: `✅ TTS auto mode set to ${action}.` },
+    };
   }
 
   if (action === "audio") {
@@ -162,6 +187,7 @@ export const handleTtsCommands: CommandHandler = async (params, allowTextCommand
       const hasOpenAI = Boolean(resolveTtsApiKey(config, "openai"));
       const hasElevenLabs = Boolean(resolveTtsApiKey(config, "elevenlabs"));
       const hasEdge = isTtsProviderConfigured(config, "edge");
+      const hasAllTalk = isTtsProviderConfigured(config, "alltalk");
       return {
         shouldContinue: false,
         reply: {
@@ -171,13 +197,19 @@ export const handleTtsCommands: CommandHandler = async (params, allowTextCommand
             `OpenAI key: ${hasOpenAI ? "✅" : "❌"}\n` +
             `ElevenLabs key: ${hasElevenLabs ? "✅" : "❌"}\n` +
             `Edge enabled: ${hasEdge ? "✅" : "❌"}\n` +
-            `Usage: /tts provider openai | elevenlabs | edge`,
+            `AllTalk available: ${hasAllTalk ? "✅" : "❌"}\n` +
+            `Usage: /tts provider openai | elevenlabs | edge | alltalk`,
         },
       };
     }
 
     const requested = args.trim().toLowerCase();
-    if (requested !== "openai" && requested !== "elevenlabs" && requested !== "edge") {
+    if (
+      requested !== "openai" &&
+      requested !== "elevenlabs" &&
+      requested !== "edge" &&
+      requested !== "alltalk"
+    ) {
       return { shouldContinue: false, reply: ttsUsage() };
     }
 
@@ -186,6 +218,96 @@ export const handleTtsCommands: CommandHandler = async (params, allowTextCommand
       shouldContinue: false,
       reply: { text: `✅ TTS provider set to ${requested}.` },
     };
+  }
+
+  if (action === "idiom" || action === "lang") {
+    if (!args.trim()) {
+      const currentLang = getTtsLanguage(config, prefsPath);
+      return {
+        shouldContinue: false,
+        reply: {
+          text: `🌐 Current TTS language (AllTalk): ${currentLang}\nUsage: /tts idiom <es|en>`,
+        },
+      };
+    }
+    const requested = args.trim().toLowerCase();
+    if (requested !== "es" && requested !== "en") {
+      return {
+        shouldContinue: false,
+        reply: { text: "❌ Supported idioms: es (Spanish), en (English)" },
+      };
+    }
+    setTtsLanguage(prefsPath, requested);
+    return {
+      shouldContinue: false,
+      reply: { text: `✅ TTS language set to ${requested}.` },
+    };
+  }
+
+  if (action === "voice") {
+    if (!args.trim()) {
+      const currentVoice = getTtsVoice(config, prefsPath);
+      return {
+        shouldContinue: false,
+        reply: {
+          text: `🗣️ Current AllTalk voice: ${currentVoice}\nUsage: /tts voice <name>\nExample: /tts voice Zelda`,
+        },
+      };
+    }
+    let requested = args.trim();
+    // Handle specific alias for Alicia_
+    if (requested.toLowerCase() === "alicia") {
+      requested = "Alicia_";
+    }
+    if (!requested.toLowerCase().endsWith(".wav")) {
+      requested += ".wav";
+    }
+    setTtsVoice(prefsPath, requested);
+    return {
+      shouldContinue: false,
+      reply: { text: `✅ TTS voice set to ${requested}. Preferences saved to ${prefsPath}` },
+    };
+  }
+
+  if (action === "format") {
+    if (!args.trim()) {
+      const currentFormat = getTtsFormat(prefsPath);
+      return {
+        shouldContinue: false,
+        reply: {
+          text: `📦 Current TTS format (AllTalk): ${currentFormat}\nUsage: /tts format <opus|wav>`,
+        },
+      };
+    }
+    const requested = args.trim().toLowerCase();
+    if (requested !== "opus" && requested !== "wav") {
+      return {
+        shouldContinue: false,
+        reply: { text: "❌ Supported formats: opus (Voice Note), wav (Audio File)" },
+      };
+    }
+    setTtsFormat(prefsPath, requested as "wav" | "opus");
+    return {
+      shouldContinue: false,
+      reply: { text: `✅ TTS format set to ${requested}.` },
+    };
+  }
+
+  if (action === "log") {
+    try {
+      const logs = execSync(
+        "journalctl --user -u alltalk-openskynet.service -n 20 --no-pager",
+      ).toString();
+      return {
+        shouldContinue: false,
+        reply: { text: `📜 **AllTalk Logs (Last 20 lines):**\n\n\`\`\`\n${logs}\n\`\`\`` },
+      };
+    } catch (err) {
+      return {
+        shouldContinue: false,
+        reply: { text: `❌ Failed to fetch logs: ${String(err)}` },
+      };
+    }
   }
 
   if (action === "limit") {
@@ -247,6 +369,7 @@ export const handleTtsCommands: CommandHandler = async (params, allowTextCommand
   }
 
   if (action === "status") {
+    const autoMode = resolveTtsAutoMode({ config, prefsPath });
     const enabled = isTtsEnabled(config, prefsPath);
     const provider = getTtsProvider(config, prefsPath);
     const hasKey = isTtsProviderConfigured(config, provider);
@@ -256,10 +379,16 @@ export const handleTtsCommands: CommandHandler = async (params, allowTextCommand
     const lines = [
       "📊 TTS status",
       `State: ${enabled ? "✅ enabled" : "❌ disabled"}`,
+      `Auto mode: ${autoMode}`,
       `Provider: ${provider} (${hasKey ? "✅ configured" : "❌ not configured"})`,
-      `Text limit: ${maxLength} chars`,
-      `Auto-summary: ${summarize ? "on" : "off"}`,
     ];
+    if (provider === "alltalk") {
+      lines.push(`Voice: ${getTtsVoice(config, prefsPath)}`);
+      lines.push(`Idiom: ${getTtsLanguage(config, prefsPath)}`);
+      lines.push(`Format: ${getTtsFormat(prefsPath)}`);
+    }
+    lines.push(`Text limit: ${maxLength} chars`);
+    lines.push(`Auto-summary: ${summarize ? "on" : "off"}`);
     if (last) {
       const timeAgo = Math.round((Date.now() - last.timestamp) / 1000);
       lines.push("");

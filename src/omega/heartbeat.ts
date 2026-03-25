@@ -3,6 +3,7 @@ import * as path from "node:path";
 import { getActiveLearningStrategy } from "./active-learning-strategy.js";
 import { runAutonomousCycle } from "./autonomous-executor.js";
 import { getContinuousThinkingEngine } from "./continuous-thinking-engine.js";
+import { loadOmegaDurableMemory } from "./durable-memory.js";
 import {
   loadOmegaEmpiricalMetrics,
   recordOmegaBackgroundActionMetrics,
@@ -14,6 +15,7 @@ import {
   type OmegaEmpiricalRoute,
 } from "./empirical-metrics.js";
 import { getEntropyMinimizationLoop } from "./entropy-minimization-loop.js";
+import { syncOmegaExecutiveObserverState } from "./executive-state.js";
 import { decideOmegaWakeAction } from "./frontal/wake-policy.js";
 import { evaluateInnerDrives, buildAutonomousDirectivePrompt } from "./inner-life/index.js";
 import {
@@ -26,6 +28,11 @@ import {
   summarizeOmegaOperationalMemory,
 } from "./operational-memory.js";
 import {
+  loadOmegaProblemAgenda,
+  syncOmegaProblemAgenda,
+  deriveOmegaAgendaExecutionContract,
+} from "./problem-agenda.js";
+import {
   resumeInterruptedOmegaGoal,
   type OmegaAutonomousRecoveryResult,
 } from "./recovery-runner.js";
@@ -37,6 +44,7 @@ import {
   pruneShadowedOmegaGoals,
   pruneStaleOmegaGoals,
   pruneSupersededOmegaGoals,
+  loadOmegaSessionRuntimeSnapshot,
 } from "./session-context.js";
 import { deriveFocusedActiveTargets } from "./session-context.js";
 import { type OmegaSessionTaskFailure } from "./session-task.js";
@@ -139,6 +147,50 @@ export async function buildOmegaHeartbeatPrompt(params: {
   }
 
   if (wakeAction.kind === "heartbeat_ok") {
+    // PHASE 0: EXECUTIVE ARBITRATION
+    // Consulta al ejecutivo si hay tareas de mantenimiento o anomalías proactivas
+    const executive = await syncOmegaExecutiveObserverState(params);
+    if (executive.runtime.dispatchPlan.shouldDispatchLlmTurn) {
+      const plan = executive.runtime.dispatchPlan;
+      const lines = [
+        "[OMEGA Executive Dispatch]",
+        `Action: ${plan.selectedAction}`,
+        `Reason: ${plan.rationale.join(" | ")}`,
+        `Selected work item: ${plan.selectedWorkItemId}`,
+      ];
+
+      if (
+        plan.selectedAction === "maintain" &&
+        plan.selectedWorkItemId?.startsWith("maintenance:failure:")
+      ) {
+        const classKey = plan.selectedWorkItemId.slice("maintenance:".length);
+        const contract = deriveOmegaAgendaExecutionContract(classKey);
+        lines.push("");
+        lines.push("[OMEGA Initiative Contract]");
+        lines.push(`Problem class: ${classKey}`);
+
+        // Include evidence from Durable Memory if available
+        const durableMemory = await loadOmegaDurableMemory(params);
+        const relevantEvidence = durableMemory.find((m) => `failure:${m.errorKind}` === classKey);
+        if (relevantEvidence) {
+          lines.push(
+            `Evidence: ${relevantEvidence.task} -> ${relevantEvidence.targets.join(", ")}`,
+          );
+        }
+
+        lines.push(`Hypothesis: ${contract.hypothesis}`);
+        lines.push(`Deliverable: ${contract.deliverable}`);
+        lines.push(`Success criteria: ${contract.successCriteria}`);
+        if (contract.experimentMode) {
+          lines.push(`Experiment mode: ${contract.experimentMode}`);
+        }
+      }
+
+      lines.push("");
+      lines.push("If no user-facing update is needed after inspection, reply HEARTBEAT_OK.");
+      return lines.join("\n");
+    }
+
     // Sin tensión de tarea: ejecutar ciclo completo de autonomía
     if (kernel) {
       // PHASE 1: CONTINUOUS THINKING - Generar pensamientos genuinos del sistema
@@ -870,7 +922,7 @@ export async function runOneHeartbeatCycleWithDeps(
   // Fase 3: loop de iteraciones
   let iterations = 0;
   let stopReason = "max_iterations";
-  const MAX_ITERATIONS = 8;
+  const MAX_ITERATIONS = 2; // Reduced from 8 to prevent quota exhaustion loops
 
   let snapshot = await deps.loadRuntimeSnapshot({ workspaceRoot, sessionKey });
 

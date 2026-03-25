@@ -15,7 +15,6 @@ describe("omega execution controller", () => {
           queueKind: "none",
           expectedUtility: 0,
           utilityBreakdown: {
-            urgency: 0,
             expectedUtility: 0,
             uncertaintyReduction: 0,
             estimatedCost: 0,
@@ -25,7 +24,6 @@ describe("omega execution controller", () => {
           },
           budgetUsage: {
             observedTurns: 0,
-            observedLlmCalls: 0,
             observedWallTimeMs: 0,
             turnPressure: 0,
             llmPressure: 0,

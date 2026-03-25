@@ -104,7 +104,6 @@ describe("omega execution policy", () => {
         queueKind: "anomaly",
         expectedUtility: 0.8,
         utilityBreakdown: {
-          urgency: 0.7,
           expectedUtility: 0.8,
           uncertaintyReduction: 0.4,
           estimatedCost: 0.2,
@@ -114,7 +113,6 @@ describe("omega execution policy", () => {
         },
         budgetUsage: {
           observedTurns: 1,
-          observedLlmCalls: 1,
           observedWallTimeMs: 500,
           turnPressure: 0.1,
           llmPressure: 0.1,
@@ -180,17 +178,16 @@ describe("omega execution policy", () => {
           goalId: "goal-1",
           goalTask: "patch module",
           remainingTargets: ["src/a.ts"],
-          collateralPaths: ["src/b.ts"],
           expectsJson: false,
           requiredKeys: [],
           failureStreak: 1,
-          reason: "verified_locality_failure_after_restart",
+          reason: "verified_write_failure_after_restart",
           suggestedRoute: "sessions_spawn",
           resumeTask: "resume",
           lastErrorKind: "unexpected_collateral_writes",
         },
         route: "sessions_spawn",
       }),
-    ).toBe("unexpected_collateral_writes|single_target|collateral|sessions_spawn");
+    ).toBe("unexpected_collateral_writes|single_target|contained|sessions_spawn");
   });
 });

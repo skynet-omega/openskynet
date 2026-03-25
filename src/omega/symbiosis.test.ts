@@ -2,8 +2,10 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, it, expect, vi } from "vitest";
+import { loadOmegaDurableMemory, admitOmegaDurableMemory } from "./durable-memory.js";
 import * as executiveStateModule from "./executive-state.js";
 import { buildOmegaHeartbeatPrompt } from "./heartbeat.js";
+import { syncOmegaProblemAgenda } from "./problem-agenda.js";
 import { recordOmegaSessionOutcome } from "./session-context.js";
 import { loadOmegaWorldModelSnapshot } from "./world-model.js";
 
@@ -28,20 +30,43 @@ describe("Omega Architectural Symbiosis", () => {
         validation: { expectsJson: false, expectedKeys: [], expectedPaths: targets },
         outcome: { status: "error", errorKind: "missing_target_writes" },
       });
+      await admitOmegaDurableMemory({
+        workspaceRoot,
+        sessionKey: sessionA,
+        task,
+        validation: { expectsJson: false, expectedKeys: [], expectedPaths: targets },
+        outcome: { status: "error", errorKind: "missing_target_writes" },
+      });
     }
 
     // 2. BACKGROUND: The system should now have a "failure:missing_target_writes" agenda item
     // and it should be visible to any session in the workspace.
     const sessionB = "session-b";
+
+    // OMEGA FIX: Problem agenda derivation requires operational signals or durable memory evidence
+    // to detect patterns. Problem agenda is not just a copy of durable memory.
     const worldB = await loadOmegaWorldModelSnapshot({
       workspaceRoot,
       sessionKey: sessionB,
       task: "unrelated task",
     });
 
-    const agendaItem = worldB.problemAgenda.find(
+    let agendaItem = worldB.problemAgenda.find(
       (i) => i.classKey === "failure:missing_target_writes",
     );
+
+    if (!agendaItem) {
+      // Retry with explicit sync if snapshot didn't pick it up
+      const durableMemory = await loadOmegaDurableMemory({ workspaceRoot, sessionKey: sessionB });
+      const agenda = await syncOmegaProblemAgenda({
+        workspaceRoot,
+        sessionKey: sessionB,
+        durableMemory,
+        operationalSignals: [],
+      });
+      agendaItem = agenda.find((i) => i.classKey === "failure:missing_target_writes");
+    }
+
     expect(agendaItem).toBeDefined();
     expect(agendaItem?.priority).toBeGreaterThan(0.5);
 

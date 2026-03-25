@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { rmSync } from "node:fs";
 import { completeSimple, type TextContent } from "@mariozechner/pi-ai";
 import { EdgeTTS } from "node-edge-tts";
@@ -22,6 +23,29 @@ import type {
 const DEFAULT_ELEVENLABS_BASE_URL = "https://api.elevenlabs.io";
 export const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 const TEMP_FILE_CLEANUP_DELAY_MS = 5 * 60 * 1000; // 5 minutes
+
+export async function transcodeToOggOpus(params: {
+  inputPath: string;
+  outputPath: string;
+}): Promise<void> {
+  const result = spawnSync("ffmpeg", [
+    "-y", // overwrite output
+    "-i",
+    params.inputPath,
+    "-c:a",
+    "libopus",
+    "-b:a",
+    "64k", // good for voice
+    "-vbr",
+    "on",
+    params.outputPath,
+  ]);
+
+  if (result.status !== 0) {
+    const error = result.stderr?.toString() || "Unknown ffmpeg error";
+    throw new Error(`FFmpeg transcoding failed (exit ${result.status ?? "unknown"}): ${error}`);
+  }
+}
 
 export function isValidVoiceId(voiceId: string): boolean {
   return /^[a-zA-Z0-9]{10,40}$/.test(voiceId);
@@ -721,9 +745,10 @@ export async function alltalkTTS(params: {
   text: string;
   baseUrl: string;
   voice: string;
+  language?: string;
   timeoutMs: number;
 }): Promise<Buffer> {
-  const { text, baseUrl, voice, timeoutMs } = params;
+  const { text, baseUrl, voice, language, timeoutMs } = params;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -738,7 +763,7 @@ export async function alltalkTTS(params: {
     payload.append("narrator_enabled", "false");
     payload.append("narrator_voice_gen", "male_01.wav");
     payload.append("text_not_inside", "character");
-    payload.append("language", "en");
+    payload.append("language", language || "es");
     payload.append("output_file_name", "myoutputstring");
     payload.append("output_file_timestamp", "true");
     payload.append("autoplay", "false");

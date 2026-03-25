@@ -287,6 +287,17 @@ function emitFailureAlert(
   }
 }
 
+const QUOTA_EXHAUSTED_BACKOFF_MS = 12 * 60 * 60_000; // 12 hours
+const MAX_CONSECUTIVE_QUOTA_ERRORS = 10;
+
+function isQuotaExhaustedError(error: string | undefined): boolean {
+  if (!error) return false;
+  return (
+    /exhausted|limit reached|429|usage limit|try again in/i.test(error) &&
+    /min|hour|day/i.test(error)
+  );
+}
+
 /**
  * Apply the result of a job execution to the job's state.
  * Handles consecutive error tracking, exponential backoff, one-shot disable,
@@ -337,6 +348,21 @@ export function applyJobResult(
   // Track consecutive errors for backoff / auto-disable.
   if (result.status === "error") {
     job.state.consecutiveErrors = (job.state.consecutiveErrors ?? 0) + 1;
+
+    // Circuit breaker for persistent quota errors
+    if (
+      isQuotaExhaustedError(result.error) &&
+      job.state.consecutiveErrors >= MAX_CONSECUTIVE_QUOTA_ERRORS
+    ) {
+      job.enabled = false;
+      job.state.nextRunAtMs = undefined;
+      state.deps.log.error(
+        { jobId: job.id, jobName: job.name, consecutiveErrors: job.state.consecutiveErrors },
+        "cron: circuit breaker triggered due to persistent quota exhaustion. Disabling job.",
+      );
+      return false;
+    }
+
     const alertConfig = resolveFailureAlert(state, job);
     if (alertConfig && job.state.consecutiveErrors >= alertConfig.after) {
       const isBestEffort =
@@ -415,7 +441,13 @@ export function applyJobResult(
       }
     } else if (result.status === "error" && job.enabled) {
       // Apply exponential backoff for errored jobs to prevent retry storms.
-      const backoff = errorBackoffMs(job.state.consecutiveErrors ?? 1);
+      let backoff = errorBackoffMs(job.state.consecutiveErrors ?? 1);
+
+      // Much more aggressive backoff for real quota exhaustion
+      if (isQuotaExhaustedError(result.error)) {
+        backoff = Math.max(backoff, QUOTA_EXHAUSTED_BACKOFF_MS);
+      }
+
       let normalNext: number | undefined;
       try {
         normalNext =

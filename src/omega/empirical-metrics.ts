@@ -48,7 +48,7 @@ export type OmegaEmpiricalMetrics = {
   };
   /** Recovery strategy empirical data — used by world-model.ts to derive routing preferences */
   recovery: {
-    strategies: Record<string, { successes: number; failures: number }>;
+    strategies: Record<string, { attempts: number; successes: number; failures: number }>;
   };
 };
 
@@ -302,8 +302,9 @@ export async function recordOmegaRecoveryStrategyMetrics(params: {
 }): Promise<OmegaEmpiricalMetrics> {
   return updateOmegaEmpiricalMetrics(params.workspaceRoot, (metrics) => {
     const strategies = { ...metrics.recovery?.strategies };
-    const stats = strategies[params.strategy] ?? { successes: 0, failures: 0 };
+    const stats = strategies[params.strategy] ?? { attempts: 0, successes: 0, failures: 0 };
     strategies[params.strategy] = {
+      attempts: stats.attempts + 1,
       successes: stats.successes + (params.success ? 1 : 0),
       failures: stats.failures + (params.success ? 0 : 1),
     };

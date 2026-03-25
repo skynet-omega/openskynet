@@ -16,9 +16,11 @@ export function stringEnum<T extends readonly string[]>(
   values: T,
   options: StringEnumOptions<T> = {},
 ) {
+  // Defensive check: ensure values is an iterable array to avoid TypeError during spread
+  const safeValues = Array.isArray(values) ? values : [];
   return Type.Unsafe<T[number]>({
     type: "string",
-    enum: [...values],
+    enum: [...safeValues],
     ...options,
   });
 }

@@ -35,21 +35,19 @@ import {
   isValidOpenAIModel,
   isValidOpenAIVoice,
   isValidVoiceId,
-  OPENAI_TTS_MODELS,
-  OPENAI_TTS_VOICES,
   resolveOpenAITtsInstructions,
   openaiTTS,
   alltalkTTS,
   parseTtsDirectives,
   scheduleCleanup,
   summarizeText,
+  transcodeToOggOpus,
 } from "./tts-core.js";
-export { OPENAI_TTS_MODELS, OPENAI_TTS_VOICES } from "./tts-core.js";
 
-const DEFAULT_TIMEOUT_MS = 30_000;
-const DEFAULT_TTS_MAX_LENGTH = 1500;
-const DEFAULT_TTS_SUMMARIZE = true;
-const DEFAULT_MAX_TEXT_LENGTH = 4096;
+const DEFAULT_TIMEOUT_MS = 60_000; // Increased to 60s for long texts
+const DEFAULT_TTS_MAX_LENGTH = 100_000;
+const DEFAULT_TTS_SUMMARIZE = false;
+const DEFAULT_MAX_TEXT_LENGTH = 100_000;
 
 const DEFAULT_ELEVENLABS_BASE_URL = "https://api.elevenlabs.io";
 const DEFAULT_ELEVENLABS_VOICE_ID = "pMsXgVXv3BLzUgSXRplE";
@@ -138,6 +136,7 @@ export type ResolvedTtsConfig = {
   alltalk: {
     baseUrl: string;
     voice: string;
+    language: string;
   };
   prefsPath?: string;
   maxTextLength: number;
@@ -151,6 +150,9 @@ type TtsUserPrefs = {
     provider?: TtsProvider;
     maxLength?: number;
     summarize?: boolean;
+    language?: string;
+    voice?: string;
+    format?: "wav" | "opus";
   };
 };
 
@@ -331,6 +333,7 @@ export function resolveTtsConfig(cfg: OpenClawConfig): ResolvedTtsConfig {
     alltalk: {
       baseUrl: raw.alltalk?.baseUrl?.trim() || "http://127.0.0.1:7851",
       voice: raw.alltalk?.voice?.trim() || "female_01.wav",
+      language: raw.alltalk?.language?.trim() || "es",
     },
     prefsPath: raw.prefsPath,
     maxTextLength: raw.maxTextLength ?? DEFAULT_MAX_TEXT_LENGTH,
@@ -479,6 +482,39 @@ export function setTtsProvider(prefsPath: string, provider: TtsProvider): void {
   });
 }
 
+export function getTtsLanguage(config: ResolvedTtsConfig, prefsPath: string): string {
+  const prefs = readPrefs(prefsPath);
+  return prefs.tts?.language ?? config.alltalk.language;
+}
+
+export function setTtsLanguage(prefsPath: string, language: string): void {
+  updatePrefs(prefsPath, (prefs) => {
+    prefs.tts = { ...prefs.tts, language };
+  });
+}
+
+export function getTtsVoice(config: ResolvedTtsConfig, prefsPath: string): string {
+  const prefs = readPrefs(prefsPath);
+  return prefs.tts?.voice ?? config.alltalk.voice;
+}
+
+export function setTtsVoice(prefsPath: string, voice: string): void {
+  updatePrefs(prefsPath, (prefs) => {
+    prefs.tts = { ...prefs.tts, voice };
+  });
+}
+
+export function getTtsFormat(prefsPath: string): "wav" | "opus" {
+  const prefs = readPrefs(prefsPath);
+  return prefs.tts?.format ?? "opus";
+}
+
+export function setTtsFormat(prefsPath: string, format: "wav" | "opus"): void {
+  updatePrefs(prefsPath, (prefs) => {
+    prefs.tts = { ...prefs.tts, format };
+  });
+}
+
 export function getTtsMaxLength(prefsPath: string): number {
   const prefs = readPrefs(prefsPath);
   return prefs.tts?.maxLength ?? DEFAULT_TTS_MAX_LENGTH;
@@ -580,6 +616,7 @@ function resolveTtsRequestSetup(params: {
   | {
       config: ResolvedTtsConfig;
       providers: TtsProvider[];
+      prefsPath: string;
     }
   | {
       error: string;
@@ -597,6 +634,7 @@ function resolveTtsRequestSetup(params: {
   return {
     config,
     providers: resolveTtsProviderOrder(provider),
+    prefsPath,
   };
 }
 
@@ -617,7 +655,7 @@ export async function textToSpeech(params: {
     return { success: false, error: setup.error };
   }
 
-  const { config, providers } = setup;
+  const { config, providers, prefsPath } = setup;
   const channelId = resolveChannelId(params.channel);
   const output = resolveOutputFormat(channelId);
 
@@ -700,7 +738,8 @@ export async function textToSpeech(params: {
         const audioBuffer = await alltalkTTS({
           text: params.text,
           baseUrl: config.alltalk.baseUrl,
-          voice: config.alltalk.voice,
+          voice: getTtsVoice(config, prefsPath),
+          language: getTtsLanguage(config, prefsPath),
           timeoutMs: config.timeoutMs,
         });
 
@@ -709,17 +748,37 @@ export async function textToSpeech(params: {
         const tempRoot = resolvePreferredOpenClawTmpDir();
         mkdirSync(tempRoot, { recursive: true, mode: 0o700 });
         const tempDir = mkdtempSync(path.join(tempRoot, "tts-"));
-        const audioPath = path.join(tempDir, `voice-${Date.now()}.wav`);
-        writeFileSync(audioPath, audioBuffer);
+        const baseName = `voice-${Date.now()}`;
+        const wavPath = path.join(tempDir, `${baseName}.wav`);
+        writeFileSync(wavPath, audioBuffer);
+
+        let finalAudioPath = wavPath;
+        let finalOutputFormat = "wav";
+        let finalVoiceCompatible = false;
+
+        if (output.voiceCompatible && getTtsFormat(prefsPath) === "opus") {
+          const oggPath = path.join(tempDir, `${baseName}.opus`);
+          try {
+            await transcodeToOggOpus({ inputPath: wavPath, outputPath: oggPath });
+            finalAudioPath = oggPath;
+            finalOutputFormat = "opus";
+            finalVoiceCompatible = true;
+          } catch (err) {
+            logVerbose(
+              `TTS: AllTalk transcoding to Opus failed, falling back to WAV: ${String(err)}`,
+            );
+          }
+        }
+
         scheduleCleanup(tempDir);
 
         return {
           success: true,
-          audioPath,
+          audioPath: finalAudioPath,
           latencyMs,
           provider,
-          outputFormat: "wav",
-          voiceCompatible: false,
+          outputFormat: finalOutputFormat,
+          voiceCompatible: finalVoiceCompatible,
         };
       }
 
@@ -808,7 +867,7 @@ export async function textToSpeechTelephony(params: {
     return { success: false, error: setup.error };
   }
 
-  const { config, providers } = setup;
+  const { config, providers, prefsPath } = setup;
 
   const errors: string[] = [];
 
@@ -1031,8 +1090,6 @@ export const _test = {
   isValidVoiceId,
   isValidOpenAIVoice,
   isValidOpenAIModel,
-  OPENAI_TTS_MODELS,
-  OPENAI_TTS_VOICES,
   resolveOpenAITtsInstructions,
   parseTtsDirectives,
   resolveModelOverridePolicy,

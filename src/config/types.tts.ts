@@ -84,6 +84,7 @@ export type TtsConfig = {
   alltalk?: {
     baseUrl?: string;
     voice?: string;
+    language?: string;
   };
   /** Optional path for local TTS user preferences JSON. */
   prefsPath?: string;

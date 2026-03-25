@@ -33,4 +33,17 @@ describe("TtsConfigSchema openai speed and instructions", () => {
       }),
     ).toThrow();
   });
+
+  it("accepts alltalk provider config", () => {
+    expect(() =>
+      TtsConfigSchema.parse({
+        provider: "alltalk",
+        auto: "tagged",
+        alltalk: {
+          baseUrl: "http://127.0.0.1:7851",
+          voice: "widowmaker.wav",
+        },
+      }),
+    ).not.toThrow();
+  });
 });

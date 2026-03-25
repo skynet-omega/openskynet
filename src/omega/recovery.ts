@@ -1,11 +1,9 @@
 import type { OmegaKernelGoal, OmegaSelfTimeKernelState } from "./self-time-kernel.js";
+import { type OmegaInterruptedGoalRecovery } from "./types.js";
 
 export const OMEGA_AUTONOMOUS_RECOVERY_MAX_FAILURE_STREAK = 1;
 
-const WRITE_FAILURE_ERROR_KINDS = new Set([
-  "target_not_touched",
-  "missing_target_writes",
-]);
+const WRITE_FAILURE_ERROR_KINDS = new Set(["target_not_touched", "missing_target_writes"]);
 
 function normalizeText(value: string): string {
   return value.toLowerCase().replace(/\s+/g, " ").trim();
@@ -69,22 +67,6 @@ function buildInterruptedGoalResumeTask(params: {
 
   return lines.join("\n");
 }
-
-export type OmegaInterruptedGoalRecovery = {
-  goalId: string;
-  goalTask: string;
-  remainingTargets: string[];
-  expectsJson: boolean;
-  requiredKeys: string[];
-  lastErrorKind?: string;
-  failureStreak: number;
-  reason:
-    | "pending_active_goal_after_restart"
-    | "verified_structured_failure_after_restart"
-    | "verified_write_failure_after_restart";
-  suggestedRoute: "omega_delegate" | "sessions_spawn";
-  resumeTask: string;
-};
 
 export function deriveOmegaInterruptedGoalRecovery(params: {
   kernel?: OmegaSelfTimeKernelState;

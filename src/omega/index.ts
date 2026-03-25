@@ -36,8 +36,8 @@ export { decideOmegaWakeAction, type OmegaWakeAction } from "./frontal/wake-poli
 export {
   deriveOmegaInterruptedGoalRecovery,
   taskMatchesOmegaInterruptedGoalRecovery,
-  type OmegaInterruptedGoalRecovery,
 } from "./recovery.js";
+export type { OmegaInterruptedGoalRecovery } from "./types.js";
 export {
   resumeInterruptedOmegaGoal,
   type OmegaAutonomousRecoveryResult,

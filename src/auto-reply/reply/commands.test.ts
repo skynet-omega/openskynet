@@ -2000,4 +2000,40 @@ describe("handleCommands /tts", () => {
     expect(result.shouldContinue).toBe(false);
     expect(result.reply?.text).toContain("TTS status");
   });
+
+  it("supports /tts tagged mode and persists it to prefs", async () => {
+    const prefsPath = path.join(testWorkspaceDir, "tts-tagged.json");
+    const cfg = {
+      commands: { text: true },
+      channels: { whatsapp: { allowFrom: ["*"] } },
+      messages: { tts: { prefsPath } },
+    } as OpenClawConfig;
+    const params = buildParams("/tts tagged", cfg);
+    const result = await handleCommands(params);
+    expect(result.shouldContinue).toBe(false);
+    expect(result.reply?.text).toContain("tagged");
+
+    const stored = JSON.parse(await fs.readFile(prefsPath, "utf8")) as {
+      tts?: { auto?: string };
+    };
+    expect(stored.tts?.auto).toBe("tagged");
+  });
+
+  it("supports selecting alltalk as the TTS provider", async () => {
+    const prefsPath = path.join(testWorkspaceDir, "tts-provider.json");
+    const cfg = {
+      commands: { text: true },
+      channels: { whatsapp: { allowFrom: ["*"] } },
+      messages: { tts: { prefsPath } },
+    } as OpenClawConfig;
+    const params = buildParams("/tts provider alltalk", cfg);
+    const result = await handleCommands(params);
+    expect(result.shouldContinue).toBe(false);
+    expect(result.reply?.text).toContain("alltalk");
+
+    const stored = JSON.parse(await fs.readFile(prefsPath, "utf8")) as {
+      tts?: { provider?: string };
+    };
+    expect(stored.tts?.provider).toBe("alltalk");
+  });
 });

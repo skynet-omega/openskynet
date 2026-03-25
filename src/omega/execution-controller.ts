@@ -265,11 +265,22 @@ export async function resolveOmegaRecoveryRouteDecision(params: {
     route: "sessions_spawn",
   });
 
+  const delegateStats = metrics.recovery.strategies[delegateKey] ?? {
+    attempts: 0,
+    successes: 0,
+    failures: 0,
+  };
+  const isolatedStats = metrics.recovery.strategies[isolatedKey] ?? {
+    attempts: 0,
+    successes: 0,
+    failures: 0,
+  };
+
   return chooseOmegaRecoveryRoute({
     recovery: params.recovery,
     recentStalledTurns,
-    delegateStats: metrics.recovery.strategies[delegateKey],
-    isolatedStats: metrics.recovery.strategies[isolatedKey],
+    delegateStats,
+    isolatedStats,
   });
 }
 

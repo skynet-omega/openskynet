@@ -1,4 +1,5 @@
 import { Type } from "@sinclair/typebox";
+import { loadConfig, type OpenClawConfig } from "../../config/config.js";
 import { awaitValidatedOmegaSessionRun, buildOmegaInteractionPrompt } from "../../omega/index.js";
 import type { GatewayMessageChannel } from "../../utils/message-channel.js";
 import { ACP_SPAWN_MODES, ACP_SPAWN_STREAM_TARGETS, spawnAcpDirect } from "../acp-spawn.js";
@@ -74,6 +75,7 @@ const SessionsSpawnToolSchema = Type.Object({
 
 export function createSessionsSpawnTool(
   opts?: {
+    config?: OpenClawConfig;
     agentSessionKey?: string;
     agentChannel?: GatewayMessageChannel;
     agentAccountId?: string;
@@ -91,6 +93,7 @@ export function createSessionsSpawnTool(
       'Spawn an isolated session (runtime="subagent" or runtime="acp"). mode="run" is one-shot and mode="session" is persistent/thread-bound. Subagents inherit the parent workspace directory automatically.',
     parameters: SessionsSpawnToolSchema,
     execute: async (_toolCallId, args) => {
+      const cfg = opts?.config ?? loadConfig();
       const params = args as Record<string, unknown>;
       const unsupportedParam = UNSUPPORTED_SESSIONS_SPAWN_PARAM_KEYS.find((key) =>
         Object.hasOwn(params, key),
@@ -225,17 +228,18 @@ export function createSessionsSpawnTool(
           runTimeoutSeconds,
           thread,
           mode,
-            cleanup,
-            sandbox,
-            expectsCompletionMessage: !requiresValidation,
-            announceOnCompletion: !requiresValidation,
-            attachments,
-            attachMountPath:
-              params.attachAs && typeof params.attachAs === "object"
+          cleanup,
+          sandbox,
+          expectsCompletionMessage: !requiresValidation,
+          announceOnCompletion: !requiresValidation,
+          attachments,
+          attachMountPath:
+            params.attachAs && typeof params.attachAs === "object"
               ? readStringParam(params.attachAs as Record<string, unknown>, "mountPath")
               : undefined,
         },
         {
+          config: cfg,
           agentSessionKey: opts?.agentSessionKey,
           agentChannel: opts?.agentChannel,
           agentAccountId: opts?.agentAccountId,
@@ -249,7 +253,12 @@ export function createSessionsSpawnTool(
         },
       );
 
-      if (requiresValidation && result.status === "accepted" && result.childSessionKey && result.runId) {
+      if (
+        requiresValidation &&
+        result.status === "accepted" &&
+        result.childSessionKey &&
+        result.runId
+      ) {
         const execution = await awaitValidatedOmegaSessionRun({
           runId: result.runId,
           task,

@@ -1,20 +1,9 @@
-import type { OmegaSessionTaskValidationSummary } from "./session-task.js";
-import type { OmegaStructuredTask } from "./types.js";
-
-export type OmegaCriticVerdict = "high_value" | "useful" | "low_value" | "invalid";
-
-export type OmegaOutcomeCritique = {
-  verdict: OmegaCriticVerdict;
-  score: number;
-  reasons: string[];
-  errorKind?:
-    | "low_value_result"
-    | "invalid_structured_result"
-    | "target_not_touched"
-    | "missing_target_writes"
-    | "unexpected_collateral_writes";
-  message: string;
-};
+import type {
+  OmegaCriticVerdict,
+  OmegaOutcomeCritique,
+  OmegaSessionTaskValidationSummary,
+  OmegaStructuredTask,
+} from "./types.js";
 
 function normalizeText(value: string | undefined): string {
   return (value ?? "").trim().toLowerCase();

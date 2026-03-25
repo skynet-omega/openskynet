@@ -4,7 +4,6 @@ import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { addSubagentRunForTests, resetSubagentRegistryForTests } from "./subagent-registry.js";
 import { createPerSenderSessionConfig } from "./test-helpers/session-config.js";
-import { createSessionsSpawnTool } from "./tools/sessions-spawn-tool.js";
 
 const callGatewayMock = vi.fn();
 
@@ -24,6 +23,16 @@ vi.mock("../config/config.js", async (importOriginal) => {
     loadConfig: () => configOverride,
   };
 });
+
+const { createSessionsSpawnTool } = await import("./tools/sessions-spawn-tool.js");
+
+function createDepthTestTool(agentSessionKey: string, workspaceDir?: string) {
+  return createSessionsSpawnTool({
+    agentSessionKey,
+    workspaceDir,
+    config: configOverride,
+  });
+}
 
 function writeStore(agentId: string, store: Record<string, unknown>) {
   const storePath = storeTemplatePath.replaceAll("{agentId}", agentId);
@@ -85,10 +94,7 @@ describe("sessions_spawn depth + child limits", () => {
   });
 
   it("rejects spawning when caller depth reaches maxSpawnDepth", async () => {
-    const tool = createSessionsSpawnTool({
-      agentSessionKey: "agent:main:subagent:parent",
-      workspaceDir: "/parent/workspace",
-    });
+    const tool = createDepthTestTool("agent:main:subagent:parent", "/parent/workspace");
     const result = await tool.execute("call-depth-reject", { task: "hello" });
 
     expect(result.details).toMatchObject({
@@ -100,7 +106,7 @@ describe("sessions_spawn depth + child limits", () => {
   it("allows depth-1 callers when maxSpawnDepth is 2", async () => {
     setSubagentLimits({ maxSpawnDepth: 2 });
 
-    const tool = createSessionsSpawnTool({ agentSessionKey: "agent:main:subagent:parent" });
+    const tool = createDepthTestTool("agent:main:subagent:parent");
     const result = await tool.execute("call-depth-allow", { task: "hello" });
 
     expect(result.details).toMatchObject({
@@ -140,7 +146,7 @@ describe("sessions_spawn depth + child limits", () => {
       },
     });
 
-    const tool = createSessionsSpawnTool({ agentSessionKey: callerKey });
+    const tool = createDepthTestTool(callerKey);
     const result = await tool.execute("call-depth-2-reject", { task: "hello" });
 
     expect(result.details).toMatchObject({
@@ -153,7 +159,7 @@ describe("sessions_spawn depth + child limits", () => {
     setSubagentLimits({ maxSpawnDepth: 2 });
     const { callerKey } = seedDepthTwoAncestryStore();
 
-    const tool = createSessionsSpawnTool({ agentSessionKey: callerKey });
+    const tool = createDepthTestTool(callerKey);
     const result = await tool.execute("call-depth-ancestry-reject", { task: "hello" });
 
     expect(result.details).toMatchObject({
@@ -166,7 +172,7 @@ describe("sessions_spawn depth + child limits", () => {
     setSubagentLimits({ maxSpawnDepth: 2 });
     seedDepthTwoAncestryStore({ sessionIds: true });
 
-    const tool = createSessionsSpawnTool({ agentSessionKey: "depth-2-session" });
+    const tool = createDepthTestTool("depth-2-session");
     const result = await tool.execute("call-depth-sessionid-reject", { task: "hello" });
 
     expect(result.details).toMatchObject({
@@ -199,7 +205,7 @@ describe("sessions_spawn depth + child limits", () => {
       startedAt: Date.now(),
     });
 
-    const tool = createSessionsSpawnTool({ agentSessionKey: "agent:main:subagent:parent" });
+    const tool = createDepthTestTool("agent:main:subagent:parent");
     const result = await tool.execute("call-max-children", { task: "hello" });
 
     expect(result.details).toMatchObject({
@@ -222,7 +228,7 @@ describe("sessions_spawn depth + child limits", () => {
       },
     };
 
-    const tool = createSessionsSpawnTool({ agentSessionKey: "agent:main:subagent:parent" });
+    const tool = createDepthTestTool("agent:main:subagent:parent");
     const result = await tool.execute("call-max-concurrent-independent", { task: "hello" });
 
     expect(result.details).toMatchObject({
@@ -247,7 +253,7 @@ describe("sessions_spawn depth + child limits", () => {
       return {};
     });
 
-    const tool = createSessionsSpawnTool({ agentSessionKey: "main" });
+    const tool = createDepthTestTool("main");
     const result = await tool.execute("call-model-reject", {
       task: "hello",
       model: "bad-model",

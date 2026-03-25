@@ -2,7 +2,7 @@ import { critiqueOmegaOutcome, type OmegaOutcomeCritique } from "./critic.js";
 import type {
   OmegaSessionTaskValidationRequest,
   OmegaSessionTaskValidationSummary,
-} from "./session-task.js";
+} from "./types.js";
 import { validateObservedWrite, validateStructuredOmegaResult } from "./validator.js";
 
 export type OmegaTurnEvaluation = {

@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import { formatThinkingLevels, normalizeThinkLevel } from "../auto-reply/thinking.js";
 import { DEFAULT_SUBAGENT_MAX_SPAWN_DEPTH } from "../config/agent-limits.js";
-import { loadConfig } from "../config/config.js";
+import type { OpenClawConfig } from "../config/config.js";
 import { callGateway } from "../gateway/call.js";
 import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
 import {
@@ -68,6 +68,7 @@ export type SpawnSubagentParams = {
 };
 
 export type SpawnSubagentContext = {
+  config?: OpenClawConfig;
   agentSessionKey?: string;
   agentChannel?: string;
   agentAccountId?: string;
@@ -195,6 +196,11 @@ function summarizeError(err: unknown): string {
   return "error";
 }
 
+async function loadCurrentConfig() {
+  const configModule = await import("../config/config.js");
+  return configModule.loadConfig();
+}
+
 async function ensureThreadBindingForSubagentSpawn(params: {
   hookRunner: ReturnType<typeof getGlobalHookRunner>;
   childSessionKey: string;
@@ -303,7 +309,7 @@ export async function spawnSubagentDirect(
     threadId: ctx.agentThreadId,
   });
   const hookRunner = getGlobalHookRunner();
-  const cfg = loadConfig();
+  const cfg = ctx.config ?? (await loadCurrentConfig());
 
   // When agent omits runTimeoutSeconds, use the config default.
   // Falls back to 0 (no timeout) if config key is also unset,
