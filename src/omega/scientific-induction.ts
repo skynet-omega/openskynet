@@ -26,6 +26,20 @@ export async function induceScientificHypothesis(params: {
     const errorKind = classKey.slice("failure:".length);
     const specificFailures = snapshot.relevantMemories.filter((f) => f.errorKind === errorKind);
 
+    // Si no hay recuerdos específicos, intentar buscar en el kernel directamente
+    if (specificFailures.length === 0 && snapshot.kernel) {
+      const kernelFailures = snapshot.kernel.goals
+        .filter((g) => g.lastErrorKind === errorKind)
+        .map((g) => ({
+          kind: "repeated_failure" as const,
+          task: g.task,
+          targets: g.targets,
+          errorKind: g.lastErrorKind,
+          timestamp: g.updatedAt,
+        }));
+      specificFailures.push(...kernelFailures);
+    }
+
     if (specificFailures.length > 0) {
       const lastFailure = specificFailures[0];
       const successfulAnalog = snapshot.relevantMemories.find(

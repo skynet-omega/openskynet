@@ -1,17 +1,17 @@
 /**
  * Hierarchical Memory para OpenSkyNet
- * 
+ *
  * 4 niveles inspirados en arquitectura cognitiva humana (Miller, 1956):
- * 
+ *
  * 0. Working Memory    — Buffer limitado (7 items, contexto actual, ~1 segundo)
  * 1. Episodic Memory   — Eventos con z_state tensor (~10 minutos)
  * 2. Semantic Memory   — Conceptos abstractos (patrones, reglas) (~permanente)
  * 3. Procedural Memory — Skills ejecutables (~permanente)
- * 
+ *
  * El ciclo:
  *   Working → Episodic (cada decisión) → Semantic (cada 5-10 episodios)
  *                                      → Procedural (cuando se ejecuta skill)
- * 
+ *
  * Permite que OpenSkyNet "consolide" lo que aprende dormido (cuando no actúa)
  */
 
@@ -28,10 +28,10 @@ export interface WorkingMemoryItem {
 export interface EpisodicMemoryItem {
   timestamp: number;
   cycleNumber: number;
-  z_state: number[];        // Latent state snapshot
+  z_state: number[]; // Latent state snapshot
   frustration: number;
   driveKind: string;
-  outcome: 'success' | 'failure' | 'neutral';
+  outcome: "success" | "failure" | "neutral";
   reward?: number;
   metadata?: Record<string, any>;
 }
@@ -39,18 +39,18 @@ export interface EpisodicMemoryItem {
 export interface SemanticConcept {
   id: string;
   name: string;
-  pattern: number[];        // Abstract pattern in latent space
-  frequency: number;        // Cuántas veces visto
+  pattern: number[]; // Abstract pattern in latent space
+  frequency: number; // Cuántas veces visto
   avgReward: number;
   lastSeen: number;
-  rule?: string;            // if-then rule en texto
+  rule?: string; // if-then rule en texto
 }
 
 export interface ProceduralSkill {
   name: string;
   description: string;
-  conditions: string[];     // when to use
-  steps: string[];          // how to execute
+  conditions: string[]; // when to use
+  steps: string[]; // how to execute
   successRate: number;
   lastUsed: number;
 }
@@ -75,6 +75,10 @@ export class HierarchicalMemory {
   private episodesSinceConsolidation = 0;
   private lastConsolidationTime = Date.now();
 
+  private getSemanticConceptId(driveKind: string): string {
+    return `semantic_${driveKind}`;
+  }
+
   constructor() {
     this.initializeDefaultSkills();
   }
@@ -82,7 +86,7 @@ export class HierarchicalMemory {
   /**
    * Nivel 0: Working Memory - add/retrieve
    */
-  addToWorking(item: Omit<WorkingMemoryItem, 'timestamp'>): void {
+  addToWorking(item: Omit<WorkingMemoryItem, "timestamp">): void {
     this.working.push({
       ...item,
       timestamp: Date.now(),
@@ -109,9 +113,9 @@ export class HierarchicalMemory {
     z_state: number[],
     frustration: number,
     driveKind: string,
-    outcome: 'success' | 'failure' | 'neutral',
+    outcome: "success" | "failure" | "neutral",
     cycleNumber: number,
-    metadata?: Record<string, any>
+    metadata?: Record<string, any>,
   ): void {
     const episode: EpisodicMemoryItem = {
       timestamp: Date.now(),
@@ -140,10 +144,7 @@ export class HierarchicalMemory {
   /**
    * Nivel 1: Query episodic memory (similar a retrieve_relevant)
    */
-  queryEpisodic(
-    z_query: number[],
-    k: number = 3
-  ): EpisodicMemoryItem[] {
+  queryEpisodic(z_query: number[], k: number = 3): EpisodicMemoryItem[] {
     if (this.episodic.length === 0) return [];
 
     // Similarity search: encontrar k episodios más similares
@@ -175,23 +176,31 @@ export class HierarchicalMemory {
 
     // Para cada grupo, crear/actualizar concepto semántico
     for (const [driveKind, episodes] of byDrive) {
-      const avgState = this._averageState(
-        episodes.map((e) => e.z_state)
-      );
-      const avgReward = episodes.reduce(
-        (s, e) => s + (e.metadata?.reward ?? 0),
-        0
-      ) / episodes.length;
-
-      const conceptId = `semantic_${driveKind}_${Date.now()}`;
+      const avgState = this._averageState(episodes.map((e) => e.z_state));
+      const avgReward =
+        episodes.reduce((s, e) => s + (e.metadata?.reward ?? 0), 0) / episodes.length;
+      const dominantOutcome = this._dominantOutcome(episodes);
+      const conceptId = this.getSemanticConceptId(driveKind);
+      const existing = this.semantic.get(conceptId);
+      const totalFrequency = (existing?.frequency ?? 0) + episodes.length;
+      const weightedReward =
+        ((existing?.avgReward ?? 0) * (existing?.frequency ?? 0) + avgReward * episodes.length) /
+        Math.max(1, totalFrequency);
       const concept: SemanticConcept = {
         id: conceptId,
         name: `Pattern: ${driveKind}`,
-        pattern: avgState,
-        frequency: episodes.length,
-        avgReward,
+        pattern:
+          existing && existing.pattern.length === avgState.length
+            ? existing.pattern.map(
+                (value, index) =>
+                  (value * (existing.frequency ?? 0) + avgState[index] * episodes.length) /
+                  Math.max(1, totalFrequency),
+              )
+            : avgState,
+        frequency: totalFrequency,
+        avgReward: weightedReward,
         lastSeen: Date.now(),
-        rule: `When drive is ${driveKind}, avg reward=${avgReward.toFixed(2)}`,
+        rule: `When drive is ${driveKind}, dominant outcome=${dominantOutcome}, avg reward=${weightedReward.toFixed(2)}`,
       };
 
       this.semantic.set(conceptId, concept);
@@ -208,11 +217,14 @@ export class HierarchicalMemory {
   }
 
   querySemantic(pattern: string): SemanticConcept[] {
-    return Array.from(this.semantic.values()).filter(
-      (c) =>
-        c.name.toLowerCase().includes(pattern.toLowerCase()) ||
-        c.rule?.toLowerCase().includes(pattern.toLowerCase())
-    );
+    const normalizedPattern = pattern.toLowerCase();
+    const tokens = normalizedPattern.split(/[^a-z0-9]+/i).filter((token) => token.length >= 4);
+    return Array.from(this.semantic.values()).filter((c) => {
+      const haystack = `${c.id} ${c.name} ${c.rule ?? ""}`.toLowerCase();
+      return (
+        haystack.includes(normalizedPattern) || tokens.some((token) => haystack.includes(token))
+      );
+    });
   }
 
   /**
@@ -228,10 +240,16 @@ export class HierarchicalMemory {
 
   getSuggestedSkills(task: string): ProceduralSkill[] {
     const taskLower = task.toLowerCase();
+    const taskTokens = taskLower.split(/[^a-z0-9]+/i).filter((token) => token.length >= 4);
     return Array.from(this.procedural.values()).filter(
       (s) =>
+        s.name
+          .toLowerCase()
+          .split(/[^a-z0-9]+/i)
+          .some((token) => taskTokens.includes(token)) ||
         s.conditions.some((c) => taskLower.includes(c.toLowerCase())) ||
-        s.description.toLowerCase().includes(taskLower)
+        s.description.toLowerCase().includes(taskLower) ||
+        taskTokens.some((token) => s.description.toLowerCase().includes(token)),
     );
   }
 
@@ -241,7 +259,7 @@ export class HierarchicalMemory {
    */
   retrieveRelevantContext(
     z_query: number[],
-    taskText: string
+    taskText: string,
   ): {
     working: WorkingMemoryItem[];
     episodic: EpisodicMemoryItem[];
@@ -279,37 +297,45 @@ export class HierarchicalMemory {
     return dotProduct / (normA * normB);
   }
 
+  private _dominantOutcome(episodes: EpisodicMemoryItem[]): EpisodicMemoryItem["outcome"] {
+    const counts = episodes.reduce<Record<EpisodicMemoryItem["outcome"], number>>(
+      (acc, episode) => {
+        acc[episode.outcome] += 1;
+        return acc;
+      },
+      { success: 0, failure: 0, neutral: 0 },
+    );
+    return (Object.entries(counts).sort((left, right) => right[1] - left[1])[0]?.[0] ??
+      "neutral") as EpisodicMemoryItem["outcome"];
+  }
+
   /**
    * Inicializar skills por defecto
    */
   private initializeDefaultSkills(): void {
     this.addSkill({
-      name: 'frustrated_exploration',
-      description: 'When frustration is high, explore alternatives',
-      conditions: ['frustration > 0.7', 'success_rate < 0.3'],
-      steps: [
-        'Increase entropy',
-        'Sample from exploration polytope',
-        'Log alternative outcomes',
-      ],
+      name: "frustrated_exploration",
+      description: "When frustration is high, explore alternatives",
+      conditions: ["frustration > 0.7", "success_rate < 0.3"],
+      steps: ["Increase entropy", "Sample from exploration polytope", "Log alternative outcomes"],
       successRate: 0.65,
       lastUsed: 0,
     });
 
     this.addSkill({
-      name: 'stability_maintenance',
-      description: 'When things are working, hold the line',
-      conditions: ['frustration < 0.4', 'success_rate > 0.7'],
-      steps: ['Reduce entropy', 'Commit to known good pattern', 'Refine slightly'],
+      name: "stability_maintenance",
+      description: "When things are working, hold the line",
+      conditions: ["frustration < 0.4", "success_rate > 0.7"],
+      steps: ["Reduce entropy", "Commit to known good pattern", "Refine slightly"],
       successRate: 0.85,
       lastUsed: 0,
     });
 
     this.addSkill({
-      name: 'error_recovery',
-      description: 'When error diverges, reset and retry',
-      conditions: ['error > 0.9', 'consecutive_failures > 2'],
-      steps: ['Clear working memory', 'Re-initialize drive', 'Use episodic memory to guide'],
+      name: "error_recovery",
+      description: "When error diverges, reset and retry",
+      conditions: ["error > 0.9", "consecutive_failures > 2"],
+      steps: ["Clear working memory", "Re-initialize drive", "Use episodic memory to guide"],
       successRate: 0.72,
       lastUsed: 0,
     });
@@ -324,7 +350,9 @@ export class HierarchicalMemory {
       episodic: this.episodic.length,
       semantic: this.semantic.size,
       procedural: this.procedural.size,
-      avgEpisodicReward: this.episodic.reduce((s, e) => s + (e.metadata?.reward ?? 0), 0) / Math.max(1, this.episodic.length),
+      avgEpisodicReward:
+        this.episodic.reduce((s, e) => s + (e.metadata?.reward ?? 0), 0) /
+        Math.max(1, this.episodic.length),
       lastConsolidation: this.lastConsolidationTime,
       timeSinceConsolidation: Date.now() - this.lastConsolidationTime,
     };
@@ -345,6 +373,6 @@ export function getHierarchicalMemory(): HierarchicalMemory {
 
 export function initializeHierarchicalMemory(): HierarchicalMemory {
   hmInstance = new HierarchicalMemory();
-  console.log('[HM] Hierarchical Memory initialized (4 levels)');
+  console.log("[HM] Hierarchical Memory initialized (4 levels)");
   return hmInstance;
 }

@@ -1,19 +1,20 @@
 # Security Policy
 
-If you believe you've found a security issue in OpenClaw, please report it privately.
+If you believe you've found a security issue in OpenSkyNet or a shared OpenClaw-derived component, please report it privately.
 
 ## Reporting
 
 Report vulnerabilities directly to the repository where the issue lives:
 
-- **Core CLI and gateway** — [openclaw/openclaw](https://github.com/openclaw/openclaw)
+- **OpenSkyNet repository** — [skynet-omega/openskynet](https://github.com/skynet-omega/openskynet)
+- **Shared core CLI and gateway surfaces inherited from OpenClaw** — [openclaw/openclaw](https://github.com/openclaw/openclaw)
 - **macOS desktop app** — [openclaw/openclaw](https://github.com/openclaw/openclaw) (apps/macos)
 - **iOS app** — [openclaw/openclaw](https://github.com/openclaw/openclaw) (apps/ios)
 - **Android app** — [openclaw/openclaw](https://github.com/openclaw/openclaw) (apps/android)
 - **ClawHub** — [openclaw/clawhub](https://github.com/openclaw/clawhub)
 - **Trust and threat model** — [openclaw/trust](https://github.com/openclaw/trust)
 
-For issues that don't fit a specific repo, or if you're unsure, email **[security@openclaw.ai](mailto:security@openclaw.ai)** and we'll route it.
+For issues that clearly belong to this repository, use the OpenSkyNet repo. For shared-platform issues, or if you're unsure, email **[security@openclaw.ai](mailto:security@openclaw.ai)** and we'll route it.
 
 For full reporting instructions see our [Trust page](https://trust.openclaw.ai).
 

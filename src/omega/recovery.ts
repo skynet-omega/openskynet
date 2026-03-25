@@ -4,6 +4,7 @@ import { type OmegaInterruptedGoalRecovery } from "./types.js";
 export const OMEGA_AUTONOMOUS_RECOVERY_MAX_FAILURE_STREAK = 1;
 
 const WRITE_FAILURE_ERROR_KINDS = new Set(["target_not_touched", "missing_target_writes"]);
+const LOCALITY_FAILURE_ERROR_KINDS = new Set(["unexpected_collateral_writes"]);
 
 function normalizeText(value: string): string {
   return value.toLowerCase().replace(/\s+/g, " ").trim();
@@ -41,6 +42,7 @@ function buildInterruptedGoalResumeTask(params: {
   requiredKeys: string[];
   suggestedRoute: OmegaInterruptedGoalRecovery["suggestedRoute"];
   lastErrorKind?: string;
+  collateralPaths?: string[];
 }): string {
   const lines = [
     params.goalTask,
@@ -55,6 +57,11 @@ function buildInterruptedGoalResumeTask(params: {
   }
   if (params.remainingTargets.length > 0) {
     lines.push(`Remaining target paths: ${params.remainingTargets.join(", ")}`);
+  }
+  if (params.collateralPaths && params.collateralPaths.length > 0) {
+    lines.push(
+      `Collateral paths to preserve or repair locally: ${params.collateralPaths.join(", ")}`,
+    );
   }
   if (params.requiredKeys.length > 0) {
     lines.push(`Required JSON keys: ${params.requiredKeys.join(", ")}`);
@@ -88,6 +95,13 @@ export function deriveOmegaInterruptedGoalRecovery(params: {
   const remainingTargets =
     unresolvedTargets.length > 0 ? unresolvedTargets : [...activeGoal.targets];
   const lastErrorKind = activeGoal.lastErrorKind ?? kernel.world.lastErrorKind;
+  const observedChangedFiles =
+    activeGoal.observedChangedFiles.length > 0
+      ? activeGoal.observedChangedFiles
+      : kernel.world.lastObservedChangedFiles;
+  const collateralPaths = LOCALITY_FAILURE_ERROR_KINDS.has(lastErrorKind ?? "")
+    ? observedChangedFiles.filter((candidate) => !remainingTargets.includes(candidate))
+    : [];
   const expectsJson =
     activeGoal.requiredKeys.length > 0 || lastErrorKind === "invalid_structured_result";
   const requiredKeys = [...activeGoal.requiredKeys];
@@ -98,11 +112,13 @@ export function deriveOmegaInterruptedGoalRecovery(params: {
     remainingTargets.length > 0 || WRITE_FAILURE_ERROR_KINDS.has(lastErrorKind ?? "")
       ? "sessions_spawn"
       : "omega_delegate";
-  const reason = WRITE_FAILURE_ERROR_KINDS.has(lastErrorKind ?? "")
-    ? "verified_write_failure_after_restart"
-    : lastErrorKind === "invalid_structured_result"
-      ? "verified_structured_failure_after_restart"
-      : "pending_active_goal_after_restart";
+  const reason = LOCALITY_FAILURE_ERROR_KINDS.has(lastErrorKind ?? "")
+    ? "verified_locality_failure_after_restart"
+    : WRITE_FAILURE_ERROR_KINDS.has(lastErrorKind ?? "")
+      ? "verified_write_failure_after_restart"
+      : lastErrorKind === "invalid_structured_result"
+        ? "verified_structured_failure_after_restart"
+        : "pending_active_goal_after_restart";
 
   return {
     goalId: activeGoal.id,
@@ -120,7 +136,9 @@ export function deriveOmegaInterruptedGoalRecovery(params: {
       requiredKeys,
       suggestedRoute,
       lastErrorKind,
+      collateralPaths,
     }),
+    ...(collateralPaths.length > 0 ? { collateralPaths } : {}),
     expectedUtility: 0.5,
   };
 }

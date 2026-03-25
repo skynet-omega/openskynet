@@ -289,10 +289,13 @@ export function shouldDispatchOmegaHeartbeatPrompt(params: {
   wakeAction: OmegaWakeAction;
   shouldRunAutonomy: boolean;
 }): boolean {
+  if (params.dispatchPlan.shouldDispatchLlmTurn) {
+    return true;
+  }
   if (params.wakeAction.kind === "heartbeat_ok" && !params.shouldRunAutonomy) {
     return false;
   }
-  return params.dispatchPlan.shouldDispatchLlmTurn;
+  return false;
 }
 
 export function deriveOmegaHeartbeatCorrectiveControl(params: {

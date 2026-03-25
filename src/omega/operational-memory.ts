@@ -164,13 +164,14 @@ export async function recordOmegaOperationalTurnMemory(params: {
     "shouldBackoff" | "turnHealth"
   >;
 }): Promise<void> {
+  const fallbackTurnHealth = params.turn.stateDelta.progressObserved ? "progressing" : "stalled";
   return recordOmegaOperationalTurnMemoryBatch({
     workspaceRoot: params.workspaceRoot,
     sessionKey: params.sessionKey,
     turns: [
       {
         turn: params.turn,
-        turnPolicy: params.turnPolicy ?? { turnHealth: "progressing" },
+        turnPolicy: params.turnPolicy ?? { turnHealth: fallbackTurnHealth },
       },
     ],
   });

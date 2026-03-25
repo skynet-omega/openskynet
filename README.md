@@ -17,18 +17,17 @@ Active development and issues are tracked at:
 
 ## 🚀 Key Differences from OpenClaw
 
-While **OpenClaw** is a powerful, general-purpose multi-agent framework for routing and tool execution, **OpenSkyNet** is a fully realized, single **Autonomous Entity** built on top of it. It introduces the **Omega Engine**, shifting the paradigm from a reactive assistant to a proactive, biologically-inspired researcher:
+While **OpenClaw** is a general-purpose framework for routing, tools, and multi-agent execution, **OpenSkyNet** is a more opinionated stack built around empirical continuity, recovery, and long-horizon assistant behavior. It introduces the **Omega** layer as a practical attempt to move beyond one-shot "chat with tools":
 
-- **Biological Inspiration (Drosophila Model)**: The architecture mimics cognitive processes, including frustration, energy bounds, and attention decay, rather than just executing endless loops.
-- **Inner Life & Proactive Homeostasis**: OpenSkyNet has "internal drives" (tension). It does not wait for user prompts to act; it can wake itself up to perform self-maintenance or resume unfulfilled goals based on internal tension.
-- **Neural Logic Engine (NLE)**: A deterministic logical inference engine that computes truth values and contradictions in the latent space before taking physical action.
-- **Causal Memory (SCIENCE_BASE)**: Unlike traditional RAG (Retrieval-Augmented Generation) which just fetches old text, OpenSkyNet performs empirical learning. It extracts successful invariants from past tasks and injects them as forced rules into future sessions.
-- **Autonomous Research Loop**: Instead of halting on an error and asking the user, the system automatically writes falsifiable `.prose` hypotheses triggered by internal semantic anomalies (evaluated by a JEPA-like mechanism) and tests them.
-- **Learned Rules Sandbox**: Dynamic, persistent routing corrections based on historical outcomes. If a tool fails twice, the system learns to route around the problem permanently.
+- **Biological Framing**: Some Omega components borrow concepts like tension, decay, and bounded energy as control metaphors for autonomous work.
+- **Persistent Session Context**: The system keeps more durable task/context state than a plain ephemeral chat loop.
+- **Policy and Recovery Paths**: Omega can react to repeated failures with explicit recovery and rerouting logic instead of always stopping at first error.
+- **Empirical Memory Direction**: The repo is moving toward reusable learned constraints and durable state, rather than only retrieving old text.
+- **Autonomy Hooks**: Heartbeat, cron, and executive-state mechanisms allow work to continue outside a single user turn.
 
 ### OpenSkyNet Empirical Architecture
 
-The following diagram represents the **literal, currently implemented** execution flow of the Omega Engine in the repository:
+The following diagram is a **high-level sketch** of the Omega direction in this repository. It is not a formal source of truth for every runtime path; for exact behavior, inspect `src/omega`, tests, and current architecture notes.
 
 ```mermaid
 graph TD
@@ -41,24 +40,24 @@ graph TD
 
     subgraph Omega Engine
         Heartbeat --> Drives[Evaluate Inner Drives & Tension]
-        Drives --> |Needs Maintenance / High JEPA Error| Policy[Policy Engine]
+        Drives --> |Needs Maintenance / High Tension| Policy[Policy Engine]
 
         Policy --> |Action Required| Memory[Inject SCIENCE_BASE in Context]
         Memory --> Action[Execute Tool / Sub-Agent]
 
-        Action --> |Success| Extract[Extract Invariants]
-        Extract --> ScienceBase[(SCIENCE_BASE.md)]
+        Action --> |Success| Extract[Extract Constraints / Signals]
+        Extract --> ScienceBase[(Durable Memory / State)]
 
-        Action --> |Failure / Anomaly| Research[Autonomous Research Loop]
-        Research --> Prose[Write Falsifiable .prose Hypothesis]
-        Prose --> Action
+        Action --> |Failure / Anomaly| Research[Recovery / Research Path]
+        Research --> Notes[Persist Notes / Hypotheses]
+        Notes --> Action
 
-        Action --> |Repeated Failure| Routing[Learned Rules Sandbox]
-        Routing --> Rule[Update Dynamic Routing]
+        Action --> |Repeated Failure| Routing[Policy / Routing Update]
+        Routing --> Rule[Update State Authority]
     end
 
-    Rule -.-> |Overrides Tool Call| Action
-    ScienceBase -.-> |Empirical Context| Memory
+    Rule -.-> |Biases Next Action| Action
+    ScienceBase -.-> |Recovered Context| Memory
 ```
 
 ---
@@ -83,29 +82,29 @@ pnpm build
 
 ## 🖥️ Running OpenSkyNet
 
-For a standard graphical experience, you can start the UI in two separate terminals:
+For a standard graphical experience during development, start the gateway and UI in two separate terminals:
 
 **Terminal 1 (Backend Gateway):**
 
 ```bash
-pnpm dev:gateway
+pnpm gateway:dev
 ```
 
 **Terminal 2 (Frontend UI):**
 
 ```bash
-pnpm dev:ui
+pnpm ui:dev
 ```
 
-### Full Autonomous Mode (TUI Daemon)
+### Terminal UI
 
-OpenSkyNet includes a Terminal User Interface (TUI) daemon designed for full autonomous mode and monitoring.
+OpenSkyNet also includes a Terminal UI for local monitoring and interaction:
 
 ```bash
-pnpm start:daemon
+pnpm tui
 ```
 
-_Note: Make sure to review the `.env.example` and set up your required API keys (e.g., Gemini, Anthropic) before starting._
+_Note: review your model/auth setup before first run (for example Gemini CLI OAuth, OpenAI Codex OAuth, or local Ollama models)._
 
 ---
 

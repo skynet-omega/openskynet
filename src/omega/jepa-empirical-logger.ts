@@ -2,15 +2,16 @@
  * jepa-empirical-logger.ts
  * ========================
  * Recolección automática de datos para validar correlación JEPA vs tensión real.
- * 
+ *
  * Este módulo corre en background, sin requerir interacción externa.
  * Guarda métricas JEPA en cada heartbeat y eventos de tensión cuando ocurren.
- * 
+ *
  * Después de 24-48h de datos, se puede analizar correlación offline.
  */
 
 import fs from "node:fs/promises";
 import path from "node:path";
+import { shouldSurfaceOmegaJepaWarnings } from "./jepa-control.js";
 import { runJepaTensionBridge } from "./runtime.js";
 import type { OmegaSelfTimeKernelState } from "./self-time-kernel.js";
 
@@ -40,7 +41,7 @@ export type JepaLogEntry =
     };
 
 function resolveJepaLogPath(workspaceRoot: string): string {
-  return path.join(workspaceRoot, ".openclaw", JEPA_LOG_FILENAME);
+  return path.join(workspaceRoot, ".openskynet", JEPA_LOG_FILENAME);
 }
 
 /**
@@ -80,11 +81,13 @@ export async function logJepaSample(params: {
     await appendJepaLogEntry(params.workspaceRoot, entry);
   } catch (err) {
     // No pudimos escribir el log disco lleno, permisos, etc
-    console.warn(`[OMEGA] Fallo interno JEPA Bridge o I/O disk: ${err instanceof Error ? err.message : String(err)}`);
+    console.warn(
+      `[OMEGA] Fallo interno JEPA Bridge o I/O disk: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 
   // Avisar en consola si el subproceso Python del bridge colapsó para no fallar silenciosamente
-  if (bridgeError || entry.error) {
+  if ((bridgeError || entry.error) && shouldSurfaceOmegaJepaWarnings()) {
     console.warn(`[OMEGA] JEPA Bridge subproceso reportó error -> ${bridgeError || entry.error}`);
   }
 }
@@ -118,10 +121,7 @@ export async function logTensionEvent(params: {
   }
 }
 
-async function appendJepaLogEntry(
-  workspaceRoot: string,
-  entry: JepaLogEntry,
-): Promise<void> {
+async function appendJepaLogEntry(workspaceRoot: string, entry: JepaLogEntry): Promise<void> {
   const logPath = resolveJepaLogPath(workspaceRoot);
 
   // Asegurar que existe el directorio
@@ -161,9 +161,7 @@ async function rotateJepaLogIfNeeded(logPath: string): Promise<void> {
  * Analiza correlación entre frustración JEPA y eventos de tensión.
  * Ejecutar esto después de 24-48h de recolección.
  */
-export async function analyzeJepaCorrelation(
-  workspaceRoot: string,
-): Promise<{
+export async function analyzeJepaCorrelation(workspaceRoot: string): Promise<{
   totalSamples: number;
   totalEvents: number;
   avgFrustrationBeforeFailure: number | null;
@@ -233,7 +231,8 @@ export async function analyzeJepaCorrelation(
       }
     }
 
-    const avgBeforeFailure = countBeforeFailure > 0 ? totalFrustrationBeforeFailure / countBeforeFailure : null;
+    const avgBeforeFailure =
+      countBeforeFailure > 0 ? totalFrustrationBeforeFailure / countBeforeFailure : null;
     const avgNormal = countNormal > 0 ? totalFrustrationNormal / countNormal : null;
 
     // Score simple: diferencia normalizada
@@ -269,7 +268,8 @@ export async function analyzeJepaCorrelation(
       avgFrustrationBeforeFailure: null,
       avgFrustrationNormal: null,
       correlationScore: null,
-      recommendation: "No se pudo leer log. Verificar que exista .openclaw/jepa-empirical-log.jsonl",
+      recommendation:
+        "No se pudo leer log. Verificar que exista .openskynet/jepa-empirical-log.jsonl",
     };
   }
 }

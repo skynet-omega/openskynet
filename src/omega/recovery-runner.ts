@@ -1,5 +1,6 @@
 import { spawnSubagentDirect } from "../agents/subagent-spawn.js";
 import { recordOmegaRouteMetrics } from "./empirical-metrics.js";
+import { resolveOmegaRecoveryRouteDecision } from "./execution-controller.js";
 import { buildOmegaInteractionPrompt } from "./interaction-model.js";
 import {
   deriveOmegaInterruptedGoalRecovery,
@@ -19,6 +20,7 @@ type OmegaRecoveryValidation = {
   expectsJson: boolean;
   expectedKeys: string[];
   expectedPaths: string[];
+  watchedPaths?: string[];
 };
 
 function buildRecoveryValidation(params: {
@@ -28,7 +30,41 @@ function buildRecoveryValidation(params: {
     expectsJson: params.recovery.expectsJson,
     expectedKeys: params.recovery.requiredKeys,
     expectedPaths: params.recovery.remainingTargets,
+    watchedPaths:
+      params.recovery.collateralPaths && params.recovery.collateralPaths.length > 0
+        ? [...params.recovery.remainingTargets, ...params.recovery.collateralPaths]
+        : undefined,
   };
+}
+
+function buildRecoveryRouteChoiceLine(
+  reason: Awaited<ReturnType<typeof resolveOmegaRecoveryRouteDecision>>["reason"],
+): string {
+  switch (reason) {
+    case "single_target_local_retry":
+      return "Route choice: local retry because the repair is narrow, single-target, and low-risk.";
+    case "empirical_delegate_bias":
+      return "Route choice: local recovery is empirically outperforming isolation for this failure shape.";
+    case "empirical_isolation_bias":
+      return "Route choice: isolated recovery is empirically outperforming local retry for this failure shape.";
+    case "stalled_recently":
+      return "Route choice: escalate to isolated recovery because recent stalled turns show the local loop is not converging.";
+    case "multi_target_write_repair":
+      return "Route choice: isolate the repair because multiple targets are still unresolved.";
+    case "structured_contract_repair":
+      return "Route choice: isolate the repair because the structured contract already failed and needs a clean retry.";
+    case "suggested_delegate":
+      return "Route choice: local recovery matches the current verified recovery shape.";
+    case "suggested_isolation":
+      return "Route choice: isolated recovery matches the current verified recovery shape.";
+  }
+}
+
+function buildRecoveryTaskMessage(params: {
+  recovery: NonNullable<ReturnType<typeof deriveOmegaInterruptedGoalRecovery>>;
+  routeReason: Awaited<ReturnType<typeof resolveOmegaRecoveryRouteDecision>>["reason"];
+}): string {
+  return `${params.recovery.resumeTask}\n${buildRecoveryRouteChoiceLine(params.routeReason)}`;
 }
 
 async function mirrorRecoveryOutcomeToParentSession(params: {
@@ -93,7 +129,15 @@ export async function resumeInterruptedOmegaGoal(params: {
   if (!recovery) {
     return { kind: "none" };
   }
-  if (recovery.failureStreak > OMEGA_AUTONOMOUS_RECOVERY_MAX_FAILURE_STREAK) {
+  const routeDecision = await resolveOmegaRecoveryRouteDecision({
+    workspaceRoot: params.workspaceRoot,
+    sessionKey: params.sessionKey,
+    recovery,
+  });
+  if (
+    recovery.failureStreak > OMEGA_AUTONOMOUS_RECOVERY_MAX_FAILURE_STREAK &&
+    routeDecision.route !== "sessions_spawn"
+  ) {
     return {
       kind: "skipped",
       reason: "failure_streak_too_high",
@@ -102,14 +146,21 @@ export async function resumeInterruptedOmegaGoal(params: {
     };
   }
 
-  const timeoutMs = Math.max(1_000, params.timeoutMs ?? DEFAULT_OMEGA_AUTONOMOUS_RECOVERY_TIMEOUT_MS);
+  const timeoutMs = Math.max(
+    1_000,
+    params.timeoutMs ?? DEFAULT_OMEGA_AUTONOMOUS_RECOVERY_TIMEOUT_MS,
+  );
   const timeoutSeconds = Math.max(1, Math.floor(timeoutMs / 1000));
   const validation = buildRecoveryValidation({ recovery });
+  const recoveryTaskMessage = buildRecoveryTaskMessage({
+    recovery,
+    routeReason: routeDecision.reason,
+  });
 
-  if (recovery.suggestedRoute === "omega_delegate") {
+  if (routeDecision.route === "omega_delegate") {
     const execution = await runValidatedOmegaSessionTask({
       sendParams: {
-        message: recovery.resumeTask,
+        message: recoveryTaskMessage,
         sessionKey: params.sessionKey,
       },
       sessionKey: params.sessionKey,
@@ -143,7 +194,7 @@ export async function resumeInterruptedOmegaGoal(params: {
   });
   const result = await spawnSubagentDirect(
     {
-      task: recovery.resumeTask,
+      task: recoveryTaskMessage,
       runTimeoutSeconds: timeoutSeconds,
       mode: "run",
       expectsCompletionMessage: false,

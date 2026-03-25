@@ -55,7 +55,7 @@ export function resolveOmegaExecutiveStateFile(params: {
   );
 }
 
-export async function loadOmegaExecutiveState(params: {
+async function readOmegaExecutiveStateFile(params: {
   workspaceRoot: string;
   sessionKey: string;
 }): Promise<OmegaExecutiveState | undefined> {
@@ -65,6 +65,17 @@ export async function loadOmegaExecutiveState(params: {
   } catch {
     return undefined;
   }
+}
+
+export async function loadOmegaExecutiveState(params: {
+  workspaceRoot: string;
+  sessionKey: string;
+}): Promise<OmegaExecutiveState | undefined> {
+  const existing = await readOmegaExecutiveStateFile(params);
+  if (existing) {
+    return existing;
+  }
+  return await syncOmegaExecutiveObserverState(params);
 }
 
 function buildExecutiveSyncFingerprint(params: {
@@ -103,7 +114,7 @@ export async function syncOmegaExecutiveObserverState(
   },
   skipHeavySync?: boolean,
 ): Promise<OmegaExecutiveState> {
-  const existing = await loadOmegaExecutiveState(params);
+  const existing = await readOmegaExecutiveStateFile(params);
   if (skipHeavySync && existing) {
     return existing;
   }
@@ -118,7 +129,7 @@ export async function syncOmegaExecutiveObserverState(
 
   let nextState: OmegaExecutiveState | undefined;
   await withOmegaSessionLock(params, async () => {
-    const existing = await loadOmegaExecutiveState(params);
+    const existing = await readOmegaExecutiveStateFile(params);
     if (existing?.syncFingerprint === syncFingerprint) {
       nextState = existing;
       return;

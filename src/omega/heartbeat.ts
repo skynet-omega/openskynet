@@ -1,26 +1,29 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { getActiveLearningStrategy } from "./active-learning-strategy.js";
 import { runAutonomousCycle } from "./autonomous-executor.js";
-import { getContinuousThinkingEngine } from "./continuous-thinking-engine.js";
-import { getEntropyMinimizationLoop } from "./entropy-minimization-loop.js";
+import { loadOmegaDecisionContext } from "./decision-context.js";
+import { recordOmegaHeartbeatCycleMetrics } from "./empirical-metrics.js";
+import { getOmegaHeartbeatEngineRegistry } from "./engines/registry.js";
+import {
+  mergeOmegaDriveSignalWithEngineScore,
+  scoreOmegaEngineSignals,
+} from "./engines/score-engine-signal.js";
+import {
+  deriveOmegaExecutiveActionStopReason,
+  deriveOmegaHeartbeatCorrectiveControl,
+} from "./execution-controller.js";
 import { decideOmegaWakeAction } from "./frontal/wake-policy.js";
-import { evaluateInnerDrives, buildAutonomousDirectivePrompt } from "./inner-life/index.js";
+import { buildAutonomousDirectivePrompt } from "./inner-life/index.js";
 import {
   enhanceDriveWithJepaTension,
   parseJepaTensionFromKernelTimeline,
 } from "./jepa-drive-enhancement.js";
-import { logJepaSample, analyzeJepaCorrelation } from "./jepa-empirical-logger.js";
 import {
   loadOmegaOperationalMemoryTail,
   summarizeOmegaOperationalMemory,
 } from "./operational-memory.js";
-import {
-  deriveOmegaAgendaExecutionContract,
-} from "./problem-agenda.js";
-import {
-  resumeInterruptedOmegaGoal,
-} from "./recovery-runner.js";
+import { deriveOmegaAgendaExecutionContract } from "./problem-agenda.js";
+import { resumeInterruptedOmegaGoal } from "./recovery-runner.js";
 import { queryScienceBase } from "./science-base-rag.js";
 import {
   focusActiveOmegaGoalTargets,
@@ -31,6 +34,16 @@ import {
   pruneSupersededOmegaGoals,
 } from "./session-context.js";
 import { deriveFocusedActiveTargets } from "./session-context.js";
+
+type OmegaHeartbeatPromptWakeAction =
+  | ReturnType<typeof decideOmegaWakeAction>
+  | {
+      kind: "maintain";
+      reason: string;
+      selectedWorkItemId?: string;
+      selectedWorkItemDetail?: string;
+      selectedAction?: string;
+    };
 
 /**
  * Recolecta candidatos de memoria para exploración por la drive de curiosidad.
@@ -113,68 +126,111 @@ export type OmegaHeartbeatExecutiveResult =
       focusedTargets: string[];
     };
 
+async function loadOmegaHeartbeatDecisionContext(params: {
+  workspaceRoot: string;
+  sessionKey: string;
+  kernel?: Awaited<ReturnType<typeof loadOmegaSelfTimeKernel>>;
+}) {
+  const memoryCandidates = await collectMemoryCandidates(params.workspaceRoot);
+  const decisionContext = await loadOmegaDecisionContext({
+    workspaceRoot: params.workspaceRoot,
+    sessionKey: params.sessionKey,
+    memoryCandidates,
+    includeWorldSnapshot: "urgent_maintenance",
+  });
+  const kernel = params.kernel ?? decisionContext.kernel;
+  const wakeAction = decideOmegaWakeAction({ kernel });
+  const shouldDispatchPrompt = decisionContext.shouldDispatchHeartbeatPrompt;
+  const effectiveWakeAction: OmegaHeartbeatPromptWakeAction =
+    shouldDispatchPrompt &&
+    wakeAction.kind === "heartbeat_ok" &&
+    decisionContext.controllerState?.selectedWorkItem?.queueKind === "maintenance"
+      ? {
+          kind: "maintain",
+          reason: "executive_dispatch_selected_maintenance",
+          selectedWorkItemId: decisionContext.controllerState.selectedWorkItem.id,
+          selectedWorkItemDetail: decisionContext.controllerState.selectedWorkItem.detail,
+          selectedAction: decisionContext.controllerState.dispatchPlan.selectedAction,
+        }
+      : wakeAction;
+
+  return {
+    kernel,
+    wakeAction,
+    effectiveWakeAction,
+    wsp: decisionContext.wsp,
+    stateAuthority: decisionContext.stateAuthority,
+    controllerState: decisionContext.controllerState,
+    operationalSummary: decisionContext.operationalSummary,
+    driveSignal: decisionContext.policy.driveSignal,
+    driveSignalSource: decisionContext.policy.driveSignalSource,
+    shouldRunAutonomy: decisionContext.policy.shouldRunAutonomy,
+    shouldDispatchPrompt,
+  };
+}
+
+function deriveMaintenanceContractClassKey(workItemId?: string): string | undefined {
+  if (!workItemId) {
+    return undefined;
+  }
+  if (workItemId.startsWith("maintenance:agenda:")) {
+    return workItemId.slice("maintenance:agenda:".length);
+  }
+  if (workItemId.startsWith("maintenance:failure:")) {
+    return `failure:${workItemId.slice("maintenance:failure:".length)}`;
+  }
+  if (workItemId.startsWith("maintenance:stalled_progress:")) {
+    return "initiative:stalled_progress";
+  }
+  return undefined;
+}
+
 export async function buildOmegaHeartbeatPrompt(params: {
   workspaceRoot: string;
   sessionKey: string;
 }): Promise<string | undefined> {
-  const kernel = await loadOmegaSelfTimeKernel(params);
-  const wakeAction = decideOmegaWakeAction({ kernel });
+  const {
+    kernel,
+    wakeAction,
+    effectiveWakeAction,
+    controllerState,
+    driveSignal: sharedDriveSignal,
+    shouldDispatchPrompt,
+  } = await loadOmegaHeartbeatDecisionContext(params);
+  const engines = getOmegaHeartbeatEngineRegistry();
 
   // Recolectar datos JEPA para análisis empírico (no bloqueante)
   if (kernel) {
-    void logJepaSample({
+    void engines.jepaEmpirical.logSample({
       workspaceRoot: params.workspaceRoot,
       sessionKey: params.sessionKey,
       kernel,
     });
   }
 
-  if (wakeAction.kind === "heartbeat_ok") {
+  if (wakeAction.kind === "heartbeat_ok" && !shouldDispatchPrompt) {
     // Sin tensión de tarea: ejecutar ciclo completo de autonomía
     if (kernel) {
-      // PHASE 1: CONTINUOUS THINKING - Generar pensamientos genuinos del sistema
-      const thinkingEngine = getContinuousThinkingEngine();
-      const newThoughts = thinkingEngine.think(kernel);
-
-      // PHASE 2: ENTROPY MINIMIZATION - Detectar contradicciones automáticamente
-      const entropyLoop = getEntropyMinimizationLoop();
-      entropyLoop.detectContradictions(kernel);
-
-      // PHASE 3: ACTIVE LEARNING - Generar hipótesis cuando la entropía es alta
-      const learningStrategy = getActiveLearningStrategy();
-      for (const thought of newThoughts) {
-        // Solo generar hipótesis si el pensamiento promete reducir entropía significativamente
-        if (thought.expectedEntropyReduction > 0.15 && thought.confidence < 0.8) {
-          learningStrategy.generateHypothesis({
-            observation: thought.question,
-            domain: thought.drive,
-            priorConfidence: thought.confidence,
-          });
-        }
-      }
-
-      // PHASE 4: TEST HYPOTHESES - Probar hipótesis empíricamente usando JEPA Loss History
-      const hypothesesState = learningStrategy.getState();
-      const untestedHypotheses = hypothesesState.activeHypotheses.filter((h) => !h.tested);
-
-      if (untestedHypotheses.length > 0) {
-        // Ejecuta un test asíncrono sobre la correlación real de frustración
-        const jepaEvaluation = await analyzeJepaCorrelation(params.workspaceRoot);
-
-        for (const hypothesis of untestedHypotheses.slice(0, 2)) {
-          // Actualización Bayesiana informada:
-          // Si hay una correlación clara detectada (>0.1 score), consideramos que la hipótesis del log fue validada
-          const confirmed =
-            jepaEvaluation.correlationScore !== null && jepaEvaluation.correlationScore > 0.1;
-          const evidence = `jepa_correlation:${jepaEvaluation.correlationScore?.toFixed(2) ?? "null"}, events:${jepaEvaluation.totalEvents}`;
-
-          learningStrategy.updateHypothesis(hypothesis.id, evidence, confirmed);
-        }
-      }
+      const engineSignals = engines.collectKernelSignals({
+        kernel,
+        minEntropyReduction: 0.15,
+        maxThoughtConfidence: 0.8,
+      });
+      const hypothesisSignals = await engines.testUntestedHypotheses({
+        workspaceRoot: params.workspaceRoot,
+        maxHypothesesToTest: 2,
+        correlationConfirmationThreshold: 0.1,
+      });
+      const scoredSignals = scoreOmegaEngineSignals([
+        ...engineSignals.signals,
+        ...hypothesisSignals.signals,
+      ]);
 
       // PHASE 5: TRADITIONAL DRIVES - Para compatibilidad con sistema existente
-      const memoryCandidates = await collectMemoryCandidates(params.workspaceRoot);
-      let driveSignal = evaluateInnerDrives({ kernel, nowMs: Date.now(), memoryCandidates });
+      let driveSignal = mergeOmegaDriveSignalWithEngineScore({
+        baseDriveSignal: sharedDriveSignal,
+        engineScore: scoredSignals,
+      });
 
       // PLAN B: Enhance drive with JEPA tension metrics
       // Si JEPA detecta frustración, puede elevar urgencia o activar drives
@@ -191,8 +247,12 @@ export async function buildOmegaHeartbeatPrompt(params: {
 
       // PHASE 6: INTERNAL THOUGHTS → disponibles para próximo ciclo
       // (No genera prompt en modo heartbeat_ok, pero registra para observabilidad)
-      void thinkingEngine.getStats();
+      void engines.continuousThinking.getStats();
     }
+    return undefined;
+  }
+
+  if (!shouldDispatchPrompt) {
     return undefined;
   }
 
@@ -227,9 +287,14 @@ export async function buildOmegaHeartbeatPrompt(params: {
   const lines = [
     "[OMEGA Wake]",
     "Use only verified session state; do not invent new tension.",
-    `Wake action: ${wakeAction.kind}`,
-    `Reason: ${wakeAction.reason}`,
+    `Wake action: ${effectiveWakeAction.kind}`,
+    `Reason: ${effectiveWakeAction.reason}`,
   ];
+
+  if (controllerState?.dispatchPlan.shouldDispatchLlmTurn && controllerState.selectedWorkItem) {
+    lines.push(`Executive action: ${controllerState.dispatchPlan.selectedAction}`);
+    lines.push(`Executive work item: ${controllerState.selectedWorkItem.detail}`);
+  }
 
   if (wakeAction.kind === "review_active_goal") {
     lines.push(`Active goal requiring follow-up: ${wakeAction.goalTask}`);
@@ -295,10 +360,12 @@ export async function buildOmegaHeartbeatPrompt(params: {
 
   // --- RAG: Inject relevant SCIENCE_BASE.md knowledge ---
   let taskToQuery = "";
-  if ("goalTask" in wakeAction) {
-    taskToQuery = wakeAction.goalTask;
-  } else if ("goalTasks" in wakeAction && wakeAction.goalTasks.length > 0) {
-    taskToQuery = wakeAction.goalTasks[0];
+  if ("goalTask" in effectiveWakeAction) {
+    taskToQuery = effectiveWakeAction.goalTask;
+  } else if ("goalTasks" in effectiveWakeAction && effectiveWakeAction.goalTasks.length > 0) {
+    taskToQuery = effectiveWakeAction.goalTasks[0];
+  } else if ("selectedWorkItemDetail" in effectiveWakeAction) {
+    taskToQuery = effectiveWakeAction.selectedWorkItemDetail ?? "";
   }
 
   if (taskToQuery) {
@@ -320,9 +387,16 @@ export async function buildOmegaHeartbeatPrompt(params: {
 
   // Handle Agenda Contract (wakeAction is cast to any because 'maintain' may be injected
   // by the Cron dispatcher at runtime, even though it is not part of the static OmegaWakeAction union)
-  const wakeActionAny = wakeAction as unknown as { kind: string; selectedWorkItemId?: string };
-  if (wakeActionAny.kind === "maintain" && wakeActionAny.selectedWorkItemId?.startsWith("maintenance:agenda:")) {
-    const classKey = wakeActionAny.selectedWorkItemId.slice("maintenance:agenda:".length);
+  const wakeActionAny = effectiveWakeAction as unknown as {
+    kind: string;
+    selectedWorkItemId?: string;
+  };
+  const maintenanceContractClassKey =
+    wakeActionAny.kind === "maintain"
+      ? deriveMaintenanceContractClassKey(wakeActionAny.selectedWorkItemId)
+      : undefined;
+  if (maintenanceContractClassKey) {
+    const classKey = maintenanceContractClassKey;
     const contract = deriveOmegaAgendaExecutionContract(classKey);
     lines.push("");
     lines.push("[OMEGA Initiative Contract]");
@@ -332,6 +406,20 @@ export async function buildOmegaHeartbeatPrompt(params: {
     lines.push(`Success criteria: ${contract.successCriteria}`);
     if (contract.experimentMode === "probe_experiment") {
       lines.push("Experiment mode: probe_experiment (Isolated diagnosis)");
+    }
+    const evidence = controllerState?.worldSnapshot?.relevantMemories.find((entry) =>
+      classKey.startsWith("failure:")
+        ? entry.errorKind === classKey.slice("failure:".length)
+        : true,
+    );
+    if (evidence) {
+      lines.push(`Evidence task: ${evidence.task}`);
+      if (evidence.targets.length > 0) {
+        lines.push(`Evidence targets: ${evidence.targets.join(" | ")}`);
+      }
+      if (evidence.observedChangedFiles.length > 0) {
+        lines.push(`Evidence writes: ${evidence.observedChangedFiles.join(" | ")}`);
+      }
     }
   }
 
@@ -345,10 +433,14 @@ export async function applyOmegaHeartbeatExecutiveAction(params: {
   sessionKey: string;
   requesterAgentIdOverride?: string;
 }): Promise<OmegaHeartbeatExecutiveResult> {
-  const kernel = await loadOmegaSelfTimeKernel(params);
-  const wakeAction = decideOmegaWakeAction({ kernel });
+  const { kernel, wakeAction, operationalSummary } =
+    await loadOmegaHeartbeatDecisionContext(params);
+  const correctiveControl = deriveOmegaHeartbeatCorrectiveControl({
+    wakeAction,
+    operationalSummary,
+  });
 
-  if (wakeAction.kind === "prune_stale_goals") {
+  if (correctiveControl.kind === "prune_stale_goals") {
     const pruned = await pruneStaleOmegaGoals(params);
     return {
       kind: "pruned_stale_goals",
@@ -357,7 +449,7 @@ export async function applyOmegaHeartbeatExecutiveAction(params: {
     };
   }
 
-  if (wakeAction.kind === "prune_superseded_goals") {
+  if (correctiveControl.kind === "prune_superseded_goals") {
     const pruned = await pruneSupersededOmegaGoals(params);
     return {
       kind: "pruned_superseded_goals",
@@ -366,7 +458,7 @@ export async function applyOmegaHeartbeatExecutiveAction(params: {
     };
   }
 
-  if (wakeAction.kind === "focus_active_goal_targets") {
+  if (correctiveControl.kind === "focus_active_goal_targets") {
     const focused = await focusActiveOmegaGoalTargets(params);
     return {
       kind: "focused_active_goal_targets",
@@ -376,7 +468,7 @@ export async function applyOmegaHeartbeatExecutiveAction(params: {
     };
   }
 
-  if (wakeAction.kind === "prune_shadowed_goals") {
+  if (correctiveControl.kind === "prune_shadowed_goals") {
     const pruned = await pruneShadowedOmegaGoals(params);
     return {
       kind: "pruned_shadowed_goals",
@@ -385,17 +477,17 @@ export async function applyOmegaHeartbeatExecutiveAction(params: {
     };
   }
 
-  if (wakeAction.kind === "abort_interrupted_goal") {
+  if (correctiveControl.kind === "abort_interrupted_goal") {
     return {
       kind: "aborted_interrupted_goal",
-      wakeAction,
-      goalTask: wakeAction.goalTask,
-      failureStreak: wakeAction.failureStreak,
-      errorKind: wakeAction.errorKind,
+      wakeAction: correctiveControl.wakeAction,
+      goalTask: correctiveControl.wakeAction.goalTask,
+      failureStreak: correctiveControl.wakeAction.failureStreak,
+      errorKind: correctiveControl.wakeAction.errorKind,
     };
   }
 
-  if (wakeAction.kind === "resume_interrupted_goal") {
+  if (correctiveControl.kind === "resume_interrupted_goal") {
     const resumed = await resumeInterruptedOmegaGoal({
       workspaceRoot: params.workspaceRoot,
       sessionKey: params.sessionKey,
@@ -413,17 +505,17 @@ export async function applyOmegaHeartbeatExecutiveAction(params: {
     }
   }
 
-  // Reframe stalled goal: si hay ≥2 turns stalled y hay goal activo con targets
-  // residuales, reencuadrar para evitar retry ciego
-  const opTail = await loadOmegaOperationalMemoryTail(params);
-  const opSummary = summarizeOmegaOperationalMemory(opTail);
-  if (opSummary.recentStalledTurns >= 2 && kernel?.activeGoalId) {
+  if (correctiveControl.kind === "reframe_stalled_goal" && kernel?.activeGoalId) {
     const activeGoal = kernel.goals.find(
       (g) => g.id === kernel.activeGoalId && g.status === "active",
     );
     if (activeGoal && activeGoal.targets.length > 0) {
-      const focusedTargets = deriveFocusedActiveTargets(kernel);
-      const residualTargets = focusedTargets.length > 0 ? focusedTargets : activeGoal.targets;
+      const focused = await focusActiveOmegaGoalTargets({
+        ...params,
+        learnedConstraints: ["reframe_before_retry", "narrow_to_unresolved_targets"],
+      });
+      const residualTargets =
+        focused.focusedTargets.length > 0 ? focused.focusedTargets : activeGoal.targets;
       return {
         kind: "reframed_stalled_goal",
         wakeAction,
@@ -636,26 +728,24 @@ export function deriveOmegaHeartbeatTurnDecision(params: {
     kernel?.activeGoalId !== undefined &&
     (kernel?.tension?.pendingCorrection === true || (kernel?.tension?.openGoalCount ?? 0) > 0);
 
-  const structuredIdleDetected = progressObserved && !hasActivePendingGoal && !replyHeartbeatOk;
+  const structuredIdleDetected = progressObserved && !hasActivePendingGoal;
 
-  // El heartbeat se detiene cuando:
-  // 1. La respuesta del agente dice HEARTBEAT_OK
+  // El heartbeat prioriza evidencia estructural sobre tokens textuales.
+  if (structuredIdleDetected) {
+    return {
+      shouldContinue: false,
+      stopReason: "structured_idle",
+      replyHeartbeatOk,
+      structuredIdleDetected: true,
+    };
+  }
+
   if (replyHeartbeatOk) {
     return {
       shouldContinue: false,
       stopReason: "reply_heartbeat_ok",
       replyHeartbeatOk: true,
       structuredIdleDetected: false,
-    };
-  }
-
-  // 2. El estado estructural ya muestra idle (kernel actualizó, sin pending)
-  if (structuredIdleDetected) {
-    return {
-      shouldContinue: false,
-      stopReason: "structured_idle",
-      replyHeartbeatOk: false,
-      structuredIdleDetected: true,
     };
   }
 
@@ -693,6 +783,7 @@ export interface OmegaHeartbeatTurnResult {
   iteration: number;
   terminationReason: string;
   latestReply?: string;
+  nextSnapshot: OmegaHeartbeatRuntimeSnapshot;
   decision: OmegaHeartbeatTurnDecision;
   stateDelta: {
     timelineDelta: number;
@@ -789,6 +880,7 @@ export async function executeOmegaHeartbeatTurnWithDeps(
     iteration,
     terminationReason,
     latestReply,
+    nextSnapshot,
     decision,
     stateDelta: { timelineDelta, kernelUpdated, progressObserved },
     latencyBreakdown: { sendAgentTurnMs, loadSnapshotMs, readLatestReplyMs, totalMs },
@@ -818,27 +910,41 @@ export async function runOneHeartbeatCycleWithDeps(
   const { workspaceRoot, sessionKey } = params;
 
   await deps.ensureDirectories({ workspaceRoot });
+  await recordOmegaHeartbeatCycleMetrics({
+    workspaceRoot,
+    started: true,
+  }).catch(() => undefined);
 
   // Fase 1: acción ejecutiva (no requiere LLM)
   const execResult = await deps.applyExecutiveAction({ workspaceRoot, sessionKey });
   const lastWakeActionKind = execResult.wakeAction.kind;
+  await recordOmegaHeartbeatCycleMetrics({
+    workspaceRoot,
+    executiveAction: execResult.kind !== "none",
+    usefulExecutiveAction: execResult.kind !== "none",
+  }).catch(() => undefined);
+  const executiveStopReason =
+    deriveOmegaExecutiveActionStopReason({
+      resultKind: execResult.kind,
+      status: "status" in execResult ? execResult.status : undefined,
+    }) ?? (execResult.kind === "reframed_stalled_goal" ? "structured_idle" : undefined);
 
-  // Terminación estructurada: executive recovery completó sin necesitar LLM
-  if (
-    execResult.kind === "resumed_interrupted_goal" ||
-    execResult.kind === "pruned_stale_goals" ||
-    execResult.kind === "pruned_superseded_goals" ||
-    execResult.kind === "pruned_shadowed_goals" ||
-    execResult.kind === "focused_active_goal_targets" ||
-    execResult.kind === "aborted_interrupted_goal" ||
-    execResult.kind === "reframed_stalled_goal"
-  ) {
-    return { iterations: 0, stopReason: "structured_idle", lastWakeActionKind };
+  if (executiveStopReason) {
+    await recordOmegaHeartbeatCycleMetrics({
+      workspaceRoot,
+      completed: true,
+      structuredTermination: executiveStopReason === "structured_idle",
+    }).catch(() => undefined);
+    return { iterations: 0, stopReason: executiveStopReason, lastWakeActionKind };
   }
 
   // Fase 2: generar prompt para ciclo de razonamiento
-  const prompt = await deps.buildPrompt({ workspaceRoot, sessionKey });
+  let prompt = await deps.buildPrompt({ workspaceRoot, sessionKey });
   if (!prompt) {
+    await recordOmegaHeartbeatCycleMetrics({
+      workspaceRoot,
+      completed: true,
+    }).catch(() => undefined);
     return { iterations: 0, stopReason: "no_prompt", lastWakeActionKind };
   }
 
@@ -864,7 +970,7 @@ export async function runOneHeartbeatCycleWithDeps(
       deps,
     );
 
-    snapshot = await deps.loadRuntimeSnapshot({ workspaceRoot, sessionKey });
+    snapshot = turnResult.nextSnapshot;
 
     if (!turnResult.decision.shouldContinue) {
       stopReason = turnResult.terminationReason;
@@ -879,7 +985,22 @@ export async function runOneHeartbeatCycleWithDeps(
     if (delay > 0) {
       await deps.sleep(delay);
     }
+
+    prompt = await deps.buildPrompt({ workspaceRoot, sessionKey });
+    if (!prompt) {
+      iterations = i + 1;
+      stopReason = "no_prompt";
+      break;
+    }
   }
+
+  await recordOmegaHeartbeatCycleMetrics({
+    workspaceRoot,
+    completed: true,
+    structuredTermination: stopReason === "structured_idle",
+    textTokenTermination: stopReason === "reply_heartbeat_ok",
+    iterations,
+  }).catch(() => undefined);
 
   return { iterations, stopReason, lastWakeActionKind };
 }

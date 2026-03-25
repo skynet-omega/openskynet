@@ -56,6 +56,42 @@ export type OmegaWorldModelSnapshot = {
   operationalSignals: OmegaOperationalTurnMemoryEntry[];
 };
 
+function normalizeWorldModelText(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function deriveConstraintBridgeMemories(params: {
+  durableMemory: OmegaDurableMemoryEntry[];
+  task?: string;
+  expectedPaths?: string[];
+}): OmegaDurableMemoryEntry[] {
+  const task = params.task?.trim();
+  const expectedPaths = new Set(
+    (params.expectedPaths ?? []).map((value) => value.trim()).filter(Boolean),
+  );
+  if (!task && expectedPaths.size === 0) {
+    return [];
+  }
+  const normalizedTask = task ? normalizeWorldModelText(task) : undefined;
+  const taskTokens = normalizedTask
+    ? normalizedTask.split(/[^a-z0-9]+/i).filter((token) => token.length >= 4)
+    : [];
+
+  return params.durableMemory.filter((entry) => {
+    if ((entry.learnedConstraints?.length ?? 0) === 0) {
+      return false;
+    }
+    const taskMatch = normalizedTask
+      ? normalizeWorldModelText(entry.task).includes(normalizedTask) ||
+        normalizedTask.includes(normalizeWorldModelText(entry.task)) ||
+        taskTokens.some((token) => normalizeWorldModelText(entry.task).includes(token))
+      : false;
+    const pathMatch =
+      expectedPaths.size > 0 && entry.targets.some((target) => expectedPaths.has(target));
+    return taskMatch || pathMatch;
+  });
+}
+
 function deriveRecoveryScope(params: { targetCount: number; expectsJson: boolean }): string {
   return params.targetCount > 1
     ? "multi_target"
@@ -314,7 +350,14 @@ export async function loadOmegaWorldModelSnapshot(params: {
   )?.task;
 
   // Inherit constraints from Durable Memory (The Bridge)
-  const inheritedConstraints = relevantMemories.flatMap((m) => m.learnedConstraints ?? []);
+  const constraintBridgeMemories = deriveConstraintBridgeMemories({
+    durableMemory: allDurableMemory,
+    task: params.task,
+    expectedPaths: params.expectedPaths,
+  });
+  const inheritedConstraints = [...relevantMemories, ...constraintBridgeMemories].flatMap(
+    (m) => m.learnedConstraints ?? [],
+  );
   const mergedLearnedConstraints = Array.from(
     new Set([...(selfState?.learnedConstraints ?? []), ...inheritedConstraints]),
   ).slice(-6); // OMEGA_STATE_CONSTRAINT_LIMIT equivalent

@@ -36,6 +36,35 @@ describe("omega execution controller", () => {
     ).toBe(false);
   });
 
+  it("allows heartbeat prompt when the executive plan explicitly selected work", () => {
+    expect(
+      shouldDispatchOmegaHeartbeatPrompt({
+        dispatchPlan: {
+          shouldDispatchLlmTurn: true,
+          selectedAction: "maintain",
+          queueKind: "maintenance",
+          expectedUtility: 0.6,
+          utilityBreakdown: {
+            uncertaintyReduction: 0.2,
+          } as any,
+          budgetUsage: {
+            observedTurns: 1,
+            observedWallTimeMs: 1000,
+            budgetPressure: 0.2,
+            estimatedLlmCalls: 1,
+          } as any,
+          estimatedDispatchCostMs: 1500,
+          queueDepths: { goals: 0, anomalies: 0, maintenance: 1 },
+          scheduledItems: [],
+          nextWakeDelayMs: 1000,
+          rationale: [],
+        },
+        wakeAction: { kind: "heartbeat_ok", reason: "no_verified_tension" },
+        shouldRunAutonomy: false,
+      }),
+    ).toBe(true);
+  });
+
   it("promotes stalled review work into reframe control", () => {
     expect(
       deriveOmegaHeartbeatCorrectiveControl({

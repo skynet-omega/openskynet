@@ -66,6 +66,7 @@ export type OmegaInterruptedGoalRecovery = {
   failureStreak: number;
   reason:
     | "pending_active_goal_after_restart"
+    | "verified_locality_failure_after_restart"
     | "verified_structured_failure_after_restart"
     | "verified_write_failure_after_restart";
   suggestedRoute: "omega_delegate" | "sessions_spawn";

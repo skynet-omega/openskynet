@@ -1,7 +1,16 @@
 import { decideOmegaWakeAction, type OmegaWakeAction } from "./frontal/wake-policy.js";
-import { evaluateInnerDrives, type InnerDriveSignal } from "./inner-life/index.js";
+import {
+  evaluateInnerDrives,
+  evaluateInnerDrivesFromWSP,
+  type InnerDriveSignal,
+} from "./inner-life/index.js";
+import type { OmegaWorldStatePersistent } from "./omega-wsp.js";
 import type { OmegaOperationalMemorySummary } from "./operational-memory.js";
 import type { OmegaSelfTimeKernelState } from "./self-time-kernel.js";
+import {
+  hasActiveOmegaWspDriveAuthority,
+  type OmegaStateAuthoritySnapshot,
+} from "./state-authority.js";
 
 const OMEGA_HEARTBEAT_CONTINUE_DELAY_MS = 5_000;
 const OMEGA_HEARTBEAT_CONTINUE_DELAY_FAST_MS = 1_000;
@@ -10,15 +19,19 @@ const OMEGA_HEARTBEAT_CONTINUE_DELAY_BACKOFF_MS = 7_500;
 export type OmegaPolicySnapshot = {
   wakeAction: OmegaWakeAction;
   driveSignal: InnerDriveSignal;
+  driveSignalSource: "omega-wsp" | "kernel";
   shouldRunAutonomy: boolean;
   needsRecoveryAttention: boolean;
+  stateAuthority?: OmegaStateAuthoritySnapshot;
   integratedState?: any;
 };
 
 export async function getOmegaPolicySnapshot(params: any): Promise<OmegaPolicySnapshot> {
   const snapshot = deriveOmegaPolicySnapshot({
     kernel: params.kernel,
+    wsp: params.wsp,
     operationalSummary: params.operationalSummary,
+    stateAuthority: params.stateAuthority,
   });
   return snapshot;
 }
@@ -33,11 +46,13 @@ export type OmegaHeartbeatTurnPolicy = {
 
 export function deriveOmegaPolicySnapshot(params: {
   kernel?: OmegaSelfTimeKernelState;
+  wsp?: OmegaWorldStatePersistent;
   nowMs?: number;
   memoryCandidates?: string[];
   operationalSummary?: OmegaOperationalMemorySummary;
   viabilityProb?: number;
   hasUrgentMaintenance?: boolean;
+  stateAuthority?: OmegaStateAuthoritySnapshot;
 }): OmegaPolicySnapshot {
   // decideOmegaWakeAction only accepts { kernel? } — extra params are ignored here
   // operationalSummary / viabilityProb / hasUrgentMaintenance are available
@@ -45,22 +60,36 @@ export function deriveOmegaPolicySnapshot(params: {
   const wakeAction = decideOmegaWakeAction({
     kernel: params.kernel,
   });
+  const activeWsp =
+    params.wsp !== undefined && hasActiveOmegaWspDriveAuthority(params.wsp)
+      ? params.wsp
+      : undefined;
+  const useWspDriveAuthority = params.kernel !== undefined && activeWsp !== undefined;
   const driveSignal = params.kernel
-    ? evaluateInnerDrives({
-        kernel: params.kernel,
-        nowMs: params.nowMs,
-        memoryCandidates: params.memoryCandidates,
-      })
+    ? useWspDriveAuthority
+      ? evaluateInnerDrivesFromWSP({
+          wsp: activeWsp,
+          kernel: params.kernel,
+          nowMs: params.nowMs,
+          memoryCandidates: params.memoryCandidates,
+        })
+      : evaluateInnerDrives({
+          kernel: params.kernel,
+          nowMs: params.nowMs,
+          memoryCandidates: params.memoryCandidates,
+        })
     : { kind: "idle" as const };
 
   return {
     wakeAction,
     driveSignal,
+    driveSignalSource: useWspDriveAuthority ? "omega-wsp" : "kernel",
     shouldRunAutonomy: driveSignal.kind !== "idle",
     needsRecoveryAttention:
       wakeAction.kind === "review_active_goal" ||
       wakeAction.kind === "resume_interrupted_goal" ||
       wakeAction.kind === "abort_interrupted_goal",
+    stateAuthority: params.stateAuthority,
   };
 }
 

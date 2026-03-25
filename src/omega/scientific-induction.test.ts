@@ -36,6 +36,12 @@ describe("Scientific Induction Engine", () => {
 
     const classKey = "failure:target_not_touched";
     const agendaItem = snapshot.problemAgenda.find((i) => i.classKey === classKey);
+    if (!agendaItem) {
+      console.log(
+        "DEBUG: Problem Agenda contents:",
+        JSON.stringify(snapshot.problemAgenda, null, 2),
+      );
+    }
     expect(agendaItem).toBeDefined();
 
     // 3. RUN INDUCTION

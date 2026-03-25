@@ -207,7 +207,7 @@ export async function queryOmegaDurableMemory(params: {
 }): Promise<OmegaDurableMemoryEntry[]> {
   const entries = await loadOmegaDurableMemory(params);
   const scored = entries
-    .filter((entry) => entry.kind !== "repeated_failure" || entry.failureCount >= 1)
+    .filter((entry) => entry.kind !== "repeated_failure" || entry.failureCount >= 2)
     .map((entry) => ({
       entry,
       score: queryScore(entry, params.task, params.expectedPaths ?? []),

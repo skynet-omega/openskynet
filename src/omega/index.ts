@@ -93,13 +93,6 @@ export {
   type InnerDriveSignal,
 } from "./inner-life/index.js";
 export { processIntegratedBrain, formatInternalReflection } from "./integrated-brain.js";
-export {
-  executeAutonomousAction,
-  runAutonomousCycle,
-  formatAutonomousExecution,
-  type AutonomousActionResult,
-  type AutonomousExecution,
-} from "./autonomous-executor.js";
 
 export {
   runResearchLoop,

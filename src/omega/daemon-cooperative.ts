@@ -30,6 +30,22 @@ export interface DaemonDeps {
   error?: (...args: any[]) => void;
 }
 
+type InteractionLockPayload = {
+  owner: "tui";
+  pid: number;
+  refreshedAt: number;
+};
+
+async function writeInteractionLock(workspaceRoot: string): Promise<void> {
+  const lockFilePath = path.join(workspaceRoot, INTERACTION_LOCK_FILE);
+  const payload: InteractionLockPayload = {
+    owner: "tui",
+    pid: process.pid,
+    refreshedAt: Date.now(),
+  };
+  await fs.writeFile(lockFilePath, JSON.stringify(payload, null, 2), "utf-8");
+}
+
 export async function startAutonomousDaemon(params: DaemonParams, deps: DaemonDeps = {}) {
   const lockFilePath = path.join(params.workspaceRoot, INTERACTION_LOCK_FILE);
   const log = deps.log ?? console.log;
@@ -125,8 +141,7 @@ export async function checkInteractionLock(lockFilePath: string): Promise<boolea
  * Sincronización: TUI ABRE daemon → crea lock
  */
 export async function createInteractionLock(workspaceRoot: string): Promise<void> {
-  const lockFilePath = path.join(workspaceRoot, INTERACTION_LOCK_FILE);
-  await fs.writeFile(lockFilePath, "");
+  await writeInteractionLock(workspaceRoot);
   console.log("[TUI] 🔒 Lock creado - Daemon pausado");
 }
 
@@ -158,7 +173,7 @@ export async function refreshInteractionLock(
   // Refresca cada N segundos
   const interval = setInterval(async () => {
     try {
-      await fs.writeFile(lockFilePath, "");
+      await writeInteractionLock(workspaceRoot);
     } catch {
       // Error al escribir, ignora
     }

@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadOmegaEmpiricalMetrics } from "./empirical-metrics.js";
+import * as executionController from "./execution-controller.js";
 import {
   applyOmegaHeartbeatExecutiveAction,
   buildOmegaHeartbeatPrompt,
@@ -744,5 +745,136 @@ describe("omega heartbeat", () => {
     });
 
     expect(prompt).toBeUndefined();
+  });
+
+  it("builds a prompt when the executive stack selects maintenance despite heartbeat_ok", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    vi.spyOn(executionController, "syncOmegaExecutionControllerState").mockResolvedValue({
+      executiveState: {
+        sessionKey: "main",
+        updatedAt: 1,
+        observer: {
+          mode: "idle",
+          queue: [],
+          maintenanceQueue: [],
+          anomalies: [],
+          decision: {
+            mode: "idle",
+            selectedAction: "maintain",
+            rationale: [],
+            expectedUtility: 0.7,
+            utilityBreakdown: {
+              uncertaintyReduction: 0.2,
+            } as any,
+            confidence: 0.8,
+            budget: {
+              maxTurnsPerCycle: 1,
+              maxLlmCalls: 1,
+              maxWallTimeMs: 5000,
+            },
+            budgetUsage: {
+              observedTurns: 0,
+              observedWallTimeMs: 0,
+              budgetPressure: 0.1,
+              estimatedLlmCalls: 1,
+            },
+          },
+        },
+        memory: {
+          durableEntries: 0,
+          operationalSignals: 0,
+          repeatedFailures: 0,
+          revalidationCandidates: 0,
+        },
+        runtime: {
+          lastSyncedAt: 1,
+          dispatchPlan: {
+            shouldDispatchLlmTurn: true,
+            selectedAction: "maintain",
+            queueKind: "maintenance",
+            selectedWorkItemId: "maintenance:agenda:failure:heartbeat",
+            expectedUtility: 0.7,
+            utilityBreakdown: {
+              uncertaintyReduction: 0.2,
+            } as any,
+            budgetUsage: {
+              observedTurns: 0,
+              observedWallTimeMs: 0,
+              budgetPressure: 0.1,
+              estimatedLlmCalls: 1,
+            } as any,
+            estimatedDispatchCostMs: 1000,
+            queueDepths: { goals: 0, anomalies: 0, maintenance: 1 },
+            scheduledItems: [
+              {
+                id: "maintenance:agenda:failure:heartbeat",
+                queueKind: "maintenance",
+                action: "maintain",
+                priority: 0.8,
+                detail: "Investigate stalled autonomous progress and reframe the active plan",
+              },
+            ],
+            nextWakeDelayMs: 1000,
+            rationale: [],
+          },
+          dispatchAccounting: {
+            totalCycles: 0,
+            llmDispatches: 0,
+            deferredCycles: 0,
+            queueDispatchCounts: { goal: 0, maintenance: 0, anomaly: 0 },
+            recentSelectedWorkItemIds: [],
+            recentDispatchedWorkItemIds: [],
+            workItemLedger: [],
+          },
+        },
+      },
+      dispatchPlan: {
+        shouldDispatchLlmTurn: true,
+        selectedAction: "maintain",
+        queueKind: "maintenance",
+        selectedWorkItemId: "maintenance:agenda:failure:heartbeat",
+        expectedUtility: 0.7,
+        utilityBreakdown: {
+          uncertaintyReduction: 0.2,
+        } as any,
+        budgetUsage: {
+          observedTurns: 0,
+          observedWallTimeMs: 0,
+          budgetPressure: 0.1,
+          estimatedLlmCalls: 1,
+        } as any,
+        estimatedDispatchCostMs: 1000,
+        queueDepths: { goals: 0, anomalies: 0, maintenance: 1 },
+        scheduledItems: [
+          {
+            id: "maintenance:agenda:failure:heartbeat",
+            queueKind: "maintenance",
+            action: "maintain",
+            priority: 0.8,
+            detail: "Investigate stalled autonomous progress and reframe the active plan",
+          },
+        ],
+        nextWakeDelayMs: 1000,
+        rationale: [],
+      },
+      selectedWorkItem: {
+        id: "maintenance:agenda:failure:heartbeat",
+        queueKind: "maintenance",
+        action: "maintain",
+        priority: 0.8,
+        detail: "Investigate stalled autonomous progress and reframe the active plan",
+      },
+      hasUrgentMaintenance: true,
+      operationalSummary: undefined,
+      worldSnapshot: undefined,
+    } as any);
+
+    const prompt = await buildOmegaHeartbeatPrompt({
+      workspaceRoot,
+      sessionKey: "main",
+    });
+
+    expect(prompt).toContain("Wake action: maintain");
+    expect(prompt).toContain("Executive work item: Investigate stalled autonomous progress");
   });
 });

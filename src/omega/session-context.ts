@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { admitOmegaDurableMemory } from "./durable-memory.js";
 import { recordOmegaValidationMetrics } from "./empirical-metrics.js";
 import {
   formatOmegaRecoveryEpisodeRecall,
@@ -455,24 +456,37 @@ export async function loadOmegaSessionTimeline(params: {
   workspaceRoot: string;
   sessionKey: string;
 }): Promise<OmegaSessionTimelineEntry[]> {
-  const timeline = await readOmegaSessionTimeline(params);
-  return timeline?.entries ?? [];
+  return (await loadOmegaSessionDecisionState(params)).timeline;
 }
 
 export async function loadOmegaSessionSelfState(params: {
   workspaceRoot: string;
   sessionKey: string;
 }): Promise<OmegaSessionSelfState | undefined> {
-  const timeline = await readOmegaSessionTimeline(params);
-  return timeline?.state;
+  return (await loadOmegaSessionDecisionState(params)).state;
 }
 
 export async function loadOmegaSelfTimeKernel(params: {
   workspaceRoot: string;
   sessionKey: string;
 }): Promise<OmegaSelfTimeKernelState | undefined> {
+  return (await loadOmegaSessionDecisionState(params)).kernel;
+}
+
+export async function loadOmegaSessionDecisionState(params: {
+  workspaceRoot: string;
+  sessionKey: string;
+}): Promise<{
+  timeline: OmegaSessionTimelineEntry[];
+  state?: OmegaSessionSelfState;
+  kernel?: OmegaSelfTimeKernelState;
+}> {
   const timeline = await readOmegaSessionTimeline(params);
-  return timeline?.kernel;
+  return {
+    timeline: timeline?.entries ?? [],
+    state: timeline?.state,
+    kernel: timeline?.kernel,
+  };
 }
 
 export async function loadOmegaTaskTransactions(params: {
@@ -746,6 +760,7 @@ export async function pruneSupersededOmegaGoals(params: {
 export async function focusActiveOmegaGoalTargets(params: {
   workspaceRoot: string;
   sessionKey: string;
+  learnedConstraints?: string[];
 }): Promise<{ focusedGoalTask?: string; focusedTargets: string[] }> {
   const existing = await readOmegaSessionTimeline(params);
   const existingKernel = existing?.kernel;
@@ -759,9 +774,16 @@ export async function focusActiveOmegaGoalTargets(params: {
   }
 
   const activeGoal = existingKernel.goals.find((goal) => goal.id === existingKernel.activeGoalId);
+  const learnedConstraints = Array.from(
+    new Set([
+      ...(existingState.learnedConstraints ?? []),
+      ...((params.learnedConstraints ?? []).map((value) => value.trim()).filter(Boolean) ?? []),
+    ]),
+  ).slice(-6);
   const nextState = {
     ...existingState,
     activeTargets: focusedTargets,
+    learnedConstraints,
     updatedAt: Date.now(),
   };
 
@@ -1142,6 +1164,14 @@ export async function recordOmegaSessionOutcome(params: {
     workspaceRoot: params.workspaceRoot,
     sessionKey: canonicalSessionKey,
     transactions: nextTransactions,
+  }).catch(() => undefined);
+  await admitOmegaDurableMemory({
+    workspaceRoot: params.workspaceRoot,
+    sessionKey: canonicalSessionKey,
+    task: params.task,
+    learnedConstraints: nextState.learnedConstraints,
+    validation: params.validation,
+    outcome: params.outcome,
   }).catch(() => undefined);
   if (params.recordEmpiricalMetrics !== false) {
     await recordOmegaValidationMetrics({

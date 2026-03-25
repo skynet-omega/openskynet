@@ -14,19 +14,23 @@ This file stores environment-specific facts for OpenSkyNet.
 
 ## Models
 
-- Default model: `ollama/gpt-oss-safeguard:20b`
-- Fallback model: `google-gemini-cli/gemini-3-flash-preview`
-- Fast cheap model: `ollama/gpt-oss-safeguard:20b`
-- Notes on model limits: Small models (<300B) are currently running without sandboxing (Security Warning active).
+- Default model: `google-gemini-cli/gemini-3-flash-preview`
+- Fallback chain:
+  - `google-gemini-cli/gemini-3.1-pro-preview`
+  - `ollama/kimi-k2.5:cloud`
+  - `openai-codex/gpt-5.4`
+  - `ollama/gpt-oss-safeguard:20b`
+- Cheap local fallback: `ollama/gpt-oss-safeguard:20b`
+- Config source of truth: `~/.openskynet/openclaw.json`
 
 ## OpenSkyNet / Gateway
 
 - Gateway host: `127.0.0.1`
 - Gateway port: `18789`
-- Config path: Internal JSON5 managed by OpenClaw.
-- Session/log path: `openskynet-gateway.log`
+- Config path: `~/.openskynet/openclaw.json`
+- State dir: `~/.openskynet`
 - Sandbox mode: `off`
-- Important runtime notes: Running on Node `v22.22.1` via NVM.
+- Important runtime notes: systemd user service `openskynet-gateway.service`
 
 ## SSH / Machines
 
@@ -37,18 +41,20 @@ This file stores environment-specific facts for OpenSkyNet.
 
 ### Mobile / Nodes
 
-- WhatsApp: Linked (+56988208988). Active and healthy.
+- WhatsApp: linked locally
 
 ## Common Commands
 
-- Check status: `bash -i -c "nvm use 22 && ./openclaw.mjs status"`
-- Start gateway: `bash -i -c "nvm use 22 && ./openclaw.mjs gateway start"`
-- Run tests: `bash -i -c "nvm use 22 && pnpm test <path>"`
-- Update system: `bash -i -c "nvm use 22 && ./openclaw.mjs update"`
+- Gateway dev: `pnpm gateway:dev`
+- UI dev: `pnpm ui:dev`
+- TUI: `pnpm tui`
+- Build: `pnpm build`
+- Run targeted tests: `pnpm vitest run <path>`
+- Service status: `systemctl --user status openskynet-gateway.service`
 
 ## Safety Notes
 
-- Gateway auth token is currently short (6 chars). Prefer lengthening for production.
-- Small models are exposed to host environment; avoid untrusted inputs in this mode.
+- `TOOLS.md` should stay operational and local; avoid putting secrets or personal identifiers here.
+- Small local models still run host-side in the current trust model; avoid untrusted inputs when tools are enabled.
 
-_Last updated: 2026-03-23_
+_Last updated: 2026-03-25_

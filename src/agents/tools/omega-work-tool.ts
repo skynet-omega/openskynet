@@ -1,12 +1,12 @@
 import { Type } from "@sinclair/typebox";
 import type { OpenClawConfig } from "../../config/config.js";
+import { loadOmegaDecisionContext } from "../../omega/decision-context.js";
+import { resolveOmegaValidatedWorkRouting } from "../../omega/execution-controller.js";
 import {
   decideOmegaFrontalAction,
   deriveOmegaInterruptedGoalRecovery,
   decideOmegaWakeAction,
   loadOmegaSelfTimeKernel,
-  loadOmegaSessionSelfState,
-  loadOmegaSessionTimeline,
   recordOmegaRouteMetrics,
   recordOmegaSessionOutcome,
   taskMatchesOmegaInterruptedGoalRecovery,
@@ -247,18 +247,16 @@ export function createOmegaWorkTool(
       const isolated = params.isolated === true;
       const thread = params.thread === true;
       const validation = readOmegaValidationToolParams(params);
-      const sessionTimeline = await loadOmegaSessionTimeline({
+      const decisionContext = await loadOmegaDecisionContext({
         workspaceRoot: opts?.workspaceDir ?? process.cwd(),
         sessionKey: resolvedSessionKey,
+        task,
+        expectedPaths: validation.expectedPaths,
+        watchedPaths: validation.expectedPaths,
       });
-      const sessionState = await loadOmegaSessionSelfState({
-        workspaceRoot: opts?.workspaceDir ?? process.cwd(),
-        sessionKey: resolvedSessionKey,
-      });
-      const sessionKernel = await loadOmegaSelfTimeKernel({
-        workspaceRoot: opts?.workspaceDir ?? process.cwd(),
-        sessionKey: resolvedSessionKey,
-      });
+      const sessionTimeline = decisionContext.timeline;
+      const sessionState = decisionContext.sessionState;
+      const sessionKernel = decisionContext.kernel;
       const interruptedRecovery = deriveOmegaInterruptedGoalRecovery({
         kernel: sessionKernel,
       });
@@ -334,18 +332,39 @@ export function createOmegaWorkTool(
         interactionKind: interaction.kind,
         timeoutSeconds,
       });
+      const validatedRouting = await resolveOmegaValidatedWorkRouting({
+        workspaceRoot: opts?.workspaceDir ?? process.cwd(),
+        sessionKey: resolvedSessionKey,
+        task: goalTask,
+        expectedPaths: effectiveValidation.expectedPaths,
+        watchedPaths: effectiveValidation.expectedPaths,
+        requiresValidation,
+        isolated,
+        runtime,
+        interactionKind: interaction.kind,
+        timeoutSeconds,
+        matchedRecoverySuggestedRoute: matchedRecovery?.suggestedRoute,
+      }).catch(() => undefined);
+      const executiveValidatedRoute =
+        validatedRouting?.executiveRoutingDirective?.route ?? validatedRouting?.plannedRoute;
       let effectiveRoute = frontal.kind === "escalate_isolated_repair" ? "sessions_spawn" : route;
 
-      effectiveRoute = enhanceRouteWithLearnedRules({
-        task: goalTask,
-        proposedRoute: effectiveRoute,
-        failureStreak: sessionKernel?.tension.failureStreak ?? 0,
-        lastErrorKind:
-          sessionTimeline.length > 0
-            ? sessionTimeline[sessionTimeline.length - 1].outcome?.errorKind
-            : undefined,
-        targets: effectiveValidation.expectedPaths,
-      });
+      if (executiveValidatedRoute) {
+        effectiveRoute = executiveValidatedRoute;
+      }
+
+      if (!validatedRouting?.executiveRoutingDirective) {
+        effectiveRoute = enhanceRouteWithLearnedRules({
+          task: goalTask,
+          proposedRoute: effectiveRoute,
+          failureStreak: sessionKernel?.tension.failureStreak ?? 0,
+          lastErrorKind:
+            sessionTimeline.length > 0
+              ? sessionTimeline[sessionTimeline.length - 1].outcome?.errorKind
+              : undefined,
+          targets: effectiveValidation.expectedPaths,
+        });
+      }
 
       if (matchedRecovery?.suggestedRoute === "sessions_spawn") {
         effectiveRoute = "sessions_spawn";

@@ -1,12 +1,13 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { getActiveLearningStrategy } from "./active-learning-strategy.js";
 import { CognitiveRuleEngine } from "./cognitive-rules.js";
+import { type ContinuousThought } from "./continuous-thinking-engine.js";
+import { getOmegaHeartbeatEngineRegistry } from "./engines/registry.js";
 import {
-  getContinuousThinkingEngine,
-  type ContinuousThought,
-} from "./continuous-thinking-engine.js";
-import { getEntropyMinimizationLoop } from "./entropy-minimization-loop.js";
+  mergeOmegaDriveSignalWithEngineScore,
+  scoreOmegaEngineSignals,
+} from "./engines/score-engine-signal.js";
+import type { Contradiction, OmegaKernelSignalCollection } from "./engines/types.js";
 import type { FrontalLobeState } from "./frontal/frontal-lobe.js";
 import { RicciGraphAnalytics } from "./graph-analytics.js";
 import { HolographicMemoryManager } from "./holographic-memory.js";
@@ -18,6 +19,7 @@ import {
   parseJepaTensionFromKernelTimeline,
 } from "./jepa-drive-enhancement.js";
 import { createMemoryEmbedding } from "./memory-vectors.js";
+import { loadOmegaWSP } from "./omega-wsp.js";
 import { deriveOmegaPolicySnapshot } from "./policy-engine.js";
 import {
   OMEGA_MAX_THOUGHT_CONFIDENCE_FOR_HYPOTHESIS,
@@ -26,12 +28,6 @@ import {
 import type { OmegaSelfTimeKernelState } from "./self-time-kernel.js";
 import { loadOmegaSessionTimeline } from "./session-context.js";
 import { formatOmegaWorldModelSnapshot, loadOmegaWorldModelSnapshot } from "./world-model.js";
-
-type ThoughtObservation = {
-  domain: string;
-  observation: string;
-  priorConfidence: number;
-};
 
 async function collectOmegaMemoryCandidates(workspaceRoot: string): Promise<string[]> {
   const candidates: string[] = [];
@@ -52,21 +48,6 @@ async function collectOmegaMemoryCandidates(workspaceRoot: string): Promise<stri
     console.warn("[OMEGA] Failed to collect memory candidates:", error);
   }
   return candidates;
-}
-
-function buildThoughtObservation(
-  thought: Pick<ContinuousThought, "drive" | "question" | "reasoning">,
-): ThoughtObservation {
-  const domainByDrive: Record<ContinuousThought["drive"], string> = {
-    learning: "pattern",
-    entropy_minimization: "feedback",
-    adaptive_depth: "causality",
-  };
-  return {
-    domain: domainByDrive[thought.drive],
-    observation: `${thought.question} | ${thought.reasoning}`,
-    priorConfidence: OMEGA_MAX_THOUGHT_CONFIDENCE_FOR_HYPOTHESIS / 2,
-  };
 }
 
 async function fossilizeIdleExperience(params: {
@@ -116,9 +97,7 @@ async function loadLearningContext(params: {
   return `\n\n=== COGNITIVE RULES ===\n${promptRules.trim()}`;
 }
 
-function buildContradictionsContext(
-  contradictions: ReturnType<ReturnType<typeof getEntropyMinimizationLoop>["detectContradictions"]>,
-): string {
+function buildContradictionsContext(contradictions: Contradiction[]): string {
   if (contradictions.length === 0) {
     return "";
   }
@@ -180,10 +159,13 @@ export async function buildIdleOmegaHeartbeatPrompt(params: {
   sessionKey: string;
   kernel?: OmegaSelfTimeKernelState;
 }): Promise<string> {
-  const worldModel = await loadOmegaWorldModelSnapshot({
-    workspaceRoot: params.workspaceRoot,
-    sessionKey: params.sessionKey,
-  });
+  const [worldModel, wsp] = await Promise.all([
+    loadOmegaWorldModelSnapshot({
+      workspaceRoot: params.workspaceRoot,
+      sessionKey: params.sessionKey,
+    }),
+    loadOmegaWSP(params.workspaceRoot, params.sessionKey).catch(() => undefined),
+  ]);
 
   if (!params.kernel) {
     const lines = [
@@ -197,36 +179,37 @@ export async function buildIdleOmegaHeartbeatPrompt(params: {
   }
 
   const speculativeIdleEnabled = isOmegaSpeculativeIdleEnabled();
+  const engines = getOmegaHeartbeatEngineRegistry();
   let lobeState: FrontalLobeState | undefined;
   let thoughts: ContinuousThought[] = [];
   let graphFocus: string | null = null;
-  let contradictions: ReturnType<
-    ReturnType<typeof getEntropyMinimizationLoop>["detectContradictions"]
-  > = [];
+  let contradictions: Contradiction[] = [];
+  let collectedEngineSignals: OmegaKernelSignalCollection | undefined;
 
   if (speculativeIdleEnabled) {
-    const thinkingEngine = getContinuousThinkingEngine();
-    thoughts = thinkingEngine.think(params.kernel);
+    collectedEngineSignals = engines.collectKernelSignals({
+      kernel: params.kernel,
+      minEntropyReduction: OMEGA_MIN_THOUGHT_ENTROPY_REDUCTION,
+      maxThoughtConfidence: OMEGA_MAX_THOUGHT_CONFIDENCE_FOR_HYPOTHESIS,
+    });
+    thoughts = collectedEngineSignals.thoughts;
     graphFocus = RicciGraphAnalytics.getFocusRecommendation(params.kernel);
-    contradictions = getEntropyMinimizationLoop().detectContradictions(params.kernel);
-
-    const learningStrategy = getActiveLearningStrategy();
-    for (const thought of thoughts) {
-      if (
-        thought.expectedEntropyReduction > OMEGA_MIN_THOUGHT_ENTROPY_REDUCTION &&
-        thought.confidence < OMEGA_MAX_THOUGHT_CONFIDENCE_FOR_HYPOTHESIS
-      ) {
-        learningStrategy.generateHypothesis(buildThoughtObservation(thought));
-      }
-    }
+    contradictions = collectedEngineSignals.contradictions;
   }
 
   const memoryCandidates = await collectOmegaMemoryCandidates(params.workspaceRoot);
   let driveSignal = deriveOmegaPolicySnapshot({
     kernel: params.kernel,
+    wsp,
     nowMs: Date.now(),
     memoryCandidates,
   }).driveSignal;
+  if (collectedEngineSignals) {
+    driveSignal = mergeOmegaDriveSignalWithEngineScore({
+      baseDriveSignal: driveSignal,
+      engineScore: scoreOmegaEngineSignals(collectedEngineSignals.signals),
+    });
+  }
 
   const sessionTimeline = await loadOmegaSessionTimeline(params);
   const jepaTension = parseJepaTensionFromKernelTimeline(sessionTimeline);
