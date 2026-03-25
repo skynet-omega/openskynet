@@ -17,8 +17,10 @@ export function applyAgentDefaultPrimaryModel(params: {
   legacyModels?: Set<string>;
 }): { next: OpenClawConfig; changed: boolean } {
   const current = resolvePrimaryModel(params.cfg.agents?.defaults?.model)?.trim();
-  const isLegacy = current && params.legacyModels?.has(current);
-  if (current && !isLegacy) {
+  const isLegacy = current ? params.legacyModels?.has(current) === true : false;
+  if (!current) {
+    // continue and set default
+  } else if (current === params.model || isLegacy) {
     return { next: params.cfg, changed: false };
   }
 
