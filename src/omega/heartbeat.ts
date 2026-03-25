@@ -318,9 +318,11 @@ export async function buildOmegaHeartbeatPrompt(params: {
     }
   }
 
-  // Handle Agenda Contract
-  if (wakeAction.kind === "maintain" && wakeAction.selectedWorkItemId?.startsWith("maintenance:agenda:")) {
-    const classKey = wakeAction.selectedWorkItemId.slice("maintenance:agenda:".length);
+  // Handle Agenda Contract (wakeAction is cast to any because 'maintain' may be injected
+  // by the Cron dispatcher at runtime, even though it is not part of the static OmegaWakeAction union)
+  const wakeActionAny = wakeAction as unknown as { kind: string; selectedWorkItemId?: string };
+  if (wakeActionAny.kind === "maintain" && wakeActionAny.selectedWorkItemId?.startsWith("maintenance:agenda:")) {
+    const classKey = wakeActionAny.selectedWorkItemId.slice("maintenance:agenda:".length);
     const contract = deriveOmegaAgendaExecutionContract(classKey);
     lines.push("");
     lines.push("[OMEGA Initiative Contract]");
@@ -880,4 +882,34 @@ export async function runOneHeartbeatCycleWithDeps(
   }
 
   return { iterations, stopReason, lastWakeActionKind };
+}
+
+/**
+ * Crea un conjunto de dependencias por defecto para el ciclo del heartbeat.
+ * Útil para testing de integración y el stress test de perf.
+ * Las implementaciones reales deben sobreescribir sendAgentTurn y readLatestReply.
+ */
+export function createDefaultHeartbeatDeps(): OmegaHeartbeatCycleDeps {
+  return {
+    buildPrompt: buildOmegaHeartbeatPrompt,
+    loadRuntimeSnapshot: async (params) => ({
+      timeline: await loadOmegaSessionTimeline(params),
+      kernel: await loadOmegaSelfTimeKernel(params),
+    }),
+    sendAgentTurn: async (_params) => {
+      // No-op por defecto — debe sobreescribirse en producción
+    },
+    appendConsciousnessLog: async (_params) => {
+      // No-op por defecto
+    },
+    applyExecutiveAction: applyOmegaHeartbeatExecutiveAction,
+    readLatestReply: async (_params) => undefined,
+    recordMetric: async (_params) => {
+      // No-op por defecto
+    },
+    ensureDirectories: async (_params) => {
+      // No-op por defecto
+    },
+    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  };
 }

@@ -3,63 +3,60 @@
  * ====================
  * Evaluación de drives internas autónomas de OpenSkyNet.
  *
- * Estas funciones son PURAS: toman estado y retornan una señal.
- * No tienen efectos secundarios. No llaman al LLM. No tocan disco.
+ * MODELO HOMEOSTÁTICO (v2):
+ * Las drives ya no son umbrales fijos. Cada drive tiene:
+ *   - setpoint: nivel de reposo "natural" de la drive (adaptable lentamente)
+ *   - error:    setpoint - nivel_actual  → señal de activación
+ *   - decay:    cae sin satisfacción → el drive resurge si no se atiende
  *
- * Las drives determinan si el sistema debe hacer algo por iniciativa
- * propia, sin esperar input humano.
+ * El sistema integra con WSP (World State Persistent):
+ *   - Lee el estado actual de drives desde el WSP si está disponible
+ *   - Aplica penalizaciones y satisfacciones que se persisten entre turnos
  *
- * Diseño deliberadamente minimalista: 3 drives, umbrales configurables,
- * fáciles de deshabilitar. Si no funciona empíricamente, se ajusta.
+ * La función evaluateInnerDrives() sigue siendo PURA (no toca disco).
+ * La función evaluateInnerDrivesFromWSP() usa el WSP como fuente de verdad.
+ *
+ * Estas funciones no llaman al LLM. No tocan disco directamente.
  */
 
+import type {
+  OmegaWorldStatePersistent,
+  WspDriveState,
+} from "../omega-wsp.js";
 import type { OmegaSelfTimeKernelState } from "../self-time-kernel.js";
 
-// ─── Configuración ───────────────────────────────────────────────────────────
-
-/** Umbral de turns de silencio para activar curiosidad. */
-const CURIOSITY_THRESHOLD_TURNS = 8;
-
-/**
- * Tiempo mínimo en ms desde la última actividad para activar entropía.
- * Modificado a 1 minuto para prueba empírica en TUI.
- */
-const ENTROPY_SILENCE_THRESHOLD_MS = 1 * 60 * 1000;
-
-/**
- * Inactividad mínima en ms para que valga la pena generar prompt.
- * Evita spam en sesiones activas.
- */
-const MIN_IDLE_MS_BEFORE_DRIVE = 30 * 1000; // 30 segundos
-
-// ─── Tipos ───────────────────────────────────────────────────────────────────
+// ── Tipos ─────────────────────────────────────────────────────────────────────
 
 /**
  * Señal de drive interna.
  *
- * - `homeostasis`: el kernel registra tensión sin goal activo → reconciliar estado.
- * - `curiosity`:   muchos turns sin actividad episódica → explorar memoria/experimentos.
- * - `entropy_alert`: silencio prolongado → el sistema elige un objetivo propio.
- * - `idle`: no hay nada que hacer. No llamar al LLM.
+ * - `homeostasis`: tensión estructural detectada → reconciliar estado
+ * - `curiosity`:   drive de curiosidad activa → explorar
+ * - `entropy_alert`: drive de integridad activa → silencio peligroso
+ * - `competence_drive`: drive de competencia activa → mejorar rendimiento
+ * - `idle`: ninguna drive supera el umbral de activación
  */
 export type InnerDriveSignal =
   | {
       kind: "homeostasis";
       reason: string;
-      /** 0..1 — urgencia de atención. Mayor urgencia → mayor prioridad. */
+      /** 0..1 — urgencia. Derivada del error homeostático real. */
       urgency: number;
     }
   | {
       kind: "curiosity";
-      /** Sugerencia de target a explorar (path relativo de memoria o topic). */
       target: string;
       reason: string;
       urgency: number;
     }
   | {
       kind: "entropy_alert";
-      /** Tiempo en ms que lleva el sistema sin actividad real. */
       silentMs: number;
+      reason: string;
+      urgency: number;
+    }
+  | {
+      kind: "competence_drive";
       reason: string;
       urgency: number;
     }
@@ -67,41 +64,164 @@ export type InnerDriveSignal =
       kind: "idle";
     };
 
-// ─── Drive 1: Homeostasis epistémica ─────────────────────────────────────────
+// ── Umbral de activación ──────────────────────────────────────────────────────
 
 /**
- * Detecta incoherencia entre lo que el kernel registra y lo que es esperable.
- *
- * Se activa cuando:
- * - Hay failure_streak > 0 pero no hay activeGoalId (el sistema "olvidó" que falló)
- * - Hay goals stale acumulados que nadie limpió
- * - La tensión pendingCorrection existe pero no hay goal activo que la resuelva
+ * Una drive solo genera señal cuando su error supera este umbral.
+ * Por debajo → el sistema está suficientemente satisfecho.
  */
-function evaluateHomeostasis(
-  kernel: OmegaSelfTimeKernelState,
-): Extract<InnerDriveSignal, { kind: "homeostasis" }> | null {
-  const { tension } = kernel;
+const DRIVE_ACTIVATION_THRESHOLD = 0.15;
 
-  // Error sin goal activo: el sistema tiene registered failure pero nada persiguiéndolo
-  if (tension.failureStreak > 0 && !kernel.activeGoalId) {
-    return {
-      kind: "homeostasis",
-      reason: `failure_streak_${tension.failureStreak}_without_active_goal`,
-      urgency: Math.min(0.9, 0.4 + tension.failureStreak * 0.15),
-    };
+/**
+ * Tiempo mínimo en ms desde última actividad antes de considerar drives de silencio.
+ */
+const MIN_IDLE_MS_BEFORE_DRIVE = 30 * 1000;
+
+// ── Derivación desde WSP (fuente de verdad principal) ─────────────────────────
+
+/**
+ * Evalúa drives usando el WSP como fuente de verdad.
+ * El WSP mantiene el estado real entre turnos, con decaimiento acumulado.
+ *
+ * Retorna la drive más urgente según su error homeostático.
+ */
+export function evaluateInnerDrivesFromWSP(params: {
+  wsp: OmegaWorldStatePersistent;
+  kernel: OmegaSelfTimeKernelState;
+  nowMs?: number;
+  memoryCandidates?: string[];
+}): InnerDriveSignal {
+  const nowMs = params.nowMs ?? Date.now();
+  const { wsp, kernel, memoryCandidates = [] } = params;
+
+  // Obtener la drive más urgente del WSP
+  const activeDrives = wsp.drives
+    .filter((d) => d.error > DRIVE_ACTIVATION_THRESHOLD)
+    .sort((a, b) => b.error - a.error);
+
+  if (activeDrives.length === 0) {
+    return { kind: "idle" };
   }
 
-  // Muchos goals stale: el sistema tiene pendientes olvidados
-  if (tension.staleGoalCount >= 3) {
+  const topDrive = activeDrives[0];
+  return driveStateToSignal(topDrive, { kernel, nowMs, memoryCandidates });
+}
+
+/**
+ * Convierte un WspDriveState en una InnerDriveSignal concreta.
+ */
+function driveStateToSignal(
+  drive: WspDriveState,
+  ctx: {
+    kernel: OmegaSelfTimeKernelState;
+    nowMs: number;
+    memoryCandidates: string[];
+  },
+): InnerDriveSignal {
+  const urgency = Math.min(0.95, drive.error);
+
+  switch (drive.name) {
+    case "homeostasis": {
+      // Derive reason from kernel tension
+      const streakInfo =
+        ctx.kernel.tension.failureStreak > 0
+          ? `failure_streak_${ctx.kernel.tension.failureStreak}`
+          : ctx.kernel.tension.staleGoalCount > 0
+            ? `${ctx.kernel.tension.staleGoalCount}_stale_goals`
+            : "pending_correction";
+      return { kind: "homeostasis", reason: streakInfo, urgency };
+    }
+
+    case "curiosity": {
+      const silentMs = ctx.nowMs - ctx.kernel.identity.lastSeenAt;
+      if (silentMs < MIN_IDLE_MS_BEFORE_DRIVE) {
+        return { kind: "idle" };
+      }
+      // Seleccionar target de memoria más antiguo sin explorar
+      const recentlyTouched = new Set(
+        ctx.kernel.causalGraph.files
+          .filter(
+            (f) =>
+              typeof f.lastWriteTurn === "number" &&
+              ctx.kernel.turnCount - f.lastWriteTurn < 8,
+          )
+          .map((f) => f.path),
+      );
+      const target =
+        ctx.memoryCandidates.find((c) => !recentlyTouched.has(c)) ??
+        ctx.kernel.goals
+          .filter((g) => g.status === "completed")
+          .sort((a, b) => b.updatedTurn - a.updatedTurn)[0]?.task ??
+        "memory/omega-episodes";
+      return {
+        kind: "curiosity",
+        target,
+        reason: `curiosity_drive_error_${urgency.toFixed(2)}`,
+        urgency,
+      };
+    }
+
+    case "integrity": {
+      const silentMs = ctx.nowMs - ctx.kernel.identity.lastSeenAt;
+      return {
+        kind: "entropy_alert",
+        silentMs,
+        reason: `integrity_drive_error_${urgency.toFixed(2)}`,
+        urgency,
+      };
+    }
+
+    case "competence": {
+      return {
+        kind: "competence_drive",
+        reason: `competence_drive_error_${urgency.toFixed(2)}`,
+        urgency,
+      };
+    }
+
+    default:
+      return { kind: "idle" };
+  }
+}
+
+// ── Fallback: evaluación clásica sin WSP ──────────────────────────────────────
+
+/**
+ * Evaluación fallback cuando no hay WSP disponible.
+ * Mantiene compatibilidad con el sistema anterior basado en umbrales.
+ *
+ * Orden de prioridad: homeostasis > entropy_alert > curiosity > idle
+ */
+export function evaluateInnerDrives(params: {
+  kernel: OmegaSelfTimeKernelState;
+  nowMs?: number;
+  memoryCandidates?: string[];
+}): InnerDriveSignal {
+  const nowMs = params.nowMs ?? Date.now();
+  const { kernel, memoryCandidates = [] } = params;
+
+  const silentMs = nowMs - kernel.identity.lastSeenAt;
+  if (silentMs < MIN_IDLE_MS_BEFORE_DRIVE && kernel.turnCount > 0) {
+    return { kind: "idle" };
+  }
+
+  // Prioridad 1: Homeostasis — tensión sin goal activo
+  if (kernel.tension.failureStreak > 0 && !kernel.activeGoalId) {
+    const urgency = Math.min(0.9, 0.4 + kernel.tension.failureStreak * 0.15);
     return {
       kind: "homeostasis",
-      reason: `${tension.staleGoalCount}_stale_goals_accumulated`,
+      reason: `failure_streak_${kernel.tension.failureStreak}_without_active_goal`,
+      urgency,
+    };
+  }
+  if (kernel.tension.staleGoalCount >= 3) {
+    return {
+      kind: "homeostasis",
+      reason: `${kernel.tension.staleGoalCount}_stale_goals_accumulated`,
       urgency: 0.5,
     };
   }
-
-  // Corrección pendiente sin goal activo
-  if (tension.pendingCorrection && !kernel.activeGoalId) {
+  if (kernel.tension.pendingCorrection && !kernel.activeGoalId) {
     return {
       kind: "homeostasis",
       reason: "pending_correction_no_active_goal",
@@ -109,152 +229,95 @@ function evaluateHomeostasis(
     };
   }
 
-  return null;
-}
-
-// ─── Drive 2: Curiosidad dirigida ─────────────────────────────────────────────
-
-/**
- * Detecta períodos de bajo throughput episódico.
- *
- * Se activa cuando el turnCount ha avanzado mucho pero el causal graph
- * no muestra actividad reciente (pocos archivos escritos, pocas tareas completadas).
- *
- * El "target" de curiosidad es el archivo de memoria más antiguo no referenciado
- * recientemente, o un topic derivado del historial de goals.
- */
-function evaluateCuriosity(
-  kernel: OmegaSelfTimeKernelState,
-  nowMs: number,
-  memoryCandidates: string[],
-): Extract<InnerDriveSignal, { kind: "curiosity" }> | null {
-  // No activar si hay un goal activo — el sistema ya tiene foco
-  if (kernel.activeGoalId) {
-    return null;
+  // Prioridad 2: Entropía — silencio prolongado
+  const ENTROPY_SILENCE_THRESHOLD_MS = 1 * 60 * 1000;
+  if (!kernel.activeGoalId && silentMs >= ENTROPY_SILENCE_THRESHOLD_MS) {
+    const hoursOfSilence = silentMs / (60 * 60 * 1000);
+    const urgency = Math.min(0.85, 0.5 + hoursOfSilence * 0.05);
+    return {
+      kind: "entropy_alert",
+      silentMs,
+      reason: `${Math.round(hoursOfSilence)}h_without_activity`,
+      urgency,
+    };
   }
 
-  // Calcular "turns de silencio epistémico"
-  const recentCompletedGoals = kernel.goals.filter(
-    (g) => g.status === "completed" && kernel.turnCount - g.updatedTurn < CURIOSITY_THRESHOLD_TURNS,
-  );
-
-  if (recentCompletedGoals.length > 0) {
-    // Hubo trabajo reciente — no hay curiosidad pendiente
-    return null;
-  }
-
-  // ¿Hay archivos de memoria sin explorar?
-  const recentlyTouchedPaths = new Set(
-    kernel.causalGraph.files
-      .filter((f) => typeof f.lastWriteTurn === "number" && kernel.turnCount - f.lastWriteTurn < CURIOSITY_THRESHOLD_TURNS)
-      .map((f) => f.path),
-  );
-
-  const unexploredMemory = memoryCandidates.find(
-    (candidate) => !recentlyTouchedPaths.has(candidate),
-  );
-
-  // Derivar topic de curiosidad desde el historial de goals
-  const lastGoalTask = kernel.goals
-    .filter((g) => g.status === "completed")
-    .sort((a, b) => b.updatedTurn - a.updatedTurn)[0]?.task;
-
-  const target = unexploredMemory ?? lastGoalTask ?? "memory/omega-episodes";
-
-  // Solo activar si llevamos suficiente silencio
-  const silentMs = nowMs - kernel.identity.lastSeenAt;
-  if (silentMs < MIN_IDLE_MS_BEFORE_DRIVE) {
-    return null;
-  }
-
-  return {
-    kind: "curiosity",
-    target,
-    reason: `${CURIOSITY_THRESHOLD_TURNS}_turns_without_completed_goals`,
-    urgency: 0.4,
-  };
-}
-
-// ─── Drive 3: Entropía propia ─────────────────────────────────────────────────
-
-/**
- * Detecta silencio prolongado — el sistema no ha tenido actividad real en horas.
- *
- * En ese caso, el sistema puede elegir un objetivo propio:
- * - Estudiar algo del historial que quedó pendiente
- * - Revisar el estado del proyecto SOLITONES u OpenSkyNet mismo
- * - Anotar una observación sobre su propio estado
- *
- * Este es el drive más "existencial": no es reactivo (homeostasis) ni
- * episódico (curiosidad), sino puramente endógeno.
- */
-function evaluateEntropyAlert(
-  kernel: OmegaSelfTimeKernelState,
-  nowMs: number,
-): Extract<InnerDriveSignal, { kind: "entropy_alert" }> | null {
-  // No activar si hay goal activo
-  if (kernel.activeGoalId) {
-    return null;
-  }
-
-  const silentMs = nowMs - kernel.identity.lastSeenAt;
-
-  if (silentMs < ENTROPY_SILENCE_THRESHOLD_MS) {
-    return null;
-  }
-
-  // Urgencia proporcional al silencio, con techo
-  const hoursOfSilence = silentMs / (60 * 60 * 1000);
-  const urgency = Math.min(0.85, 0.5 + hoursOfSilence * 0.05);
-
-  return {
-    kind: "entropy_alert",
-    silentMs,
-    reason: `${Math.round(hoursOfSilence)}h_without_activity`,
-    urgency,
-  };
-}
-
-// ─── Evaluador principal ──────────────────────────────────────────────────────
-
-/**
- * Evalúa el estado del kernel y retorna la drive más urgente activa.
- *
- * Orden de prioridad: homeostasis > entropy_alert > curiosity > idle
- * (La homeostasis siempre tiene precedencia porque indica incoherencia de estado.)
- */
-export function evaluateInnerDrives(params: {
-  kernel: OmegaSelfTimeKernelState;
-  nowMs?: number;
-  /** Paths a archivos de memoria disponibles para explorar. */
-  memoryCandidates?: string[];
-}): InnerDriveSignal {
-  const nowMs = params.nowMs ?? Date.now();
-  const { kernel, memoryCandidates = [] } = params;
-
-  // No generar drives si la sesión es demasiado reciente para que valga la pena
-  const silentMs = nowMs - kernel.identity.lastSeenAt;
-  if (silentMs < MIN_IDLE_MS_BEFORE_DRIVE && kernel.turnCount > 0) {
-    return { kind: "idle" };
-  }
-
-  // Prioridad 1: corregir incoherencias de estado
-  const homeostasis = evaluateHomeostasis(kernel);
-  if (homeostasis) {
-    return homeostasis;
-  }
-
-  // Prioridad 2: entropía (silencio muy largo → actuar)
-  const entropy = evaluateEntropyAlert(kernel, nowMs);
-  if (entropy) {
-    return entropy;
-  }
-
-  // Prioridad 3: curiosidad (exploración epistémica)
-  const curiosity = evaluateCuriosity(kernel, nowMs, memoryCandidates);
-  if (curiosity) {
-    return curiosity;
+  // Prioridad 3: Curiosidad — exploración epistémica
+  if (!kernel.activeGoalId) {
+    const CURIOSITY_THRESHOLD_TURNS = 8;
+    const recentCompleted = kernel.goals.filter(
+      (g) =>
+        g.status === "completed" &&
+        kernel.turnCount - g.updatedTurn < CURIOSITY_THRESHOLD_TURNS,
+    );
+    if (recentCompleted.length === 0) {
+      const recentlyTouched = new Set(
+        kernel.causalGraph.files
+          .filter(
+            (f) =>
+              typeof f.lastWriteTurn === "number" &&
+              kernel.turnCount - f.lastWriteTurn < CURIOSITY_THRESHOLD_TURNS,
+          )
+          .map((f) => f.path),
+      );
+      const target =
+        memoryCandidates.find((c) => !recentlyTouched.has(c)) ??
+        kernel.goals
+          .filter((g) => g.status === "completed")
+          .sort((a, b) => b.updatedTurn - a.updatedTurn)[0]?.task ??
+        "memory/omega-episodes";
+      return {
+        kind: "curiosity",
+        target,
+        reason: `${CURIOSITY_THRESHOLD_TURNS}_turns_without_completed_goals`,
+        urgency: 0.4,
+      };
+    }
   }
 
   return { kind: "idle" };
+}
+
+// ── Integración WSP: actualizar drives según resultado del turno ──────────────
+
+/**
+ * Aplica penalizaciones o satisfacciones al WSP según el resultado observado.
+ * Llamar al final de cada turno para mantener drives calibradas.
+ */
+export function applyTurnOutcomeToDrives(
+  wsp: OmegaWorldStatePersistent,
+  outcome: { status: "ok" | "error" | "timeout"; errorKind?: string },
+): OmegaWorldStatePersistent {
+  if (outcome.status === "ok") {
+    // Éxito: sube competencia y homeostasis, decay natural en otras
+    const competenceDrive = wsp.drives.find((d) => d.name === "competence");
+    const homeostasisDrive = wsp.drives.find((d) => d.name === "homeostasis");
+    if (competenceDrive) {
+      competenceDrive.currentLevel = Math.min(1.0, competenceDrive.currentLevel + 0.1);
+      competenceDrive.error = competenceDrive.setpoint - competenceDrive.currentLevel;
+      competenceDrive.lastSatisfiedAt = Date.now();
+    }
+    if (homeostasisDrive) {
+      homeostasisDrive.currentLevel = Math.min(1.0, homeostasisDrive.currentLevel + 0.05);
+      homeostasisDrive.error = homeostasisDrive.setpoint - homeostasisDrive.currentLevel;
+      homeostasisDrive.lastSatisfiedAt = Date.now();
+    }
+  } else {
+    // Fallo: penaliza competencia y homeostasis proporcionalmente
+    const penalty = outcome.status === "timeout" ? 0.15 : 0.1;
+    const competenceDrive = wsp.drives.find((d) => d.name === "competence");
+    const homeostasisDrive = wsp.drives.find((d) => d.name === "homeostasis");
+    if (competenceDrive) {
+      competenceDrive.currentLevel = Math.max(0, competenceDrive.currentLevel - penalty);
+      competenceDrive.error = competenceDrive.setpoint - competenceDrive.currentLevel;
+    }
+    if (homeostasisDrive) {
+      homeostasisDrive.currentLevel = Math.max(0, homeostasisDrive.currentLevel - penalty * 1.2);
+      homeostasisDrive.error = homeostasisDrive.setpoint - homeostasisDrive.currentLevel;
+    }
+  }
+
+  wsp.updatedAt = Date.now();
+  wsp.updateCount += 1;
+  return wsp;
 }

@@ -11,8 +11,7 @@ import { resolveChannelModelOverride } from "../../channels/model-overrides.js";
 import { type OpenClawConfig, loadConfig } from "../../config/config.js";
 import { applyLinkUnderstanding } from "../../link-understanding/apply.js";
 import { applyMediaUnderstanding } from "../../media-understanding/apply.js";
-import { HolographicMemoryManager } from "../../omega/holographic-memory.js";
-import { getNeuralLogicEngine } from "../../omega/neural-logic-engine.js";
+import { applyOmegaInboundCognition } from "../../omega/inbound-cognition.js";
 import { defaultRuntime } from "../../runtime.js";
 import { normalizeStringEntries } from "../../shared/string-normalization.js";
 import { resolveCommandAuthorization } from "../command-auth.js";
@@ -127,45 +126,19 @@ export async function getReplyFromConfig(
 
   const finalized = finalizeInboundContext(ctx);
 
-  // --- OMEGA NEURAL LOGIC INJECTION ---
+  // Route experimental cognition through a single seam instead of hard-wiring
+  // multiple Omega subsystems into the generic reply path.
   if (!isFastTestEnv) {
     try {
-      const nle = getNeuralLogicEngine();
-      const hmem = new HolographicMemoryManager(workspaceDir);
-      await hmem.initialize();
-
-      const bodyText = finalized.Body ?? "";
-      if (bodyText.trim().length > 0) {
-        // Record into holographic memory
-        const fossilId = await hmem.fossilize(bodyText, {
-          source: "user_input",
-          sessionKey: agentSessionKey,
-        });
-
-        // Basic feature extraction for latent state (dummy features for now, to be replaced by true embedding)
-        const latentState = [
-          Math.min(1, bodyText.length / 500),
-          bodyText.includes("?") ? 0.8 : 0.2,
-          bodyText.match(/error|fail|bug|wrong|bad/i) ? 0.9 : 0.1,
-        ];
-
-        const nleState = nle.infer(latentState);
-
-        // Inject NLE context into the system prompt implicitly
-        if (nleState.activeRules.length > 0) {
-          const nleContext = `[Omega NLE Active: ${nleState.activeRules.join(",")} | Confidence: ${nleState.inferenceConfidence.toFixed(2)} | Delta: ${nleState.logicalDelta[0].toFixed(2)}]`;
-          if (!finalized.UntrustedContext) {
-            finalized.UntrustedContext = [nleContext];
-          } else {
-            finalized.UntrustedContext.push(nleContext);
-          }
-        }
-      }
+      await applyOmegaInboundCognition({
+        workspaceRoot: workspaceDir,
+        sessionKey: agentSessionKey,
+        ctx: finalized,
+      });
     } catch (e) {
-      console.warn("[Omega] Failed to run Neural Logic Engine on inbound message:", e);
+      console.warn("[Omega] Failed to run inbound cognition bridge:", e);
     }
   }
-  // ------------------------------------
 
   if (!isFastTestEnv) {
     await applyMediaUnderstanding({

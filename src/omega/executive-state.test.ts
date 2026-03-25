@@ -94,7 +94,6 @@ describe("omega executive state", () => {
           stopReason: "continue",
           replyHeartbeatOk: false,
           structuredIdleDetected: false,
-          kind: "continue",
         },
         stateDelta: {
           timelineDelta: 0,
@@ -124,7 +123,6 @@ describe("omega executive state", () => {
           stopReason: "continue",
           replyHeartbeatOk: false,
           structuredIdleDetected: false,
-          kind: "continue",
         },
         stateDelta: {
           timelineDelta: 0,

@@ -237,6 +237,18 @@ export async function executeAutonomousAction(params: {
       };
     }
 
+    case "competence_drive": {
+      const statusCheck = await executeStatusCheck(workspaceRoot);
+      if (statusCheck.issues.length > 0) {
+        return {
+          kind: "status_check",
+          status: statusCheck.status,
+          issues: statusCheck.issues,
+        };
+      }
+      return { kind: "none", reason: "competence_nominal" };
+    }
+
     case "idle":
     default:
       return { kind: "none", reason: "no_drive_active" };
@@ -297,12 +309,14 @@ export async function runAutonomousCycle(params: {
  */
 export function formatAutonomousExecution(exec: AutonomousExecution): string {
   const timestamp = new Date(exec.executedAt).toISOString();
-  const driveEmoji = {
+  const driveEmojiByKind: Record<InnerDriveSignal["kind"], string> = {
     homeostasis: "🏥",
     curiosity: "🔍",
     entropy_alert: "⚡",
+    competence_drive: "🛠️",
     idle: "💤",
-  }[exec.driveKind];
+  };
+  const driveEmoji = driveEmojiByKind[exec.driveKind];
 
   let actionText = "";
   switch (exec.action.kind) {

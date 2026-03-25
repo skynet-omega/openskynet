@@ -8,11 +8,19 @@
  * - Detects uncertainty and works to resolve it
  * - Operates INDEPENDENTLY of external triggers
  *
+ * PERSISTENCIA: Los pensamientos se guardan en .openskynet/omega-thoughts.jsonl
+ * y sobreviven reinicios. El singleton carga el historial al inicializarse.
+ *
  * This is what transforms OpenSkyNet from "reactive system"
  * to "genuinely autonomous agent".
  */
 
+import fs from "node:fs/promises";
+import path from "node:path";
 import type { OmegaSelfTimeKernelState } from "./self-time-kernel.js";
+
+const THOUGHTS_FILENAME = "omega-thoughts.jsonl";
+const MAX_PERSISTED_THOUGHTS = 500; // Límite para evitar crecimiento ilimitado
 
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -97,22 +105,31 @@ export class ContinuousThinkingEngine {
   };
 
   private thoughtCounter = 0;
-
   private kernel: OmegaSelfTimeKernelState | null = null;
+  /** Ruta del workspace para persistencia — se establece en initialize() */
+  private workspaceRoot: string | null = null;
+  /** Indica si ya cargó el historial del disco */
+  private loaded = false;
 
   /**
-   * Initialize with kernel state (needed for context-aware thinking)
+   * Initialize with kernel state and optionally workspace root for FS persistence.
+   * Si se provee workspaceRoot, carga el historial previo del disco.
    */
-  initialize(kernel: OmegaSelfTimeKernelState): void {
+  async initialize(kernel: OmegaSelfTimeKernelState, workspaceRoot?: string): Promise<void> {
     this.kernel = kernel;
     this.state.isActive = true;
+    if (workspaceRoot && !this.loaded) {
+      this.workspaceRoot = workspaceRoot;
+      await this.loadFromDisk();
+      this.loaded = true;
+    }
   }
 
   /**
    * THE MAIN THINKING LOOP
    *
-   * This runs continuously (not waiting for external trigger).
-   * Generates genuine questions based on measured uncertainty.
+   * Genera pensamientos basados en incertidumbre medida.
+   * Persiste los nuevos pensamientos en disco si workspaceRoot está configurado.
    */
   think(kernel: OmegaSelfTimeKernelState): ContinuousThought[] {
     if (!this.state.isActive) {
@@ -144,6 +161,11 @@ export class ContinuousThinkingEngine {
 
     // Update uncertainty estimates
     this.updateUncertaintyMetrics(kernel);
+
+    // Persist asíncronamente sin bloquear el loop
+    if (newThoughts.length > 0 && this.workspaceRoot) {
+      void this.persistToDisk(newThoughts);
+    }
 
     return newThoughts;
   }
@@ -349,7 +371,8 @@ export class ContinuousThinkingEngine {
   }
 
   /**
-   * Create a thought with all fields
+   * Create a thought with all fields.
+   * La confianza se deriva del estado real del kernel (no aleatoriedad).
    */
   private createThought(params: {
     drive: "learning" | "entropy_minimization" | "adaptive_depth";
@@ -358,14 +381,25 @@ export class ContinuousThinkingEngine {
     expectedEntropyReduction?: number;
   }): ContinuousThought {
     this.thoughtCounter += 1;
+
+    // Confianza derivada del estado del kernel (no random)
+    let confidence = 0.5;
+    if (this.kernel) {
+      const totalGoals = this.kernel.goals.length || 1;
+      const successRate = this.kernel.goals.filter((g) => g.status === "completed").length / totalGoals;
+      const stabilityFactor = Math.max(0, 1 - this.kernel.tension.failureStreak / 5);
+      confidence = (successRate * 0.5 + stabilityFactor * 0.5);
+      confidence = Math.max(0.1, Math.min(0.95, confidence));
+    }
+
     return {
       id: `thought_${this.state.totalCycles}_${this.thoughtCounter}`,
       timestamp: Date.now(),
       drive: params.drive,
       question: params.question,
       reasoning: params.reasoning,
-      confidence: 0.6 + Math.random() * 0.35, // 0.6-0.95, realistic uncertainty
-      expectedEntropyReduction: params.expectedEntropyReduction || 0.15,
+      confidence,
+      expectedEntropyReduction: params.expectedEntropyReduction ?? 0.15,
       processed: false,
     };
   }
@@ -433,6 +467,61 @@ export class ContinuousThinkingEngine {
       causalUncertainty: this.state.causalUncertainty,
       totalCycles: this.state.totalCycles,
     };
+  }
+
+  // ── Persistencia en FS ──────────────────────────────────────────────────────
+
+  /**
+   * Carga historial de pensamientos desde .openskynet/omega-thoughts.jsonl.
+   * Solo carga los últimos MAX_PERSISTED_THOUGHTS para no sobrecargar memoria.
+   */
+  private async loadFromDisk(): Promise<void> {
+    if (!this.workspaceRoot) return;
+    const filePath = path.join(this.workspaceRoot, ".openskynet", THOUGHTS_FILENAME);
+    try {
+      const raw = await fs.readFile(filePath, "utf-8");
+      const lines = raw.trim().split("\n").filter(Boolean);
+      const recent = lines.slice(-MAX_PERSISTED_THOUGHTS);
+      const loaded: ContinuousThought[] = [];
+      for (const line of recent) {
+        try {
+          loaded.push(JSON.parse(line) as ContinuousThought);
+        } catch {
+          // Línea corrupta — ignorar
+        }
+      }
+      // Merge con estado actual (los del historial van primero)
+      this.state.thoughts = [...loaded, ...this.state.thoughts];
+      // Recalcular contador para evitar colisiones de ID
+      this.thoughtCounter = loaded.length;
+    } catch {
+      // Archivo no existe aún — primera ejecución
+    }
+  }
+
+  /**
+   * Persiste pensamientos nuevos en JSONL (append-only para eficiencia).
+   * Si el archivo supera MAX_PERSISTED_THOUGHTS líneas, rota (trunca antiguas).
+   */
+  private async persistToDisk(newThoughts: ContinuousThought[]): Promise<void> {
+    if (!this.workspaceRoot || newThoughts.length === 0) return;
+    const dir = path.join(this.workspaceRoot, ".openskynet");
+    const filePath = path.join(dir, THOUGHTS_FILENAME);
+    try {
+      await fs.mkdir(dir, { recursive: true }).catch(() => {});
+      const lines = newThoughts.map((t) => JSON.stringify(t)).join("\n") + "\n";
+      await fs.appendFile(filePath, lines, "utf-8");
+
+      // Rotación: si el archivo crece demasiado, mantener solo las últimas N líneas
+      const full = await fs.readFile(filePath, "utf-8");
+      const allLines = full.trim().split("\n").filter(Boolean);
+      if (allLines.length > MAX_PERSISTED_THOUGHTS) {
+        const trimmed = allLines.slice(-MAX_PERSISTED_THOUGHTS).join("\n") + "\n";
+        await fs.writeFile(filePath, trimmed, "utf-8");
+      }
+    } catch {
+      // Error de I/O — ignorar silenciosamente para no interrumpir el loop
+    }
   }
 }
 
