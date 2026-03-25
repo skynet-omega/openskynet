@@ -50,8 +50,11 @@ async function testEmpiricalThoughtArchitecture() {
     cognitiveResidue: "Does it persist between calls?",
   });
 
-  const parsedResult = JSON.parse(result.content[0].text);
-
+  const firstContent = result.content[0];
+  if (!firstContent || firstContent.type !== "text") {
+    throw new Error("Expected text content");
+  }
+  const parsedResult = JSON.parse(firstContent.text);
   if (parsedResult.success && parsedResult.updatedState.macroIntent === testIntent) {
     console.log("✅ Herramienta update_frontal_lobe funcionó correctamente.");
   } else {

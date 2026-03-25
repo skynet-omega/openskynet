@@ -8,6 +8,7 @@ export type OmegaUtilityBreakdown = {
   wallTimeCost: number;
   disruptionCost: number;
   total: number;
+  expectedUtility?: number;
 };
 
 export type OmegaBudgetUsage = {
@@ -15,6 +16,7 @@ export type OmegaBudgetUsage = {
   estimatedLlmCalls: number;
   observedWallTimeMs: number;
   budgetPressure: number;
+  turnPressure?: number;
 };
 
 function clampUnit(value: number): number {
@@ -42,6 +44,7 @@ export function deriveOmegaBudgetUsage(params: {
     estimatedLlmCalls,
     observedWallTimeMs,
     budgetPressure: clampUnit(Math.max(turnPressure, llmPressure, wallTimePressure)),
+    turnPressure,
   };
 }
 
@@ -74,5 +77,6 @@ export function computeOmegaUtilityBreakdown(params: {
       tokenCost -
       wallTimeCost -
       disruptionCost,
+    expectedUtility: params.expectedUtility,
   };
 }

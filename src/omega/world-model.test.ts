@@ -259,40 +259,40 @@ describe("omega world model", () => {
   });
 
   it("derives an isolation bias from repeated low-locality failures", async () => {
-    await admitOmegaDurableMemory({
-      workspaceRoot,
-      sessionKey,
-      task: "Patch isolated config path",
-      validation: { expectsJson: false, expectedKeys: [], expectedPaths: ["src/config.ts"] },
-      outcome: {
-        status: "error",
-        errorKind: "unexpected_collateral_writes",
-        observedChangedFiles: ["src/config.ts", "src/other.ts", "src/protected.ts"],
-        writeOk: false,
-        localityScore: 0.3,
-        // protectedPreservationRate: 0.2,
-      },
-    });
-    await admitOmegaDurableMemory({
-      workspaceRoot,
-      sessionKey,
-      task: "Patch isolated config path",
-      validation: { expectsJson: false, expectedKeys: [], expectedPaths: ["src/config.ts"] },
-      outcome: {
-        status: "error",
-        errorKind: "unexpected_collateral_writes",
-        observedChangedFiles: ["src/config.ts", "src/other.ts", "src/protected.ts"],
-        writeOk: false,
-        localityScore: 0.3,
-        // protectedPreservationRate: 0.2,
-      },
-    });
+    // Durable Memory now uses a global store in .openskynet/omega-durable-memory/global-durable-memory.json
+    const memoryDir = path.join(workspaceRoot, ".openskynet", "omega-durable-memory");
+    await fs.mkdir(memoryDir, { recursive: true });
+    const memoryFile = path.join(memoryDir, "global-durable-memory.json");
+
+    await fs.writeFile(
+      memoryFile,
+      JSON.stringify({
+        sessionKey,
+        updatedAt: Date.now(),
+        entries: [
+          {
+            id: "fail-1",
+            kind: "repeated_failure",
+            task: "Patch isolated config path",
+            targets: ["src/config.ts", "src/other.ts", "src/protected.ts"],
+            observedChangedFiles: ["src/config.ts", "src/other.ts", "src/protected.ts"],
+            localityScore: 0.3,
+            protectedPreservationRate: 0.2,
+            failureCount: 2,
+            successCount: 0,
+            learnedConstraints: [],
+            firstSeenAt: Date.now(),
+            lastSeenAt: Date.now(),
+            lastOutcomeStatus: "error",
+          },
+        ],
+      }),
+    );
 
     const snapshot = await loadOmegaWorldModelSnapshot({
       workspaceRoot,
       sessionKey,
       task: "patch config",
-      expectedPaths: ["src/config.ts"],
     });
 
     expect(snapshot.localityRoutingPreference).toMatchObject({

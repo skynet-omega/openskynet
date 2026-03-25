@@ -18,7 +18,7 @@ import {
   loadOmegaOperationalMemorySummary,
   type OmegaOperationalMemorySummary,
 } from "./operational-memory.js";
-import type { OmegaInterruptedGoalRecovery } from "./recovery.js";
+import type { OmegaInterruptedGoalRecovery } from "./types.js";
 import { loadOmegaWorldModelSnapshot, type OmegaWorldModelSnapshot } from "./world-model.js";
 
 export type OmegaExecutionControllerState = {

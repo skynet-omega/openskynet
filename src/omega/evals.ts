@@ -1,5 +1,6 @@
-import { critiqueOmegaOutcome, type OmegaOutcomeCritique } from "./critic.js";
+import { critiqueOmegaOutcome } from "./critic.js";
 import type {
+  OmegaOutcomeCritique,
   OmegaSessionTaskValidationRequest,
   OmegaSessionTaskValidationSummary,
 } from "./types.js";

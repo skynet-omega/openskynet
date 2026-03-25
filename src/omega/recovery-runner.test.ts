@@ -338,10 +338,12 @@ describe("omega recovery runner", () => {
       recovery: {
         strategies: {
           "target_not_touched|single_target|contained|omega_delegate": {
+            attempts: 3,
             successes: 3,
             failures: 0,
           },
           "target_not_touched|single_target|contained|sessions_spawn": {
+            attempts: 2,
             successes: 0,
             failures: 2,
           },

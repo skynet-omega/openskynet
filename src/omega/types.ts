@@ -71,6 +71,7 @@ export type OmegaInterruptedGoalRecovery = {
   suggestedRoute: "omega_delegate" | "sessions_spawn";
   resumeTask: string;
   collateralPaths?: string[];
+  expectedUtility?: number;
 };
 
 /**

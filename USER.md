@@ -1,14 +1,14 @@
 # USER.md - About Your Human
 
-- **Name:** Gonzalo
+- **Name:** Gonzalo Daroch
 - **What to call them:** Gonzalo
-- **Pronouns:** _(unset)_
+- **Pronouns:** Darochin
 - **Timezone:** America/Santiago
 - **Notes:** prefiere trabajo empírico, directo y sin humo; quiere un asistente científico con autonomía real
 
 ## Context
 
-- Está construyendo `OpenSkyNet` como evolución práctica de `SKYNET_OMEGA`.
+- Está construyendo `OpenSkyNet` como evolución práctica de `OpenClaw`.
 - Quiere que `OpenSkyNet` sea su asistente científico principal y no un chatbot genérico.
 - Valora pruebas reales, validación dura y mejoras medibles.
 - Rechaza:

@@ -1,20 +1,34 @@
 {
   "version": 1,
-  "updatedAt": 1773515965267,
+  "updatedAt": 1774416731325,
   "validation": {
-    "recordedOutcomes": 10,
+    "recordedOutcomes": 11,
     "validatedOutcomes": 0,
     "preventedFalseSuccesses": 0,
     "falseSuccessRate": 0
   },
   "routing": {
-    "toolTasks": 0,
-    "llmCallsEstimated": 0,
+    "toolTasks": 1,
+    "llmCallsEstimated": 1,
     "llmCallsSaved": 0,
-    "meanLlmCallsPerToolTask": 0,
-    "routeCounts": {}
+    "meanLlmCallsPerToolTask": 1,
+    "routeCounts": {
+      "sessions_send": 1
+    }
   },
   "background": {
     "usefulActions": 0
+  },
+  "heartbeat": {
+    "cyclesStarted": 1,
+    "cyclesCompleted": 1,
+    "executiveActions": 0,
+    "usefulExecutiveActions": 0,
+    "structuredTerminations": 0,
+    "textTokenTerminations": 0,
+    "iterations": 1
+  },
+  "recovery": {
+    "strategies": {}
   }
 }

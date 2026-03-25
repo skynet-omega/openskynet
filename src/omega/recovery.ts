@@ -121,6 +121,7 @@ export function deriveOmegaInterruptedGoalRecovery(params: {
       suggestedRoute,
       lastErrorKind,
     }),
+    expectedUtility: 0.5,
   };
 }
 

@@ -16,70 +16,92 @@ import path from "node:path";
 const INTERACTION_LOCK_FILE = ".interaction-lock";
 const LOCK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutos: si TUI se cuelga, daemon sigue
 
-/**
- * DAEMON ENTRY POINT
- * Se ejecuta una sola vez al boot/inicio
- * Luego ejecuta runAutonomousLoop() de forma coordinada
- */
-export async function startAutonomousDaemon(params: { workspaceRoot: string; sessionKey: string }) {
+export interface DaemonParams {
+  workspaceRoot: string;
+  sessionKey: string;
+  signal?: AbortSignal;
+}
+
+export interface DaemonDeps {
+  checkInteractionLock?: (path: string) => Promise<boolean>;
+  runHeartbeatCycle?: (params: { workspaceRoot: string; sessionKey: string }) => Promise<void>;
+  sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
+  log?: (...args: any[]) => void;
+  error?: (...args: any[]) => void;
+}
+
+export async function startAutonomousDaemon(params: DaemonParams, deps: DaemonDeps = {}) {
   const lockFilePath = path.join(params.workspaceRoot, INTERACTION_LOCK_FILE);
+  const log = deps.log ?? console.log;
+  const errorLog = deps.error ?? console.error;
 
-  console.log("[DAEMON] 🚀 Iniciando OpenSkyNet Autonomous Daemon");
-  console.log(`[DAEMON] Session: ${params.sessionKey}`);
-  console.log(`[DAEMON] Lock file: ${lockFilePath}`);
-  console.log(`[DAEMON] Presiona Ctrl+C para detener`);
-  console.log("");
+  log("[DAEMON] 🚀 Iniciando OpenSkyNet Autonomous Daemon");
+  log(`[DAEMON] Session: ${params.sessionKey}`);
+  log(`[DAEMON] Lock file: ${lockFilePath}`);
+  log(`[DAEMON] Presiona Ctrl+C para detener`);
+  log("");
 
-  /**
-   * WRAPPER del loop autónomo que respeta la interacción
-   */
   const wrappedLoop = async () => {
-    const originalInterval = 5; // 5 minutos entre ciclos
+    const originalInterval = 5;
 
     let cycleCount = 0;
 
-    while (true) {
+    while (!params.signal?.aborted) {
       cycleCount++;
 
-      // CHECK: ¿Hay interacción activa?
-      const isInteracting = await checkInteractionLock(lockFilePath);
+      const isInteracting = deps.checkInteractionLock
+        ? await deps.checkInteractionLock(lockFilePath)
+        : await checkInteractionLock(lockFilePath);
 
       if (isInteracting) {
-        console.log(`[DAEMON] 🧑 Interacción detectada. Daemon en pausa (ciclo ${cycleCount})...`);
-        // Espera menos: verifica cada 10s si TUI terminó
-        await sleep(10 * 1000);
+        log(`[DAEMON] 🧑 Interacción detectada. Daemon en pausa (ciclo ${cycleCount})...`);
+        const sleepFn = deps.sleep ?? sleep;
+        await sleepFn(10 * 1000, params.signal);
         continue;
       }
 
-      // AUTONOMÍA: Ejecuta ciclo
-      console.log(`[DAEMON] 🤖 Ciclo #${cycleCount} - Daemon activo`);
+      log(`[DAEMON] 🤖 Ciclo #${cycleCount} - Daemon activo`);
       try {
-        // Ejecuta ciclo real
-        const { runOneHeartbeatCycle } = await import("./heartbeat.js");
-        await runOneHeartbeatCycle({
-          workspaceRoot: params.workspaceRoot,
-          sessionKey: params.sessionKey,
-        });
-        console.log(`[DAEMON] ✓ Ciclo ${cycleCount} completado`);
+        if (deps.runHeartbeatCycle) {
+          await deps.runHeartbeatCycle({
+            workspaceRoot: params.workspaceRoot,
+            sessionKey: params.sessionKey,
+          });
+        } else {
+          const { runOneHeartbeatCycle } = await import("./heartbeat.js");
+          await runOneHeartbeatCycle({
+            workspaceRoot: params.workspaceRoot,
+            sessionKey: params.sessionKey,
+          });
+        }
+        log(`[DAEMON] ✓ Ciclo ${cycleCount} completado`);
       } catch (error) {
-        console.error(`[DAEMON] ❌ Error en ciclo ${cycleCount}:`, error);
-        // Continue despite errors
+        errorLog(`[DAEMON] ❌ Error en ciclo ${cycleCount}:`, error);
       }
 
-      // Espera N minutos hasta próximo ciclo
-      console.log(`[DAEMON] ⏰ Próximo ciclo en ${originalInterval} min (o si termina TUI)...`);
-      await sleep(originalInterval * 60 * 1000);
+      if (params.signal?.aborted) break;
+
+      log(`[DAEMON] ⏰ Próximo ciclo en ${originalInterval} min (o si termina TUI)...`);
+      const sleepFn = deps.sleep ?? sleep;
+      await sleepFn(originalInterval * 60 * 1000, params.signal);
     }
   };
 
-  // Ejecuta el loop
-  await wrappedLoop();
+  try {
+    await wrappedLoop();
+  } catch (error) {
+    if (params.signal?.aborted) {
+      log("[DAEMON] 🛑 Detenido por señal de aborto.");
+    } else {
+      throw error;
+    }
+  }
 }
 
 /**
  * Verifica si hay interacción activa (archivo lock existe)
  */
-async function checkInteractionLock(lockFilePath: string): Promise<boolean> {
+export async function checkInteractionLock(lockFilePath: string): Promise<boolean> {
   try {
     const stat = await fs.stat(lockFilePath);
     const ageMs = Date.now() - stat.mtimeMs;
@@ -152,6 +174,21 @@ export async function refreshInteractionLock(
 /**
  * Helper: duerme N millisegundos
  */
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(signal.reason);
+
+    const timeout = setTimeout(resolve, ms);
+
+    if (signal) {
+      signal.addEventListener(
+        "abort",
+        () => {
+          clearTimeout(timeout);
+          reject(signal.reason);
+        },
+        { once: true },
+      );
+    }
+  });
 }

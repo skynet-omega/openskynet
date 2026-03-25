@@ -90,8 +90,11 @@ describe("omega executive state", () => {
         iteration: 1,
         terminationReason: "continue",
         decision: {
-          kind: "dispatch_turn",
-          reason: "normal_operation",
+          shouldContinue: true,
+          stopReason: "continue",
+          replyHeartbeatOk: false,
+          structuredIdleDetected: false,
+          kind: "continue",
         },
         stateDelta: {
           timelineDelta: 0,
@@ -117,8 +120,11 @@ describe("omega executive state", () => {
         iteration: 2,
         terminationReason: "continue",
         decision: {
-          kind: "dispatch_turn",
-          reason: "normal_operation",
+          shouldContinue: true,
+          stopReason: "continue",
+          replyHeartbeatOk: false,
+          structuredIdleDetected: false,
+          kind: "continue",
         },
         stateDelta: {
           timelineDelta: 0,

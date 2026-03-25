@@ -660,6 +660,7 @@ export interface OmegaHeartbeatTurnDecision {
   stopReason: "structured_idle" | "reply_heartbeat_ok" | "no_progress" | "active_goal" | "continue";
   replyHeartbeatOk: boolean;
   structuredIdleDetected: boolean;
+  kind?: string;
 }
 
 /**
@@ -699,6 +700,7 @@ export function deriveOmegaHeartbeatTurnDecision(params: {
       stopReason: "reply_heartbeat_ok",
       replyHeartbeatOk: true,
       structuredIdleDetected: false,
+      kind: "reply_heartbeat_ok",
     };
   }
 
@@ -709,6 +711,7 @@ export function deriveOmegaHeartbeatTurnDecision(params: {
       stopReason: "structured_idle",
       replyHeartbeatOk: false,
       structuredIdleDetected: true,
+      kind: "structured_idle",
     };
   }
 
@@ -717,6 +720,7 @@ export function deriveOmegaHeartbeatTurnDecision(params: {
     stopReason: "continue",
     replyHeartbeatOk: false,
     structuredIdleDetected: false,
+    kind: "continue",
   };
 }
 
