@@ -25,9 +25,10 @@
 **/ModuleCache/
 **/node_modules/
 *.bun-build
-*.log
+*.log*
 *.pyc
-.*.log
+.*.log*
+*.Zone.Identifier
 .DS_Store
 .agent/
 .agent/*.json
