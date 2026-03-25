@@ -49,4 +49,16 @@ describe("omega critic", () => {
     expect(critique.verdict).toBe("useful");
     expect(critique.reasons).toContain("substantive_reply");
   });
+
+  it("accepts HEARTBEAT_OK. with a dot as a substantive reply", () => {
+    const critique = critiqueOmegaOutcome({
+      task: "maintain system",
+      reply: "HEARTBEAT_OK.",
+      observedChangedFiles: [],
+      expectedPaths: [],
+    });
+
+    expect(critique.verdict).toBe("useful");
+    expect(critique.reasons).toContain("substantive_reply");
+  });
 });

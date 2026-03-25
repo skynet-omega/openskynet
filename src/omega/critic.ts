@@ -40,7 +40,11 @@ function replyLooksSubstantive(reply: string | undefined): boolean {
   }
   // Permitir confirmaciones de pensamiento interno (ej: NO_REPLY o HEARTBEAT_OK)
   // como sustantivas si el sistema las usa para señalizar fin de tarea.
-  if (normalizedReply === "no_reply" || normalizedReply === "heartbeat_ok") {
+  if (
+    normalizedReply === "no_reply" ||
+    normalizedReply === "heartbeat_ok" ||
+    normalizedReply === "heartbeat_ok."
+  ) {
     return true;
   }
   if (normalizedReply.startsWith("{") && normalizedReply.endsWith("}")) {
