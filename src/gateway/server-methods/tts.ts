@@ -1,7 +1,6 @@
 import { loadConfig } from "../../config/config.js";
+import { OPENAI_TTS_MODELS, OPENAI_TTS_VOICES } from "../../tts/tts-core.js";
 import {
-  OPENAI_TTS_MODELS,
-  OPENAI_TTS_VOICES,
   getTtsProvider,
   isTtsEnabled,
   isTtsProviderConfigured,
