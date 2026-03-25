@@ -329,12 +329,16 @@ export async function syncOmegaProblemAgenda(params: {
         0.1,
         Math.max(current.priority * 0.6, candidate.priority) + current.realizedUtility * 0.08,
       );
+      const hasNewEvidence = candidate.evidenceCount > current.evidenceCount;
       current.evidenceCount = Math.max(current.evidenceCount, candidate.evidenceCount);
       current.lastSeenAt = now;
       if (current.failureCount >= 2 && current.realizedUtility <= -0.3) {
         current.status = "dormant";
         current.priority = Math.min(current.priority, 0.16);
-      } else if (current.status === "dormant" || current.status === "resolved") {
+      } else if (
+        current.status === "dormant" ||
+        (current.status === "resolved" && hasNewEvidence)
+      ) {
         current.status = "open";
       }
       continue;
