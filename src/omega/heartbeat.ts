@@ -925,6 +925,9 @@ export async function runOneHeartbeatCycleWithDeps(
   const MAX_ITERATIONS = 2; // Reduced from 8 to prevent quota exhaustion loops
 
   let snapshot = await deps.loadRuntimeSnapshot({ workspaceRoot, sessionKey });
+  if (!snapshot) {
+    return { iterations: 0, stopReason: "snapshot_load_failure", lastWakeActionKind };
+  }
 
   for (let i = 1; i <= MAX_ITERATIONS; i++) {
     iterations = i;
@@ -933,7 +936,12 @@ export async function runOneHeartbeatCycleWithDeps(
       deps,
     );
 
-    snapshot = await deps.loadRuntimeSnapshot({ workspaceRoot, sessionKey });
+    const nextSnapshot = await deps.loadRuntimeSnapshot({ workspaceRoot, sessionKey });
+    if (!nextSnapshot) {
+      stopReason = "snapshot_load_failure";
+      break;
+    }
+    snapshot = nextSnapshot;
 
     if (!turnResult.decision.shouldContinue) {
       stopReason = turnResult.terminationReason;

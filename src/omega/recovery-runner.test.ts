@@ -60,6 +60,7 @@ vi.mock("./empirical-metrics.js", () => ({
   })),
   recordOmegaRouteMetrics: vi.fn(async () => undefined),
   recordOmegaRecoveryStrategyMetrics: vi.fn(async () => undefined),
+  buildOmegaRecoveryStrategyKey: vi.fn(() => "mock-key"),
 }));
 
 vi.mock("./interaction-model.js", () => ({

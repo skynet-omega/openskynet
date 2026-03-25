@@ -326,9 +326,17 @@ export async function ensureControlUiAssetsBuilt(
 
   runtime.log("Control UI assets missing; building (ui:build, auto-installs UI deps)…");
 
+  const execDir = path.dirname(process.execPath);
+  const envPathKey = process.platform === "win32" ? "Path" : "PATH";
+  const childEnv = {
+    ...process.env,
+    [envPathKey]: `${execDir}${path.delimiter}${process.env[envPathKey] || ""}`,
+  };
+
   const build = await runCommandWithTimeout([process.execPath, uiScript, "build"], {
     cwd: repoRoot,
     timeoutMs: opts?.timeoutMs ?? 10 * 60_000,
+    env: childEnv,
   });
   if (build.code !== 0) {
     return {
