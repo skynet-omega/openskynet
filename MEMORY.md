@@ -17,7 +17,7 @@ OpenSkyNet está en proceso de transición de un conjunto de módulos heterogén
 - **Soberanía del WSP:** Elevar el World State Processor de experimental a autoridad cuando la confianza sea suficiente.
 - **Adapters Formales:** Mover motores supervivientes a `src/omega/engines/adapters/`.
 - **Loop Frío/Caliente:** Separar ejecución básica de llamadas costosas al LLM.
-- **Skynet:** Consolidar el nuevo núcleo experimental como agenda autónoma persistente con estado, programa de estudio y validación empírica propia. Se inició el primer experimento de autonomía endógena (`src/skynet/experiments/autonomy_pulse_01.ts`) para medir señales de entropía y ajustar el foco de estudio.
+- **Skynet:** Consolidar el nuevo núcleo experimental como agenda autónoma persistente con estado, programa de estudio y validación empírica propia. Se inició el primer experimento de autonomía endógena (`src/skynet/experiments/autonomy_pulse_01.ts`) para medir señales de entropía y ajustar el foco de estudio. Se agregaron los primeros artefactos de estudio: `decision-bifurcation-probe.ts` y `benchmark-hardening-probe.ts` para medir presión de bifurcación y convergencia de scoring respectivamente.
 
 ### Autoridad de Estado de Skynet
 

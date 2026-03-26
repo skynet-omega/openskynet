@@ -158,7 +158,7 @@ export async function buildIdleOmegaHeartbeatPrompt(params: {
 
   const speculativeIdleEnabled = isOmegaSpeculativeIdleEnabled();
   const engines = getOmegaHeartbeatEngineRegistry();
-  let lobeState: FrontalLobeState | undefined;
+  let lobeState: FrontalLobeState | undefined = params.lobeState;
   let thoughts: ContinuousThought[] = [];
   let graphFocus: string | null = null;
   let contradictions: Contradiction[] = [];
