@@ -18,6 +18,7 @@ import {
   enhanceDriveWithJepaTension,
   parseJepaTensionFromKernelTimeline,
 } from "./jepa-drive-enhancement.js";
+import { collectOpenSkynetMemoryCandidates } from "./living-memory.js";
 import {
   loadOmegaOperationalMemoryTail,
   summarizeOmegaOperationalMemory,
@@ -50,31 +51,7 @@ type OmegaHeartbeatPromptWakeAction =
  * Busca archivos en memory/ y MEMORY.md en la raíz del workspace.
  */
 async function collectMemoryCandidates(workspaceRoot: string): Promise<string[]> {
-  const candidates: string[] = [];
-
-  // MEMORY.md siempre es candidato
-  const memoryMdPath = path.join(workspaceRoot, "MEMORY.md");
-  try {
-    await fs.access(memoryMdPath);
-    candidates.push("MEMORY.md");
-  } catch {
-    // No existe, ignorar
-  }
-
-  // Archivos en memory/
-  const memoryDir = path.join(workspaceRoot, "memory");
-  try {
-    const entries = await fs.readdir(memoryDir, { withFileTypes: true });
-    for (const entry of entries) {
-      if (entry.isFile() && entry.name.endsWith(".md")) {
-        candidates.push(path.join("memory", entry.name));
-      }
-    }
-  } catch {
-    // Directorio no existe, ignorar
-  }
-
-  return candidates;
+  return collectOpenSkynetMemoryCandidates(workspaceRoot);
 }
 
 export type OmegaHeartbeatExecutiveResult =

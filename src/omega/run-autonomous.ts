@@ -2,26 +2,40 @@
 
 /**
  * Entry point para ejecutar el loop autónomo
- * 
+ *
  * Uso:
  *   pnpm openclaw autonomous --interval 5  # Cada 5 minutos
  *   pnpm openclaw autonomous --once        # Solo 1 ciclo (testing)
  */
 
+import {
+  OMEGA_DEFAULT_AUTONOMOUS_INTERVAL_MINUTES,
+  resolveOmegaAutonomousIntervalMinutes,
+  resolveOmegaRuntimeDefaults,
+} from "./autonomous-runtime.js";
 import { runAutonomousLoop, runOneHeartbeatCycle } from "./heartbeat.js";
 
 async function main() {
   const args = process.argv.slice(2);
-  const workspaceRoot = process.cwd();
-  const sessionKey = "openskynet";
-  
+  const runtimeDefaults = resolveOmegaRuntimeDefaults({ cwd: process.cwd() });
+
   // Parser simple de argumentos
-  let intervalMinutes = 5;
+  let intervalMinutes = runtimeDefaults.intervalMinutes;
   let runOnce = false;
-  
+
   for (let i = 0; i < args.length; i++) {
+    if (args[i]?.startsWith("--interval=")) {
+      intervalMinutes = resolveOmegaAutonomousIntervalMinutes(
+        args[i].split("=")[1],
+        OMEGA_DEFAULT_AUTONOMOUS_INTERVAL_MINUTES,
+      );
+      continue;
+    }
     if (args[i] === "--interval" && args[i + 1]) {
-      intervalMinutes = parseInt(args[i + 1], 10);
+      intervalMinutes = resolveOmegaAutonomousIntervalMinutes(
+        args[i + 1],
+        OMEGA_DEFAULT_AUTONOMOUS_INTERVAL_MINUTES,
+      );
       i++;
     }
     if (args[i] === "--once") {
@@ -62,9 +76,12 @@ Presiona Ctrl+C para terminar.
       process.exit(0);
     }
   }
-  
-  const params = { workspaceRoot, sessionKey };
-  
+
+  const params = {
+    workspaceRoot: runtimeDefaults.workspaceRoot,
+    sessionKey: runtimeDefaults.sessionKey,
+  };
+
   if (runOnce) {
     await runOneHeartbeatCycle(params);
   } else {

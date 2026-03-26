@@ -13,6 +13,12 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { buildNodeInstallPlan } from "../commands/node-daemon-install-helpers.js";
 import { resolveOpenSkyNetService } from "../daemon/openskynet-service.js";
+import {
+  OMEGA_DEFAULT_AUTONOMOUS_INTERVAL_MINUTES,
+  OMEGA_DEFAULT_SESSION_KEY,
+  resolveOmegaAutonomousIntervalMinutes,
+  resolveOmegaWorkspaceRoot,
+} from "./autonomous-runtime.js";
 
 type DaemonCommand = "install" | "start" | "stop" | "status" | "uninstall";
 
@@ -25,7 +31,10 @@ async function parseDaemonArgs(): Promise<{
   const command = (args[0] ?? "status") as DaemonCommand;
 
   const intervalArg = args.find((arg) => arg.startsWith("--interval="));
-  const interval = intervalArg ? parseInt(intervalArg.split("=")[1] ?? "5", 10) : 5;
+  const interval = resolveOmegaAutonomousIntervalMinutes(
+    intervalArg ? intervalArg.split("=")[1] : undefined,
+    OMEGA_DEFAULT_AUTONOMOUS_INTERVAL_MINUTES,
+  );
 
   const force = args.includes("--force");
 
@@ -33,7 +42,7 @@ async function parseDaemonArgs(): Promise<{
 }
 
 async function runInstall(intervalMinutes: number) {
-  const workspaceRoot = process.env.WORKSPACE_ROOT || process.cwd();
+  const workspaceRoot = resolveOmegaWorkspaceRoot({ cwd: process.cwd() });
   const service = resolveOpenSkyNetService();
 
   console.log("[DAEMON] 📦 Instalando OpenSkyNet Autonomous Daemon...");
@@ -53,7 +62,7 @@ async function runInstall(intervalMinutes: number) {
     const environment = {
       ...process.env,
       WORKSPACE_ROOT: workspaceRoot,
-      SESSION_KEY: "openskynet",
+      SESSION_KEY: OMEGA_DEFAULT_SESSION_KEY,
       OPENSKYNET_INTERVAL_MINUTES: String(intervalMinutes),
     };
 

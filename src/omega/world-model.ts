@@ -1,4 +1,9 @@
 import {
+  formatSkynetBifurcationBlock,
+  loadSkynetBifurcationState,
+  type SkynetBifurcationState,
+} from "../skynet/bifurcation-engine.js";
+import {
   formatSkynetContinuityBlock,
   syncSkynetContinuityState,
   type SkynetContinuityState,
@@ -78,6 +83,7 @@ export type OmegaWorldModelSnapshot = {
   skynetNucleus?: SkynetNucleusState;
   skynetStudyProgram?: SkynetStudyProgram;
   skynetContinuity?: SkynetContinuityState;
+  skynetBifurcation?: SkynetBifurcationState;
 };
 
 function normalizeWorldModelText(value: string): string {

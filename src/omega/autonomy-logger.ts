@@ -1,24 +1,25 @@
 /**
  * src/omega/autonomy-logger.ts
- * 
+ *
  * Sistema de logging para monitorear decisiones autónomas en tiempo real
  * Registra:
  * - Cada decisión: autónoma vs requiere input
  * - Frustración JEPA en cada ciclo
  * - Activación de drives
  * - Métricas consolidadas cada N ciclos
- * 
+ *
  * Permite "recordar" el estado histórico y detectar patrones
  */
 
-import fs from 'fs';
-import path from 'path';
+import fs from "fs";
+import path from "path";
+import { resolveStateDir } from "../config/paths.js";
 
 export interface DecisionEvent {
   timestamp: number;
   cycleNumber: number;
   decision: {
-    kind: 'homeostasis' | 'curiosity' | 'entropy_alert' | 'idle';
+    kind: "homeostasis" | "curiosity" | "entropy_alert" | "idle";
     isAutonomous: boolean;
     urgency: number;
     jepaBoosted?: boolean;
@@ -53,11 +54,11 @@ export class AutonomyLogger {
   private cycleCounter = 0;
   private aggregationWindow = 10; // Consolidar cada 10 ciclos
 
-  constructor(stateDir: string = process.env.OPENSKYNET_STATE_DIR || '~/.openskynet') {
-    const expandedDir = stateDir.replace('~', process.env.HOME || '/root');
-    this.logFilePath = path.join(expandedDir, 'autonomy-decisions.jsonl');
-    this.metricsFilePath = path.join(expandedDir, 'autonomy-metrics.json');
-    
+  constructor(stateDir?: string) {
+    const expandedDir = stateDir ? path.resolve(stateDir) : resolveStateDir(process.env);
+    this.logFilePath = path.join(expandedDir, "autonomy-decisions.jsonl");
+    this.metricsFilePath = path.join(expandedDir, "autonomy-metrics.json");
+
     // Crear directorio si no existe
     const dir = path.dirname(this.logFilePath);
     if (!fs.existsSync(dir)) {
@@ -73,7 +74,7 @@ export class AutonomyLogger {
   private loadExistingMetrics() {
     try {
       if (fs.existsSync(this.metricsFilePath)) {
-        const data = fs.readFileSync(this.metricsFilePath, 'utf-8');
+        const data = fs.readFileSync(this.metricsFilePath, "utf-8");
         const parsed = JSON.parse(data);
         if (Array.isArray(parsed)) {
           this.metrics = parsed;
@@ -88,30 +89,30 @@ export class AutonomyLogger {
   /**
    * Registrar una decisión del heartbeat
    */
-  logDecision(decision: {
-    kind: 'homeostasis' | 'curiosity' | 'entropy_alert' | 'idle';
-    urgency: number;
-    jepaBoosted?: boolean;
-  }, jepa?: { frustration: number; confidence: number }, memoryMetrics?: any) {
+  logDecision(
+    decision: {
+      kind: "homeostasis" | "curiosity" | "entropy_alert" | "idle";
+      urgency: number;
+      jepaBoosted?: boolean;
+    },
+    jepa?: { frustration: number; confidence: number },
+    memoryMetrics?: any,
+  ) {
     const event: DecisionEvent = {
       timestamp: Date.now(),
       cycleNumber: this.cycleCounter++,
       decision: {
         ...decision,
-        isAutonomous: decision.kind !== 'idle'
+        isAutonomous: decision.kind !== "idle",
       },
       jepa,
-      memoryMetrics
+      memoryMetrics,
     };
 
     this.events.push(event);
 
     // Escribir en JSONL para análisis posterior
-    fs.appendFileSync(
-      this.logFilePath,
-      JSON.stringify(event) + '\n',
-      { encoding: 'utf-8' }
-    );
+    fs.appendFileSync(this.logFilePath, JSON.stringify(event) + "\n", { encoding: "utf-8" });
 
     // Consolidar métricas cada N ciclos
     if (this.events.length % this.aggregationWindow === 0) {
@@ -127,27 +128,25 @@ export class AutonomyLogger {
     const recentEvents = this.events.slice(-this.aggregationWindow);
     if (recentEvents.length === 0) return;
 
-    const autonomous = recentEvents.filter(e => e.decision.isAutonomous).length;
-    const idle = recentEvents.filter(e => e.decision.kind === 'idle').length;
-    const avgFrustration = recentEvents.reduce((sum, e) => sum + (e.jepa?.frustration || 0), 0) / recentEvents.length;
+    const autonomous = recentEvents.filter((e) => e.decision.isAutonomous).length;
+    const idle = recentEvents.filter((e) => e.decision.kind === "idle").length;
+    const avgFrustration =
+      recentEvents.reduce((sum, e) => sum + (e.jepa?.frustration || 0), 0) / recentEvents.length;
 
     const driveBreakdown: Record<string, number> = {};
-    recentEvents.forEach(e => {
+    recentEvents.forEach((e) => {
       driveBreakdown[e.decision.kind] = (driveBreakdown[e.decision.kind] || 0) + 1;
     });
 
     const metric: AutonomyMetrics = {
       timestamp: Date.now(),
-      cycleRange: [
-        recentEvents[0].cycleNumber,
-        recentEvents[recentEvents.length - 1].cycleNumber
-      ],
+      cycleRange: [recentEvents[0].cycleNumber, recentEvents[recentEvents.length - 1].cycleNumber],
       totalCycles: recentEvents.length,
       autonomousCycles: autonomous,
       idleCycles: idle,
       autonomyPercentage: (autonomous / recentEvents.length) * 100,
       averageFrustration: avgFrustration,
-      driveBreakdown
+      driveBreakdown,
     };
 
     this.metrics.push(metric);
@@ -158,11 +157,9 @@ export class AutonomyLogger {
    * Guardar métricas a disco para persistencia
    */
   private saveMetrics() {
-    fs.writeFileSync(
-      this.metricsFilePath,
-      JSON.stringify(this.metrics, null, 2),
-      { encoding: 'utf-8' }
-    );
+    fs.writeFileSync(this.metricsFilePath, JSON.stringify(this.metrics, null, 2), {
+      encoding: "utf-8",
+    });
   }
 
   /**
@@ -172,16 +169,24 @@ export class AutonomyLogger {
     if (this.metrics.length === 0) return;
 
     const latest = this.metrics[this.metrics.length - 1];
-    const trend = this.metrics.length > 1 
-      ? this.metrics[this.metrics.length - 1].autonomyPercentage - this.metrics[this.metrics.length - 2].autonomyPercentage
-      : 0;
+    const trend =
+      this.metrics.length > 1
+        ? this.metrics[this.metrics.length - 1].autonomyPercentage -
+          this.metrics[this.metrics.length - 2].autonomyPercentage
+        : 0;
 
     const timestamp = new Date(latest.timestamp).toISOString();
-    const autonomyBar = '█'.repeat(Math.round(latest.autonomyPercentage / 5)) + '░'.repeat(20 - Math.round(latest.autonomyPercentage / 5));
+    const autonomyBar =
+      "█".repeat(Math.round(latest.autonomyPercentage / 5)) +
+      "░".repeat(20 - Math.round(latest.autonomyPercentage / 5));
 
-    console.log(`\n[${timestamp}] AUTONOMY METRICS (Cycles ${latest.cycleRange[0]}-${latest.cycleRange[1]})`);
-    console.log(`  Autonomous: ${latest.autonomousCycles}/${latest.totalCycles} [${autonomyBar}] ${latest.autonomyPercentage.toFixed(1)}%`);
-    console.log(`  Trend: ${trend >= 0 ? '+' : ''}${trend.toFixed(1)}%`);
+    console.log(
+      `\n[${timestamp}] AUTONOMY METRICS (Cycles ${latest.cycleRange[0]}-${latest.cycleRange[1]})`,
+    );
+    console.log(
+      `  Autonomous: ${latest.autonomousCycles}/${latest.totalCycles} [${autonomyBar}] ${latest.autonomyPercentage.toFixed(1)}%`,
+    );
+    console.log(`  Trend: ${trend >= 0 ? "+" : ""}${trend.toFixed(1)}%`);
     console.log(`  Frustration: ${latest.averageFrustration.toFixed(2)} (0-2 scale)`);
     console.log(`  Drives: ${JSON.stringify(latest.driveBreakdown)}`);
   }
@@ -204,11 +209,11 @@ export class AutonomyLogger {
         maxAutonomy: 0,
         minAutonomy: 0,
         trend: 0,
-        sessions: 0
+        sessions: 0,
       };
     }
 
-    const autonomyValues = this.metrics.map(m => m.autonomyPercentage);
+    const autonomyValues = this.metrics.map((m) => m.autonomyPercentage);
     const avgAutonomy = autonomyValues.reduce((a, b) => a + b, 0) / autonomyValues.length;
     const maxAutonomy = Math.max(...autonomyValues);
     const minAutonomy = Math.min(...autonomyValues);
@@ -221,7 +226,7 @@ export class AutonomyLogger {
       maxAutonomy,
       minAutonomy,
       trend,
-      sessions: this.metrics.length
+      sessions: this.metrics.length,
     };
   }
 
@@ -230,19 +235,27 @@ export class AutonomyLogger {
    */
   detectPatterns() {
     if (this.metrics.length < 3) {
-      return { high_frustration: 'Not enough data', low_frustration: 'Not enough data' };
+      return { high_frustration: "Not enough data", low_frustration: "Not enough data" };
     }
 
-    const highFrustration = this.metrics.filter(m => m.averageFrustration > 1.0);
-    const lowFrustration = this.metrics.filter(m => m.averageFrustration < 0.5);
+    const highFrustration = this.metrics.filter((m) => m.averageFrustration > 1.0);
+    const lowFrustration = this.metrics.filter((m) => m.averageFrustration < 0.5);
 
     return {
-      high_frustration: highFrustration.length > 0
-        ? (highFrustration.reduce((sum, m) => sum + m.autonomyPercentage, 0) / highFrustration.length).toFixed(1) + '%'
-        : 'No data',
-      low_frustration: lowFrustration.length > 0
-        ? (lowFrustration.reduce((sum, m) => sum + m.autonomyPercentage, 0) / lowFrustration.length).toFixed(1) + '%'
-        : 'No data'
+      high_frustration:
+        highFrustration.length > 0
+          ? (
+              highFrustration.reduce((sum, m) => sum + m.autonomyPercentage, 0) /
+              highFrustration.length
+            ).toFixed(1) + "%"
+          : "No data",
+      low_frustration:
+        lowFrustration.length > 0
+          ? (
+              lowFrustration.reduce((sum, m) => sum + m.autonomyPercentage, 0) /
+              lowFrustration.length
+            ).toFixed(1) + "%"
+          : "No data",
     };
   }
 
@@ -264,7 +277,7 @@ Autonomy Statistics:
   Average: ${summary.avgAutonomy.toFixed(1)}%
   Maximum: ${summary.maxAutonomy.toFixed(1)}%
   Minimum: ${summary.minAutonomy.toFixed(1)}%
-  Trend: ${summary.trend >= 0 ? '+' : ''}${summary.trend.toFixed(1)}%
+  Trend: ${summary.trend >= 0 ? "+" : ""}${summary.trend.toFixed(1)}%
 
 Behavioral Patterns:
   High Frustration (>1.0): ${patterns.high_frustration} autonomous

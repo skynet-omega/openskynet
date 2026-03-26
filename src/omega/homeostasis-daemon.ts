@@ -2,6 +2,7 @@ import { exec } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+import { getResolvedLoggerSettings } from "../logging.js";
 import { HolographicMemoryManager } from "./holographic-memory.js";
 import { getNeuralLogicEngine } from "./neural-logic-engine.js";
 
@@ -98,9 +99,8 @@ export async function runHomeostasisDaemon(workspaceRoot: string): Promise<void>
 
 async function scanForCriticalFailures(workspaceRoot: string): Promise<string | null> {
   try {
-    // Intentamos leer el log del gateway para detectar errores de sincronización o rate limits
-    // Usamos tail para ser eficientes
-    const logPath = path.join(workspaceRoot, ".openskynet", "gateway.log");
+    // Usa el rolling log canónico del sistema en lugar de asumir un path local inexistente.
+    const logPath = getResolvedLoggerSettings().file;
     const { stdout } = await execAsync(`tail -n 100 "${logPath}"`).catch(() => ({ stdout: "" }));
 
     if (stdout.includes("edit failed: Error: Could not find the exact text")) {

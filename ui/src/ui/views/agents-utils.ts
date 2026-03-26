@@ -8,6 +8,7 @@ import type {
   AgentIdentityResult,
   AgentsFilesListResult,
   AgentsListResult,
+  ModelCatalogEntry,
   ToolCatalogProfile,
   ToolsCatalogResult,
 } from "../types.ts";
@@ -573,9 +574,25 @@ function resolveConfiguredModels(
 
 export function buildModelOptions(
   configForm: Record<string, unknown> | null,
+  modelCatalog: readonly ModelCatalogEntry[] | null,
   current?: string | null,
 ) {
-  const options = resolveConfiguredModels(configForm);
+  const options = [...resolveConfiguredModels(configForm)];
+  const seen = new Set(options.map((option) => option.value));
+  for (const entry of modelCatalog ?? []) {
+    const value = typeof entry?.id === "string" ? entry.id.trim() : "";
+    if (!value || seen.has(value)) {
+      continue;
+    }
+    const provider = typeof entry?.provider === "string" ? entry.provider.trim() : "";
+    const name = typeof entry?.name === "string" ? entry.name.trim() : "";
+    const labelParts = [name && name !== value ? name : "", provider ? `[${provider}]` : ""].filter(
+      Boolean,
+    );
+    const label = labelParts.length > 0 ? `${labelParts.join(" ")} (${value})` : value;
+    options.push({ value, label });
+    seen.add(value);
+  }
   const hasCurrent = current ? options.some((option) => option.value === current) : false;
   if (current && !hasCurrent) {
     options.unshift({ value: current, label: `Current (${current})` });

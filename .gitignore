@@ -47,7 +47,6 @@
 .tsbuildinfo
 .worktrees/
 /local/
-/memory/
 Core/
 Swabble/build/
 __pycache__/
@@ -107,7 +106,6 @@ node_modules/
 
 # OpenSkyNet Specific Ignores
 .openskynet/
-memory/
 reports/
 venv/
 .venv/

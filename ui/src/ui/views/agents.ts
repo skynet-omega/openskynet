@@ -6,6 +6,7 @@ import type {
   ChannelsStatusSnapshot,
   CronJob,
   CronStatus,
+  ModelCatalogEntry,
   SkillStatusReport,
   ToolsCatalogResult,
 } from "../types.ts";
@@ -73,6 +74,7 @@ export type AgentsProps = {
   selectedAgentId: string | null;
   activePanel: AgentsPanel;
   config: ConfigState;
+  modelCatalog: readonly ModelCatalogEntry[];
   channels: ChannelsState;
   cron: CronState;
   agentFiles: AgentFilesState;
@@ -227,6 +229,7 @@ export function renderAgents(props: AgentsProps) {
                         basePath: props.basePath,
                         defaultId,
                         configForm: props.config.form,
+                        modelCatalog: props.modelCatalog,
                         agentFilesList: props.agentFiles.list,
                         agentIdentity: props.agentIdentityById[selectedAgent.id] ?? null,
                         agentIdentityError: props.agentIdentityError,

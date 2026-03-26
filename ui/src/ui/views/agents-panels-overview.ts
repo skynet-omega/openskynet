@@ -1,5 +1,10 @@
 import { html, nothing } from "lit";
-import type { AgentIdentityResult, AgentsFilesListResult, AgentsListResult } from "../types.ts";
+import type {
+  AgentIdentityResult,
+  AgentsFilesListResult,
+  AgentsListResult,
+  ModelCatalogEntry,
+} from "../types.ts";
 import {
   buildModelOptions,
   normalizeModelValue,
@@ -16,6 +21,7 @@ export function renderAgentOverview(params: {
   basePath: string;
   defaultId: string | null;
   configForm: Record<string, unknown> | null;
+  modelCatalog: readonly ModelCatalogEntry[] | null;
   agentFilesList: AgentsFilesListResult | null;
   agentIdentity: AgentIdentityResult | null;
   agentIdentityLoading: boolean;
@@ -135,7 +141,7 @@ export function renderAgentOverview(params: {
                       </option>
                     `
               }
-              ${buildModelOptions(configForm, effectivePrimary ?? undefined)}
+              ${buildModelOptions(configForm, params.modelCatalog, effectivePrimary ?? undefined)}
             </select>
           </label>
           <div class="field">

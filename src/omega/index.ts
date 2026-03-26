@@ -92,7 +92,6 @@ export {
   buildAutonomousDirectivePrompt,
   type InnerDriveSignal,
 } from "./inner-life/index.js";
-export { processIntegratedBrain, formatInternalReflection } from "./integrated-brain.js";
 
 export {
   runResearchLoop,

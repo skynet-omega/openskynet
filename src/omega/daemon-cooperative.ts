@@ -12,9 +12,13 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
+import {
+  OMEGA_DEFAULT_AUTONOMOUS_INTERVAL_MINUTES,
+  OMEGA_INTERACTION_LOCK_REFRESH_MS,
+  OMEGA_INTERACTION_LOCK_TIMEOUT_MS,
+} from "./autonomous-runtime.js";
 
 const INTERACTION_LOCK_FILE = ".interaction-lock";
-const LOCK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutos: si TUI se cuelga, daemon sigue
 
 export interface DaemonParams {
   workspaceRoot: string;
@@ -58,8 +62,6 @@ export async function startAutonomousDaemon(params: DaemonParams, deps: DaemonDe
   log("");
 
   const wrappedLoop = async () => {
-    const originalInterval = 5;
-
     let cycleCount = 0;
 
     while (!params.signal?.aborted) {
@@ -72,7 +74,7 @@ export async function startAutonomousDaemon(params: DaemonParams, deps: DaemonDe
       if (isInteracting) {
         log(`[DAEMON] 🧑 Interacción detectada. Daemon en pausa (ciclo ${cycleCount})...`);
         const sleepFn = deps.sleep ?? sleep;
-        await sleepFn(10 * 1000, params.signal);
+        await sleepFn(OMEGA_INTERACTION_LOCK_REFRESH_MS, params.signal);
         continue;
       }
 
@@ -97,9 +99,11 @@ export async function startAutonomousDaemon(params: DaemonParams, deps: DaemonDe
 
       if (params.signal?.aborted) break;
 
-      log(`[DAEMON] ⏰ Próximo ciclo en ${originalInterval} min (o si termina TUI)...`);
+      log(
+        `[DAEMON] ⏰ Próximo ciclo en ${OMEGA_DEFAULT_AUTONOMOUS_INTERVAL_MINUTES} min (o si termina TUI)...`,
+      );
       const sleepFn = deps.sleep ?? sleep;
-      await sleepFn(originalInterval * 60 * 1000, params.signal);
+      await sleepFn(OMEGA_DEFAULT_AUTONOMOUS_INTERVAL_MINUTES * 60 * 1000, params.signal);
     }
   };
 
@@ -123,7 +127,7 @@ export async function checkInteractionLock(lockFilePath: string): Promise<boolea
     const ageMs = Date.now() - stat.mtimeMs;
 
     // Si existe Y es reciente → hay interacción
-    if (ageMs < 60 * 1000) {
+    if (ageMs < OMEGA_INTERACTION_LOCK_TIMEOUT_MS) {
       // menos de 1 minuto = interacción activa
       return true;
     }
@@ -163,7 +167,7 @@ export async function releaseInteractionLock(workspaceRoot: string): Promise<voi
  */
 export async function refreshInteractionLock(
   workspaceRoot: string,
-  intervalMs = 10 * 1000,
+  intervalMs = OMEGA_INTERACTION_LOCK_REFRESH_MS,
 ): Promise<() => Promise<void>> {
   const lockFilePath = path.join(workspaceRoot, INTERACTION_LOCK_FILE);
 

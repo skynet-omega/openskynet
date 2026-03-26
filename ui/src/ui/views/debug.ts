@@ -1,5 +1,6 @@
 import { html, nothing } from "lit";
 import type { EventLogEntry } from "../app-events.ts";
+import type { DebugWorkspaceFile } from "../controllers/debug.ts";
 import { formatEventPayload } from "../presenter.ts";
 
 export type DebugProps = {
@@ -8,6 +9,7 @@ export type DebugProps = {
   health: Record<string, unknown> | null;
   models: unknown[];
   heartbeat: unknown;
+  skynetFiles: DebugWorkspaceFile[];
   eventLog: EventLogEntry[];
   methods: string[];
   callMethod: string;
@@ -125,6 +127,31 @@ export function renderDebug(props: DebugProps) {
         null,
         2,
       )}</pre>
+    </section>
+
+    <section class="card" style="margin-top: 18px;">
+      <div class="card-title">Skynet</div>
+      <div class="card-sub">
+        Structured living memory first, then human-readable derived artifacts.
+      </div>
+      ${
+        props.skynetFiles.length === 0
+          ? html`
+              <div class="muted" style="margin-top: 12px">No Skynet artifacts available.</div>
+            `
+          : html`
+              <div class="stack" style="margin-top: 12px;">
+                ${props.skynetFiles.map(
+                  (file) => html`
+                    <div>
+                      <div class="muted">${file.name}</div>
+                      <pre class="code-block">${file.content}</pre>
+                    </div>
+                  `,
+                )}
+              </div>
+            `
+      }
     </section>
 
     <section class="card" style="margin-top: 18px;">

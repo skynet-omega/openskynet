@@ -76,6 +76,8 @@ Ademas existe un ciclo de experimento activo en [experiment-cycle.ts](/home/daro
 
 Y ahora existe un primer modulo experimental ejecutable en [autonomy_pulse_01.ts](/home/daroch/openskynet/src/skynet/experiments/autonomy_pulse_01.ts#L1).
 
+Tambien existe un primer artefacto de bifurcacion ejecutiva en [decision-bifurcation-probe.ts](/home/daroch/openskynet/src/skynet/artifacts/decision-bifurcation-probe.ts#L1).
+
 Ese prototipo:
 
 - persiste un estado por sesion
@@ -86,6 +88,7 @@ Ese prototipo:
 - registra continuidad entre ciclos para medir si el foco y el trabajo sobreviven
 - genera un experimento activo con hipotesis, deliverable, benchmark hook y kill criteria
 - ya puede correr un modulo experimental que estima presion de iniciativa y decide si intensificar, mantener, estabilizar o reencuadrar
+- ya puede correr un probe de bifurcacion que decide si mantener, ramificar o comprometer el siguiente paso
 
 Todavia no existe:
 

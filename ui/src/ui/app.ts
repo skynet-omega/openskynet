@@ -253,6 +253,7 @@ export class OpenClawApp extends LitElement {
 
   @state() agentsLoading = false;
   @state() agentsList: AgentsListResult | null = null;
+  @state() agentModelCatalog: ModelCatalogEntry[] = [];
   @state() agentsError: string | null = null;
   @state() agentsSelectedId: string | null = null;
   @state() toolsCatalogLoading = false;
@@ -410,6 +411,7 @@ export class OpenClawApp extends LitElement {
   @state() debugHealth: HealthSummary | null = null;
   @state() debugModels: ModelCatalogEntry[] = [];
   @state() debugHeartbeat: unknown = null;
+  @state() debugSkynetFiles: import("./controllers/debug.js").DebugWorkspaceFile[] = [];
   @state() debugCallMethod = "";
   @state() debugCallParams = "{}";
   @state() debugCallResult: string | null = null;

@@ -1,5 +1,5 @@
 import type { GatewayBrowserClient } from "../gateway.ts";
-import type { AgentsListResult, ToolsCatalogResult } from "../types.ts";
+import type { AgentsListResult, ModelCatalogEntry, ToolsCatalogResult } from "../types.ts";
 import { saveConfig } from "./config.ts";
 import type { ConfigState } from "./config.ts";
 
@@ -9,6 +9,7 @@ export type AgentsState = {
   agentsLoading: boolean;
   agentsError: string | null;
   agentsList: AgentsListResult | null;
+  agentModelCatalog: ModelCatalogEntry[];
   agentsSelectedId: string | null;
   toolsCatalogLoading: boolean;
   toolsCatalogLoadingAgentId?: string | null;
@@ -28,7 +29,10 @@ export async function loadAgents(state: AgentsState) {
   state.agentsLoading = true;
   state.agentsError = null;
   try {
-    const res = await state.client.request<AgentsListResult>("agents.list", {});
+    const [res, modelsRes] = await Promise.all([
+      state.client.request<AgentsListResult>("agents.list", {}),
+      state.client.request<{ models?: ModelCatalogEntry[] }>("models.list", {}),
+    ]);
     if (res) {
       state.agentsList = res;
       const selected = state.agentsSelectedId;
@@ -37,6 +41,7 @@ export async function loadAgents(state: AgentsState) {
         state.agentsSelectedId = res.defaultId ?? res.agents[0]?.id ?? null;
       }
     }
+    state.agentModelCatalog = Array.isArray(modelsRes?.models) ? modelsRes.models : [];
   } catch (err) {
     state.agentsError = String(err);
   } finally {

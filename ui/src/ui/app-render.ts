@@ -626,6 +626,7 @@ export function renderApp(state: AppViewState) {
                 attentionItems: state.attentionItems,
                 eventLog: state.eventLog,
                 overviewLogLines: state.overviewLogLines,
+                skynetFiles: state.debugSkynetFiles,
                 showGatewayToken: state.overviewShowGatewayToken,
                 showGatewayPassword: state.overviewShowGatewayPassword,
                 onSettingsChange: (next) => state.applySettings(next),
@@ -877,6 +878,7 @@ export function renderApp(state: AppViewState) {
                     saving: state.configSaving,
                     dirty: state.configFormDirty,
                   },
+                  modelCatalog: state.agentModelCatalog,
                   channels: {
                     snapshot: state.channelsSnapshot,
                     loading: state.channelsLoading,
@@ -1868,6 +1870,7 @@ export function renderApp(state: AppViewState) {
                   health: state.debugHealth,
                   models: state.debugModels,
                   heartbeat: state.debugHeartbeat,
+                  skynetFiles: state.debugSkynetFiles,
                   eventLog: state.eventLog,
                   methods: (state.hello?.features?.methods ?? []).toSorted(),
                   callMethod: state.debugCallMethod,

@@ -525,6 +525,15 @@ async function loadOverviewLogs(host: OpenClawApp) {
 
 function buildAttentionItems(host: OpenClawApp) {
   const items: AttentionItem[] = [];
+  const heartbeat = host.debugHeartbeat as
+    | {
+        ts?: number;
+        status?: string;
+        channel?: string;
+        reason?: string;
+      }
+    | null
+    | undefined;
 
   if (host.lastError) {
     items.push({
@@ -580,6 +589,39 @@ function buildAttentionItems(host: OpenClawApp) {
       icon: "clock",
       title: `${failedCron.length} cron job${failedCron.length > 1 ? "s" : ""} failed`,
       description: failedCron.map((j) => j.name).join(", "),
+    });
+  }
+
+  if (heartbeat?.ts && Number.isFinite(heartbeat.ts)) {
+    const ageMs = Date.now() - heartbeat.ts;
+    if (heartbeat.status === "failed") {
+      items.push({
+        severity: "error",
+        icon: "radio",
+        title: "Last heartbeat failed",
+        description: heartbeat.reason?.trim() || "The latest heartbeat run reported failure.",
+      });
+    } else if (ageMs > 2 * 60 * 60 * 1000) {
+      const ageMin = Math.round(ageMs / 60000);
+      items.push({
+        severity: "warning",
+        icon: "radio",
+        title: "Heartbeat looks stale",
+        description: `Last heartbeat was ${ageMin}m ago${heartbeat.channel ? ` on ${heartbeat.channel}` : ""}.`,
+      });
+    }
+  }
+
+  const undeliveredCron = cronJobs.filter(
+    (j) =>
+      j.enabled && j.state?.lastStatus === "ok" && j.state?.lastDeliveryStatus === "not-delivered",
+  );
+  if (undeliveredCron.length > 0) {
+    items.push({
+      severity: "warning",
+      icon: "clock",
+      title: `${undeliveredCron.length} cron job${undeliveredCron.length > 1 ? "s" : ""} not delivered`,
+      description: undeliveredCron.map((j) => j.name).join(", "),
     });
   }
 

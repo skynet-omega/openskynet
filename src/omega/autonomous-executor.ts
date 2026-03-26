@@ -14,6 +14,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import type { InnerDriveSignal } from "./inner-life/drives.js";
 import { evaluateInnerDrives } from "./inner-life/drives.js";
+import { collectOpenSkynetMemoryCandidates } from "./living-memory.js";
 import { runResearchLoop, hasRecentResearchProse } from "./research-loop.js";
 import { compressScienceBase } from "./science-base-compressor.js";
 import type { OmegaSelfTimeKernelState } from "./self-time-kernel.js";
@@ -267,12 +268,13 @@ export async function runAutonomousCycle(params: {
   if (!kernel) {
     return null;
   }
+  const memoryCandidates = await collectOpenSkynetMemoryCandidates(params.workspaceRoot);
 
   // Evaluar drives
   const signal = evaluateInnerDrives({
     kernel,
     nowMs: Date.now(),
-    memoryCandidates: ["MEMORY.md", "memory/"],
+    memoryCandidates,
   });
 
   if (signal.kind === "idle") {

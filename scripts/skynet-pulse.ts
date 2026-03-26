@@ -1,7 +1,8 @@
+import { resolveOmegaWorkspaceRoot } from "../src/omega/autonomous-runtime.js";
 import { runSkynetPulse } from "../src/skynet/pulse.js";
 
 async function main() {
-  const workspaceRoot = process.cwd();
+  const workspaceRoot = resolveOmegaWorkspaceRoot({ cwd: process.cwd() });
   const sessionKey = "agent:openskynet:main";
   const runResearch = process.argv.includes("--research");
   const pulse = await runSkynetPulse({

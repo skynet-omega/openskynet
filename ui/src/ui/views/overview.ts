@@ -1,6 +1,7 @@
 import { html, nothing } from "lit";
 import { t, i18n, SUPPORTED_LOCALES, type Locale } from "../../i18n/index.ts";
 import type { EventLogEntry } from "../app-events.ts";
+import type { DebugWorkspaceFile } from "../controllers/debug.ts";
 import { buildExternalLinkRel, EXTERNAL_LINK_TARGET } from "../external-link.ts";
 import { formatRelativeTimestamp, formatDurationHuman } from "../format.ts";
 import type { GatewayHelloOk } from "../gateway.ts";
@@ -45,6 +46,7 @@ export type OverviewProps = {
   attentionItems: AttentionItem[];
   eventLog: EventLogEntry[];
   overviewLogLines: string[];
+  skynetFiles: DebugWorkspaceFile[];
   showGatewayToken: boolean;
   showGatewayPassword: boolean;
   onSettingsChange: (next: UiSettings) => void;
@@ -191,6 +193,49 @@ export function renderOverview(props: OverviewProps) {
   })();
 
   const currentLocale = i18n.getLocale();
+  const skynetStateFile =
+    props.skynetFiles.find((file) => file.name.includes(".openskynet/living-memory/state/")) ??
+    null;
+  const skynetState = (() => {
+    if (!skynetStateFile) {
+      return null;
+    }
+    try {
+      return JSON.parse(skynetStateFile.content) as {
+        skynet?: {
+          focusTitle?: string | null;
+          mode?: string | null;
+          continuityScore?: number | null;
+          topWorkItem?: string | null;
+          recommendedAction?: string | null;
+          commitment?: { kind?: string; artifactKind?: string; confidence?: number } | null;
+        };
+      };
+    } catch {
+      return null;
+    }
+  })();
+  const skynetPrimary =
+    skynetStateFile ??
+    props.skynetFiles.find((file) => file.name.endsWith("SKYNET_PULSE.md")) ??
+    props.skynetFiles[0] ??
+    null;
+  const skynetPreview = skynetState
+    ? [
+        skynetState.skynet?.focusTitle ? `Focus: ${skynetState.skynet.focusTitle}` : "",
+        skynetState.skynet?.mode ? `Mode: ${skynetState.skynet.mode}` : "",
+        typeof skynetState.skynet?.continuityScore === "number"
+          ? `Continuity: ${skynetState.skynet.continuityScore.toFixed(2)}`
+          : "",
+        skynetState.skynet?.topWorkItem ? `Top item: ${skynetState.skynet.topWorkItem}` : "",
+      ].filter(Boolean)
+    : skynetPrimary
+      ? skynetPrimary.content
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .slice(0, 4)
+      : [];
 
   return html`
     <section class="grid">
@@ -386,6 +431,39 @@ export function renderOverview(props: OverviewProps) {
       presenceCount: props.presenceCount,
       onNavigate: props.onNavigate,
     })}
+
+    <section class="card" style="margin-top: 18px;">
+      <div class="row" style="justify-content: space-between; gap: 12px;">
+        <div>
+          <div class="card-title">Skynet</div>
+          <div class="card-sub">Living memory first, then derived pulse artifacts.</div>
+        </div>
+        <button class="btn btn--sm" @click=${() => props.onNavigate("debug")}>Open Debug</button>
+      </div>
+      ${
+        skynetPrimary
+          ? html`
+              <div class="stack" style="margin-top: 12px;">
+                <div class="muted">${skynetPrimary.name}</div>
+                <div class="callout" style="margin-top: 4px;">
+                  ${
+                    skynetPreview.length > 0
+                      ? skynetPreview.map((line) => html`<div>${line}</div>`)
+                      : html`
+                          <div>No summary available.</div>
+                        `
+                  }
+                </div>
+                <div class="muted">
+                  ${props.skynetFiles.length} persisted artifacts available in Debug.
+                </div>
+              </div>
+            `
+          : html`
+              <div class="muted" style="margin-top: 12px">No Skynet artifacts available yet.</div>
+            `
+      }
+    </section>
 
     ${renderOverviewAttention({ items: props.attentionItems })}
 

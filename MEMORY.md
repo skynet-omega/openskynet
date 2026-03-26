@@ -19,6 +19,11 @@ OpenSkyNet está en proceso de transición de un conjunto de módulos heterogén
 - **Loop Frío/Caliente:** Separar ejecución básica de llamadas costosas al LLM.
 - **Skynet:** Consolidar el nuevo núcleo experimental como agenda autónoma persistente con estado, programa de estudio y validación empírica propia. Se inició el primer experimento de autonomía endógena (`src/skynet/experiments/autonomy_pulse_01.ts`) para medir señales de entropía y ajustar el foco de estudio.
 
+### Autoridad de Estado de Skynet
+
+- El estado presente de `Skynet` debe describirse desde `.openskynet/living-memory/state/*.json`, `.openskynet/living-memory/history.jsonl` y los stores estructurados de `.openskynet/skynet-*`.
+- Los diarios `memory/YYYY-MM-DD.md` conservan snapshots históricos y no deben citarse como estado actual si entran en conflicto con la fuente canónica.
+
 ### Decisiones de Diseño
 
 - Se rechazó la creación de un "Single Store" físico masivo; se optó por una matriz de autoridad sobre stores existentes.

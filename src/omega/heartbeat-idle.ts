@@ -1,5 +1,3 @@
-import fs from "node:fs/promises";
-import path from "node:path";
 import { CognitiveRuleEngine } from "./cognitive-rules.js";
 import { type ContinuousThought } from "./continuous-thinking-engine.js";
 import { getOmegaHeartbeatEngineRegistry } from "./engines/registry.js";
@@ -18,6 +16,7 @@ import {
   enhanceDriveWithJepaTension,
   parseJepaTensionFromKernelTimeline,
 } from "./jepa-drive-enhancement.js";
+import { collectOpenSkynetMemoryCandidates } from "./living-memory.js";
 import { createMemoryEmbedding } from "./memory-vectors.js";
 import { loadOmegaWSP } from "./omega-wsp.js";
 import { deriveOmegaPolicySnapshot } from "./policy-engine.js";
@@ -28,27 +27,6 @@ import {
 import type { OmegaSelfTimeKernelState } from "./self-time-kernel.js";
 import { loadOmegaSessionTimeline } from "./session-context.js";
 import { formatOmegaWorldModelSnapshot, loadOmegaWorldModelSnapshot } from "./world-model.js";
-
-async function collectOmegaMemoryCandidates(workspaceRoot: string): Promise<string[]> {
-  const candidates: string[] = [];
-  try {
-    const memoryDir = path.join(workspaceRoot, "memory");
-    const files = await fs.readdir(memoryDir).catch(() => []);
-    candidates.push(...files.map((file) => path.join("memory", file)));
-
-    const memoryMd = path.join(workspaceRoot, "MEMORY.md");
-    const hasMemoryMd = await fs
-      .stat(memoryMd)
-      .then(() => true)
-      .catch(() => false);
-    if (hasMemoryMd) {
-      candidates.push("MEMORY.md");
-    }
-  } catch (error) {
-    console.warn("[OMEGA] Failed to collect memory candidates:", error);
-  }
-  return candidates;
-}
 
 async function fossilizeIdleExperience(params: {
   workspaceRoot: string;
@@ -197,7 +175,7 @@ export async function buildIdleOmegaHeartbeatPrompt(params: {
     contradictions = collectedEngineSignals.contradictions;
   }
 
-  const memoryCandidates = await collectOmegaMemoryCandidates(params.workspaceRoot);
+  const memoryCandidates = await collectOpenSkynetMemoryCandidates(params.workspaceRoot);
   let driveSignal = deriveOmegaPolicySnapshot({
     kernel: params.kernel,
     wsp,

@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { syncOpenSkynetLivingMemory } from "../omega/living-memory.js";
 import {
   hasRecentResearchProse,
   runResearchLoop,
@@ -167,5 +168,13 @@ export async function runSkynetPulse(params: {
 
   await fs.mkdir(path.dirname(result.filePath), { recursive: true });
   await fs.writeFile(result.filePath, buildPulseMarkdown(result), "utf-8");
+  await syncOpenSkynetLivingMemory({
+    workspaceRoot: params.workspaceRoot,
+    sessionKey: params.sessionKey,
+    snapshot,
+    recommendedAction: result.recommendedAction,
+    commitment,
+    experiment: experimentPlan,
+  });
   return result;
 }

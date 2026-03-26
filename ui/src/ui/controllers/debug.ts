@@ -1,5 +1,19 @@
 import type { GatewayBrowserClient } from "../gateway.ts";
-import type { HealthSnapshot, StatusSummary } from "../types.ts";
+import type { AgentsFilesGetResult, HealthSnapshot, StatusSummary } from "../types.ts";
+
+const SKYNET_DEBUG_FILES = [
+  ".openskynet/living-memory/state/agent_openskynet_main.json",
+  ".openskynet/living-memory/history.jsonl",
+  "memory/SKYNET_PULSE.md",
+  "memory/SKYNET_CONTINUITY.md",
+  "memory/SKYNET_COMMITMENT.md",
+  "memory/SKYNET_ACTIVE_EXPERIMENT.md",
+] as const;
+
+export type DebugWorkspaceFile = {
+  name: string;
+  content: string;
+};
 
 export type DebugState = {
   client: GatewayBrowserClient | null;
@@ -9,6 +23,7 @@ export type DebugState = {
   debugHealth: HealthSnapshot | null;
   debugModels: unknown[];
   debugHeartbeat: unknown;
+  debugSkynetFiles: DebugWorkspaceFile[];
   debugCallMethod: string;
   debugCallParams: string;
   debugCallResult: string | null;
@@ -35,6 +50,28 @@ export async function loadDebug(state: DebugState) {
     const modelPayload = models as { models?: unknown[] } | undefined;
     state.debugModels = Array.isArray(modelPayload?.models) ? modelPayload?.models : [];
     state.debugHeartbeat = heartbeat;
+    const healthSummary = health as { defaultAgentId?: unknown } | null;
+    const defaultAgentId =
+      typeof healthSummary?.defaultAgentId === "string" ? healthSummary.defaultAgentId.trim() : "";
+    if (defaultAgentId) {
+      const fileResults = await Promise.allSettled(
+        SKYNET_DEBUG_FILES.map(async (name) => {
+          const res = await state.client!.request<AgentsFilesGetResult | null>("agents.files.get", {
+            agentId: defaultAgentId,
+            name,
+          });
+          return {
+            name,
+            content: res?.file?.content ?? "",
+          };
+        }),
+      );
+      state.debugSkynetFiles = fileResults.flatMap((result) =>
+        result.status === "fulfilled" && result.value.content.trim() ? [result.value] : [],
+      );
+    } else {
+      state.debugSkynetFiles = [];
+    }
   } catch (err) {
     state.debugCallError = String(err);
   } finally {

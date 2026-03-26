@@ -18,3 +18,4 @@ export {
   initializeOmegaIntegratedReasoner,
   type IntegratedReasoningState,
 } from "./omega-integrated-reasoning.js";
+export { processIntegratedBrain, formatInternalReflection } from "./integrated-brain.js";

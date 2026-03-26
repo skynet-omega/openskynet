@@ -8,11 +8,11 @@
  *   pnpm tsx src/omega/daemon-entry.ts
  */
 
+import { resolveOmegaRuntimeDefaults } from "./autonomous-runtime.js";
 import { startAutonomousDaemon } from "./daemon-cooperative.js";
 
 async function main() {
-  const workspaceRoot = process.env.WORKSPACE_ROOT || process.cwd();
-  const sessionKey = process.env.SESSION_KEY || "openskynet";
+  const { workspaceRoot, sessionKey } = resolveOmegaRuntimeDefaults({ cwd: process.cwd() });
 
   try {
     await startAutonomousDaemon({
