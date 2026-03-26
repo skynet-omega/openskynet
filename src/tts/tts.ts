@@ -11,8 +11,8 @@ import {
 } from "node:fs";
 import path from "node:path";
 import type { ReplyPayload } from "../auto-reply/types.js";
-import { normalizeChannelId } from "../channels/plugins/index.js";
 import type { ChannelId } from "../channels/plugins/types.js";
+import { normalizeChannelId } from "../channels/registry.js";
 import type { OpenClawConfig } from "../config/config.js";
 import { normalizeResolvedSecretInputString } from "../config/types.secrets.js";
 import type {
@@ -46,7 +46,7 @@ import {
   transcodeToOggOpus,
 } from "./tts-core.js";
 
-const DEFAULT_TIMEOUT_MS = 60_000; // Increased to 60s for long texts
+const DEFAULT_TIMEOUT_MS = 300_000; // Increased to 5 minutes for long texts (Podcasts)
 const DEFAULT_TTS_MAX_LENGTH = 100_000;
 const DEFAULT_TTS_SUMMARIZE = false;
 const DEFAULT_MAX_TEXT_LENGTH = 100_000;
