@@ -125,3 +125,4 @@ src/canvas-host/a2ui/*.bundle.js
 src/canvas-host/a2ui/*.map
 tmp/
 tsc
+memory/
