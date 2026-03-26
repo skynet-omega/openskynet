@@ -108,6 +108,38 @@ export {
 } from "./science-base-reader.js";
 
 export {
+  formatOmegaStudySupervisorBlock,
+  syncOmegaStudySupervisor,
+  type OmegaStudyFocus,
+  type OmegaStudySupervisorState,
+  type OmegaStudyTrack,
+  type OmegaStudyTrackKey,
+} from "./study-supervisor.js";
+export {
+  deriveSkynetContinuityState,
+  formatSkynetContinuityBlock,
+  syncSkynetContinuityState,
+  type SkynetContinuityState,
+} from "../skynet/continuity-tracker.js";
+export {
+  deriveSkynetNucleusState,
+  formatSkynetNucleusBlock,
+  syncSkynetNucleus,
+  type SkynetExecutiveLobe,
+  type SkynetMetabolism,
+  type SkynetNucleusMode,
+  type SkynetNucleusState,
+  type SkynetPatternField,
+} from "../skynet/nucleus.js";
+export {
+  deriveSkynetStudyProgram,
+  formatSkynetStudyProgramBlock,
+  syncSkynetStudyProgram,
+  type SkynetStudyProgram,
+  type SkynetStudyWorkItem,
+} from "../skynet/study-program.js";
+
+export {
   registerLearnedRule,
   applyLearnedRules,
   recordLearnedRuleOutcome,

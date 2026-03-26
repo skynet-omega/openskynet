@@ -1,4 +1,19 @@
 import {
+  formatSkynetContinuityBlock,
+  syncSkynetContinuityState,
+  type SkynetContinuityState,
+} from "../skynet/continuity-tracker.js";
+import {
+  formatSkynetNucleusBlock,
+  syncSkynetNucleus,
+  type SkynetNucleusState,
+} from "../skynet/nucleus.js";
+import {
+  formatSkynetStudyProgramBlock,
+  syncSkynetStudyProgram,
+  type SkynetStudyProgram,
+} from "../skynet/study-program.js";
+import {
   loadOmegaDurableMemory,
   queryOmegaDurableMemory,
   type OmegaDurableMemoryEntry,
@@ -16,6 +31,11 @@ import {
 } from "./problem-agenda.js";
 import type { OmegaSelfTimeKernelState } from "./self-time-kernel.js";
 import { loadOmegaSessionRuntimeSnapshot, loadOmegaSessionSelfState } from "./session-context.js";
+import {
+  formatOmegaStudySupervisorBlock,
+  syncOmegaStudySupervisor,
+  type OmegaStudySupervisorState,
+} from "./study-supervisor.js";
 
 type OmegaRecoveryPreference = {
   preferredRoute: "omega_delegate" | "sessions_spawn";
@@ -54,6 +74,10 @@ export type OmegaWorldModelSnapshot = {
   activeGoalTask?: string;
   relevantMemories: OmegaDurableMemoryEntry[];
   operationalSignals: OmegaOperationalTurnMemoryEntry[];
+  studySupervisor?: OmegaStudySupervisorState;
+  skynetNucleus?: SkynetNucleusState;
+  skynetStudyProgram?: SkynetStudyProgram;
+  skynetContinuity?: SkynetContinuityState;
 };
 
 function normalizeWorldModelText(value: string): string {
@@ -375,6 +399,52 @@ export async function loadOmegaWorldModelSnapshot(params: {
           updatedAt: Date.now(),
         }
       : undefined;
+  const studySupervisor = await syncOmegaStudySupervisor({
+    workspaceRoot: params.workspaceRoot,
+    sessionKey: params.sessionKey,
+    problemAgenda,
+    relevantMemories,
+    operationalSignals,
+    learnedConstraints: enrichedSelfState?.learnedConstraints ?? [],
+    activeGoalTask,
+    localityExecutionGuard: deriveLocalityExecutionGuard({
+      relevantMemories,
+      expectedPaths: params.expectedPaths,
+      watchedPaths: params.watchedPaths,
+    }),
+  }).catch(() => undefined);
+  const localityExecutionGuard = deriveLocalityExecutionGuard({
+    relevantMemories,
+    expectedPaths: params.expectedPaths,
+    watchedPaths: params.watchedPaths,
+  });
+  const skynetNucleus = studySupervisor
+    ? await syncSkynetNucleus({
+        workspaceRoot: params.workspaceRoot,
+        sessionKey: params.sessionKey,
+        studyFocus: studySupervisor.focus,
+        operationalSignals,
+        learnedConstraints: enrichedSelfState?.learnedConstraints ?? [],
+      }).catch(() => undefined)
+    : undefined;
+  const skynetStudyProgram =
+    studySupervisor && skynetNucleus
+      ? await syncSkynetStudyProgram({
+          workspaceRoot: params.workspaceRoot,
+          sessionKey: params.sessionKey,
+          supervisor: studySupervisor,
+          nucleus: skynetNucleus,
+        }).catch(() => undefined)
+      : undefined;
+  const skynetContinuity =
+    skynetNucleus && skynetStudyProgram
+      ? await syncSkynetContinuityState({
+          workspaceRoot: params.workspaceRoot,
+          sessionKey: params.sessionKey,
+          nucleus: skynetNucleus,
+          program: skynetStudyProgram,
+        }).catch(() => undefined)
+      : undefined;
 
   return {
     sessionKey: params.sessionKey,
@@ -389,16 +459,16 @@ export async function loadOmegaWorldModelSnapshot(params: {
       metrics: empiricalMetrics,
     }),
     localityRoutingPreference: deriveLocalityRoutingPreference(relevantMemories),
-    localityExecutionGuard: deriveLocalityExecutionGuard({
-      relevantMemories,
-      expectedPaths: params.expectedPaths,
-      watchedPaths: params.watchedPaths,
-    }),
+    localityExecutionGuard,
     problemAgenda,
     timelineLength: runtime.timeline.length,
     activeGoalTask,
     relevantMemories,
     operationalSignals,
+    studySupervisor,
+    skynetNucleus,
+    skynetStudyProgram,
+    skynetContinuity,
   };
 }
 
@@ -452,6 +522,17 @@ export function formatOmegaWorldModelSnapshot(snapshot: OmegaWorldModelSnapshot)
         .map((item) => item.classKey)
         .join(", ")}`,
     );
+  }
+  lines.push(...formatOmegaStudySupervisorBlock(snapshot.studySupervisor));
+  if (snapshot.skynetNucleus) {
+    lines.push("");
+    lines.push(...formatSkynetNucleusBlock(snapshot.skynetNucleus));
+  }
+  if (snapshot.skynetStudyProgram) {
+    lines.push(...formatSkynetStudyProgramBlock(snapshot.skynetStudyProgram));
+  }
+  if (snapshot.skynetContinuity) {
+    lines.push(...formatSkynetContinuityBlock(snapshot.skynetContinuity));
   }
   if (snapshot.relevantMemories.length > 0) {
     lines.push("");

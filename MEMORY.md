@@ -1,21 +1,26 @@
 # MEMORY.md - Long-Term Memory (Omega)
 
-## 2026-03-25: Structural Convergence Milestone
+## Estado de la Misión (Marzo 2026)
 
-**Milestone Reached:** Completed the baseline convergence of the Omega cognitive loop.
+OpenSkyNet está en proceso de transición de un conjunto de módulos heterogéneos a un runtime ejecutivo único con soberanía arquitectónica.
 
-- **Unified Decision Context:** Both `heartbeat` and `omega_work` now consume a common `DecisionContext`.
-- **State Authority Model:** Implemented a formal governance layer (`state-authority.ts`) to manage state between `authoritative`, `derived`, `fallback`, and `experimental` sources.
-- **Engine Signal Scoring:** Established a standardized scoring system for cognitive engines, allowing for weighted, multi-dimensional signal aggregation (confidence, urgency, frustration).
+### Hitos Alcanzados
 
-**Key Learnings:**
+- **Sustrato Estable:** `openclaw-tools.ts` refactorizado en suites funcionales (Core, Session, Omega, Plugin).
+- **Gobernanza de Estado:** Implementación de `state-authority.ts` para clasificar stores (Authoritative, Derived, Fallback).
+- **Convergencia del Loop:** `heartbeat` y `omega_work` ahora consumen `decision-context.ts`.
+- **Registry de Engines:** Existe un baseline en `src/omega/engines/` para unificar señales de NLE, JEPA y otros motores.
 
-- Consolidating state via authority classification (governance) proved more viable than the original Phase 2 plan of a single physical store.
-- Decoupling engines through a signal-scoring registry has significantly reduced complexity in the main `heartbeat` loop.
+### Pendientes Críticos (Next Milestones)
 
-**Next Strategic Focus:**
+- **Benchmark Hardening:** Validar si el scoring agregado mejora decisiones reales frente al kernel simple.
+- **Soberanía del WSP:** Elevar el World State Processor de experimental a autoridad cuando la confianza sea suficiente.
+- **Adapters Formales:** Mover motores supervivientes a `src/omega/engines/adapters/`.
+- **Loop Frío/Caliente:** Separar ejecución básica de llamadas costosas al LLM.
+- **Skynet:** Consolidar el nuevo núcleo experimental como agenda autónoma persistente con estado, programa de estudio y validación empírica propia. Se inició el primer experimento de autonomía endógena (`src/skynet/experiments/autonomy_pulse_01.ts`) para medir señales de entropía y ajustar el foco de estudio.
 
-- Transition to empirical benchmarking (A/B testing of dispatch and drive signals).
-- Formalize engine adapters to further isolate experimental modules from the core runtime.
+### Decisiones de Diseño
 
-_Citations: `ANALISIS_EMPIRICO_MACRO_MICRO_v2.md`, `IMPLEMENTATION_PLAN.md`_
+- Se rechazó la creación de un "Single Store" físico masivo; se optó por una matriz de autoridad sobre stores existentes.
+- El LLM debe ser un órgano periférico (engine), no el centro ontológico de la decisión.
+- `OpenSkyNet` actual pasa a ser plataforma de supervisión e instrumentación; `Skynet` es el nombre oficial del nuevo núcleo experimental.

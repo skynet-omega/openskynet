@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import { formatThinkingLevels, normalizeThinkLevel } from "../auto-reply/thinking.js";
 import { DEFAULT_SUBAGENT_MAX_SPAWN_DEPTH } from "../config/agent-limits.js";
-import type { OpenClawConfig } from "../config/config.js";
+import { loadConfig, type OpenClawConfig } from "../config/config.js";
 import { callGateway } from "../gateway/call.js";
 import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
 import {
@@ -197,8 +197,7 @@ function summarizeError(err: unknown): string {
 }
 
 async function loadCurrentConfig() {
-  const configModule = await import("../config/config.js");
-  return configModule.loadConfig();
+  return loadConfig();
 }
 
 async function ensureThreadBindingForSubagentSpawn(params: {

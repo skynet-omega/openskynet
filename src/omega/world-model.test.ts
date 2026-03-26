@@ -256,6 +256,27 @@ describe("omega world model", () => {
 
     expect(snapshot.problemAgenda.length).toBeGreaterThan(0);
     expect(snapshot.problemAgenda[0]?.classKey).toBe("initiative:autonomy_improvement");
+    expect(snapshot.studySupervisor?.focus.key).toBe("endogenous_science_agenda");
+    expect(snapshot.studySupervisor?.tracks.length).toBeGreaterThanOrEqual(5);
+    expect(snapshot.skynetNucleus?.name).toBe("Skynet");
+    expect(snapshot.skynetNucleus?.mode).toBe("explore");
+    expect(snapshot.skynetStudyProgram?.items.length).toBe(3);
+    expect(snapshot.skynetStudyProgram?.items[0]?.title).toContain("Empujar foco activo");
+    expect(snapshot.skynetContinuity?.focusStreak).toBe(1);
+  });
+
+  it("includes the study supervisor focus in the idle heartbeat prompt", async () => {
+    const prompt = await buildIdleOmegaHeartbeatPrompt({
+      workspaceRoot,
+      sessionKey,
+      kernel: undefined,
+    });
+
+    expect(prompt).toContain("[SKYNET Study Supervisor]");
+    expect(prompt).toContain("[Skynet Nucleus]");
+    expect(prompt).toContain("[Skynet Study Program]");
+    expect(prompt).toContain("[Skynet Continuity]");
+    expect(prompt).toContain("Agenda científica endógena");
   });
 
   it("derives an isolation bias from repeated low-locality failures", async () => {

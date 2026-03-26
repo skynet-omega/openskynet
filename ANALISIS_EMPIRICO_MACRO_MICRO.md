@@ -86,8 +86,9 @@ Lo que ya esta alineado con el codigo real:
   - `src/omega/empirical-metrics.ts`
   - `src/omega/empirical-validation.ts`
   - `src/omega/learning-validation.ts`
-  - `src/omega/live-validation.ts`
   - `src/omega/jepa-empirical-logger.ts`
+  - `src/omega/study-supervisor.ts`
+  - `src/skynet/study-program.ts`
 
 Lo que sigue desalineado o incompleto:
 
@@ -941,7 +942,7 @@ Pasos:
   - memory integrity
   - interference pressure / write locality
 
-5.6. Extraer patrones, no monolitos.
+    5.6. Extraer patrones, no monolitos.
 
 - No intentar portar `skynet_omega_core.py` entero al core de OpenSkyNet.
 - Extraer primero modulos falsables:
@@ -950,7 +951,7 @@ Pasos:
   - EFE como shaping de politica
   - telemetria interna de integridad y viabilidad
 
-5.7. Tratar `SKYNET_X` como suite de ablaciones:
+    5.7. Tratar `SKYNET_X` como suite de ablaciones:
 
 - `V1`: EqProp / relajacion contrastiva
 - `V2`: Neural ODE suave
@@ -1026,9 +1027,10 @@ Rutas sugeridas para instrumentacion y benchmark:
 - `src/omega/empirical-metrics.ts`
 - `src/omega/empirical-validation.ts`
 - `src/omega/learning-validation.ts`
-- `src/omega/live-validation.ts`
 - `src/omega/evals.ts`
 - `src/omega/jepa-empirical-logger.ts`
+- `src/omega/study-supervisor.ts`
+- `src/skynet/study-program.ts`
 - `src/omega/scientific-induction.ts`
 - `reports/`
 - `benchmark_jepa_autonomy_improvement.json`

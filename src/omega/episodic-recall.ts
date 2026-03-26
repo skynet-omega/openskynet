@@ -1,5 +1,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { loadConfig } from "../config/config.js";
+import { getMemorySearchManager } from "../memory/index.js";
+import { resolveAgentIdFromSessionKey } from "../routing/session-key.js";
 import type { OmegaEmpiricalRoute } from "./empirical-metrics.js";
 import type { OmegaSessionValidationSnapshot } from "./session-context.js";
 import {
@@ -185,10 +188,7 @@ function buildEpisode(params: {
 
 function formatAttemptSummary(transaction: OmegaTaskTransaction): string[] {
   return transaction.attempts.map((attempt, index) => {
-    const bits = [
-      `${index + 1}. status=${attempt.status}`,
-      `trigger=${attempt.trigger}`,
-    ];
+    const bits = [`${index + 1}. status=${attempt.status}`, `trigger=${attempt.trigger}`];
     if (attempt.route) {
       bits.push(`route=${attempt.route}`);
     }
@@ -302,7 +302,9 @@ async function loadEpisodeCandidates(params: {
         const raw = await fs.readFile(filePath, "utf-8");
         const parsed = JSON.parse(raw) as OmegaSessionTimelineFileLike;
         const sessionKey =
-          typeof parsed.sessionKey === "string" ? normalizeSessionKey(parsed.sessionKey) : undefined;
+          typeof parsed.sessionKey === "string"
+            ? normalizeSessionKey(parsed.sessionKey)
+            : undefined;
         if (!sessionKey) {
           return [];
         }
@@ -349,8 +351,10 @@ export async function loadOmegaRecoveryEpisodeRecall(params: {
       if (episode.status === "completed") {
         return true;
       }
-      return !(normalizeText(episode.task) === normalizeText(params.task) &&
-        sameTargets(episode.targets, params.validation.expectedPaths));
+      return !(
+        normalizeText(episode.task) === normalizeText(params.task) &&
+        sameTargets(episode.targets, params.validation.expectedPaths)
+      );
     })
     .map((episode) => ({
       ...episode,
@@ -417,12 +421,6 @@ export async function loadOmegaSemanticRecoveryRecall(params: {
 
   const maxResults = Math.max(1, params.maxResults ?? OMEGA_SEMANTIC_RECALL_RESULT_LIMIT);
   try {
-    const [{ loadConfig }, { getMemorySearchManager }, { resolveAgentIdFromSessionKey }] =
-      await Promise.all([
-        import("../config/config.js"),
-        import("../memory/index.js"),
-        import("../routing/session-key.js"),
-      ]);
     const cfg = loadConfig();
     const agentId = resolveAgentIdFromSessionKey(params.sessionKey);
     const { manager } = await getMemorySearchManager({
@@ -442,8 +440,7 @@ export async function loadOmegaSemanticRecoveryRecall(params: {
       .slice(0, maxResults)
       .map((entry) => ({
         path: entry.path,
-        citation:
-          entry.citation ?? formatCitation(entry.path, entry.startLine, entry.endLine),
+        citation: entry.citation ?? formatCitation(entry.path, entry.startLine, entry.endLine),
         score: Number(entry.score.toFixed(4)),
         snippet: compactSnippet(entry.snippet),
       }));
@@ -452,9 +449,7 @@ export async function loadOmegaSemanticRecoveryRecall(params: {
   }
 }
 
-export function formatOmegaRecoveryEpisodeRecall(
-  episodes: OmegaRecoveryEpisode[],
-): string[] {
+export function formatOmegaRecoveryEpisodeRecall(episodes: OmegaRecoveryEpisode[]): string[] {
   if (episodes.length === 0) {
     return [];
   }

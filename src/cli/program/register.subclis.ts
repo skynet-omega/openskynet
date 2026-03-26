@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import type { OpenClawConfig } from "../../config/config.js";
+import { loadConfig, readConfigFileSnapshot, type OpenClawConfig } from "../../config/config.js";
 import { isTruthyEnvValue } from "../../infra/env.js";
 import { getPrimaryCommand, hasHelpOrVersion } from "../argv.js";
 import { reparseProgramFromActionArgs } from "./action-reparse.js";
@@ -30,12 +30,11 @@ const shouldEagerRegisterSubcommands = (_argv: string[]) => {
 
 export const loadValidatedConfigForPluginRegistration =
   async (): Promise<OpenClawConfig | null> => {
-    const mod = await import("../../config/config.js");
-    const snapshot = await mod.readConfigFileSnapshot();
+    const snapshot = await readConfigFileSnapshot();
     if (!snapshot.valid) {
       return null;
     }
-    return mod.loadConfig();
+    return loadConfig();
   };
 
 // Note for humans and agents:

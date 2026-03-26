@@ -1,501 +1,312 @@
-Primero chequeo memoria y luego te doy una síntesis
-brutal de debilidades, muros y separación respecto a AGI.Sí. Puedo hacerlo.
+# CRITICA ACTUALIZADA A OPENSKYNET
 
-Y para ser preciso: revisé memoria primero y no encontré entradas guardadas relevantes sobre este estudio, así que
-esta respuesta se basa en:
+Fecha de actualizacion: 2026-03-25
 
-- el corpus de EXPERIMENTOS que revisamos
-- los cambios recientes en OMEGA
-- la comparación funcional que corrimos contra el proyecto padre
+Este documento reemplaza la version anterior que mezclaba critica valida con afirmaciones ya obsoletas.
 
-Respuesta corta
+La lectura correcta hoy no es:
 
-Sí, este estudio se puede y se debe hacer.
-Y diría más: ya empezó de facto, pero todavía falta consolidarlo como diagnóstico explícito del sistema.
+- "OpenSkyNet sigue siendo solo un collage sin convergencia"
 
-Porque hoy ya tenemos suficiente evidencia para contestar varias cosas sin humo:
+Tampoco es:
 
-- cuáles son las debilidades reales de OpenSkyNet
-- cuáles son sus cuellos de botella
-- qué lo separa de una AGI
-- qué líneas ya fracasaron
-- qué línea sí muestra señal útil
+- "OpenSkyNet ya resolvio su arquitectura ejecutiva"
 
-────────────────────────────────────────────────────────────────────────────────
+La formulacion precisa es esta:
 
-Mi diagnóstico actual de OpenSkyNet
+- OpenSkyNet ya salio de la fase de collage puro
+- logro convergencia util en varias piezas ejecutivas importantes
+- pero todavia no tiene soberania arquitectonica cerrada
+- y todavia no tiene validacion experimental suficiente para declarar cierre
 
-1.  Qué es hoy OpenSkyNet, brutalmente
+## 1. Que es hoy OpenSkyNet
 
-Hoy OpenSkyNet no es AGI ni está cerca en el sentido fuerte.
+Hoy OpenSkyNet no es AGI ni esta cerca en el sentido fuerte.
 
-Hoy es más bien:
+Hoy es:
 
-│ un sistema agente instrumental con memoria operativa parcial, recuperación útil parcial y capacidad creciente de
-│ corrección localizada
+- un sistema agente instrumental con memoria operativa real
+- continuidad parcial entre sesiones
+- recovery util
+- policy ejecutiva parcialmente convergida
+- instrumentation suficiente para medir y corregir
 
-Eso no es menor.
-Pero tampoco es una mente general.
+Eso ya no es trivial.
+Pero tampoco es una cognicion general cerrada.
 
-────────────────────────────────────────────────────────────────────────────────
+## 2. Que partes de la critica vieja quedaron obsoletas
 
-2.  Debilidades centrales de OpenSkyNet
+Estas afirmaciones ya no describen bien el repo actual y se eliminan como critica vigente:
 
-A. No tiene modelo del mundo suficientemente profundo
+- que `heartbeat` y `omega_work` operan como cerebros casi separados
+- que no existe continuidad real o que el pensamiento continuo muere siempre al final del ciclo
+- que no existe WSP util en el path de decision
+- que no existe clasificacion explicita de autoridad de estado
+- que no existe interfaz comun de engines o scoring agregado
 
-Tiene:
+Hoy si existen:
 
-- contexto
-- memoria operativa
-- causalidad limitada
-- objetivos y tensión
+- `src/omega/decision-context.ts`
+- `src/omega/state-authority.ts`
+- `src/omega/omega-wsp.ts`
+- `src/omega/engines/registry.ts`
+- `src/omega/engines/score-engine-signal.ts`
+- consumo compartido de `decision-context` desde `heartbeat` y `omega_work`
 
-Pero eso no equivale a un modelo generativo interno robusto del mundo.
+Por eso la critica ya no puede seguir escrita como si faltaran todas las piezas.
 
-Problema:
+## 3. Que sigue siendo verdadero
 
-- reacciona mejor de lo que comprende
-- coordina mejor de lo que explica
-- corrige localmente mejor de lo que abstrae globalmente
+### 3.1 El LLM sigue siendo parte del motor efectivo
 
-Eso lo aleja fuerte de AGI.
+OMEGA gano estructura, pero OpenSkyNet sigue siendo una arquitectura ejecutiva alrededor de un LM.
 
-────────────────────────────────────────────────────────────────────────────────
+Sigue faltando:
 
-B. La continuidad temporal sigue siendo parcial
+- loop frio sin LLM
+- loop caliente con LLM solo por umbral
+- separacion dura entre control base y expansion semantica costosa
 
-Mejoró bastante, pero todavía la continuidad es frágil.
+Mientras eso no exista, el sistema sigue dependiendo demasiado del modelo base para cerrar conducta.
 
-El sistema puede:
+### 3.2 No hay soberania cerrada del estado
 
+La clasificacion de autoridad fue una mejora correcta.
+Pero clasificar stores no es lo mismo que resolver una sola ley de estado.
+
+La autoridad sigue repartida entre:
+
+- `self-time-kernel`
+- `execution-controller`
+- `operational-memory`
+- `world-model`
+- `omega-wsp`
+
+El sistema ya no esta en caos puro.
+Pero tampoco en soberania unificada.
+
+### 3.3 La continuidad temporal mejoro, pero sigue siendo fragil
+
+Hoy ya hay:
+
+- sesiones persistidas
+- durable memory
+- cross-session bridge
+- recovery runner
+- contexto compartido de decision
+
+Pero todavia no hay identidad cognitiva acumulativa fuerte.
+
+El sistema aun no sostiene bien:
+
+- lineas de investigacion largas sin deriva
+- consolidacion mecanistica reusable
+- revision retrospectiva fuerte de decisiones viejas
+- aprendizaje autonomo estable entre escalas
+
+### 3.4 No existe descubrimiento cientifico autonomo cerrado
+
+OpenSkyNet ya puede:
+
+- detectar tension
+- registrar fallos
+- inducir hipotesis focalizadas
+- correr validaciones y benchmarks
+
+Pero todavia no cierra el ciclo completo de ciencia sin supervison fuerte:
+
+1. formular hipotesis nuevas de valor
+2. disenar experimento fuerte
+3. ejecutar
+4. analizar
+5. refinar teoria
+6. integrar mecanismo
+7. volver a medir con criterio de kill
+
+Sigue siendo un colaborador cientifico creciente, no un cientifico autonomo fuerte.
+
+### 3.5 Falta abstraccion mecanistica transferible
+
+Este sigue siendo uno de los muros principales.
+
+OpenSkyNet puede:
+
+- corregir localmente
+- preservar estructura correcta
 - retomar objetivos
-- guardar estado
-- detectar ciertos fallos
-- rencauzar recovery
+- enrutar recovery con mas criterio
 
-Pero todavía falla en cosas como:
-
-- mantener una línea de investigación larga sin deriva
-- sostener hipótesis en múltiples escalas temporales
-- revisar decisiones antiguas con criterio fuerte
-- acumular aprendizaje reusable de forma estable
-
-O sea:
-
-│ tiene memoria operativa, pero no todavía identidad cognitiva acumulativa fuerte
-
-────────────────────────────────────────────────────────────────────────────────
-
-C. Le falta abstracción mecanística transferible
-
-Esto es importante.
-
-OpenSkyNet puede resolver o corregir tareas, pero aún le cuesta:
+Pero le sigue costando:
 
 - descubrir mecanismos generales
-- abstraer leyes operativas
-- transferir un hallazgo entre dominios sin mucho andamiaje
-- construir modelos compactos reutilizables
+- comprimir hallazgos en reglas reutilizables
+- transferir un aprendizaje entre dominios
+- convertir resultados en ley operativa durable
 
-Sin eso no hay inteligencia general seria.
+## 4. Que gano realmente el sistema
 
-────────────────────────────────────────────────────────────────────────────────
+Esto si cambio y no debe seguir negandose:
 
-D. Todavía depende demasiado del LM como motor semántico base
+- `heartbeat` y `omega_work` ya no operan por caminos totalmente separados
+- existe un `decision-context` comun
+- existe una matriz de autoridad de estado
+- existe baseline funcional de engines comparables
+- existe scoring agregado de senales
+- existe mejor recovery y continuidad que en la etapa anterior
 
-Aunque OMEGA añade estructura, policy y validación, el sistema aún depende de un modelo base que:
+En otras palabras:
 
-- no estable entre contextos
-- no tiene objetivos propios persistentes
-- no aprende realmente online en el sentido fuerte
-- no consolida conocimiento por sí mismo como una arquitectura cognitiva cerrada
+antes el problema era "faltan piezas".
 
-Eso significa que OpenSkyNet hoy es más:
+hoy el problema es:
 
-- arquitectura de control sobre un LM
-  que
-- sistema cognitivo autónomo completo
+- hay varias piezas correctas
+- varias ya convergieron
+- pero no hay cierre suficientemente duro sobre quien manda, cuando manda y como cambia la conducta despues de aprender
 
-────────────────────────────────────────────────────────────────────────────────
+## 5. Cuellos de botella vigentes
 
-E. No tiene descubrimiento científico autónomo cerrado
+### 5.1 Memoria util vs memoria acumulada
 
-Este punto es clave para ti.
+El problema no es guardar mas.
+El problema sigue siendo:
 
-Puede ayudar a investigar.
-Puede comparar.
-Puede instrumentar.
-Puede iterar.
+- que memoria cambia decisiones futuras de forma fiable
 
-Pero todavía no cierra bien el ciclo completo de ciencia:
+OpenSkyNet mejoro durable memory, retrieval y continuidad.
+Pero aun no demuestra que la memoria acumulada produzca aprendizaje mecanistico suficientemente fuerte.
 
-1.  formular hipótesis propias de valor
-2.  diseñar experimento fuerte
-3.  ejecutar
-4.  analizar
-5.  refinar teoría
-6.  integrar mecanismo
-7.  volver a medir sin supervisión fuerte
+### 5.2 Recovery y edicion selectiva
 
-Ese loop aún no está maduro.
+Esta sigue siendo una de las fronteras mas prometedoras del sistema.
 
-────────────────────────────────────────────────────────────────────────────────
-
-3.  Qué lo separa de una AGI
-
-Si lo digo en una línea:
-
-Lo separa de una AGI el hecho de que todavía no tiene una dinámica general de construcción de mundo, aprendizaje
-acumulativo y automejora epistémica robusta.
-
-Más concretamente:
-
-### 1. Falta de generalización profunda
-
-Puede generalizar localmente.
-No demuestra todavía generalización abierta y robusta entre clases de problema muy distintas.
-
-### 2. Falta de aprendizaje acumulativo real
-
-Recuerda cosas, sí.
-Pero recordar no es lo mismo que aprender una nueva estructura cognitiva reutilizable.
-
-### 3. Falta de autonomía de investigación fuerte
-
-No sostiene todavía programas de investigación largos con independencia real.
-
-### 4. Falta de un modelo ejecutivo suficientemente universal
-
-Tiene policy/tensión/recovery, pero todavía no un ejecutivo que:
-
-- razone sobre sí mismo con suficiente precisión
-- redistribuya recursos cognitivos de manera óptima
-- descubra nuevas representaciones cuando las actuales fallan
-
-### 5. Falta de compresión causal del mundo
-
-Sin eso, el sistema sigue siendo parcialmente táctico.
-
-────────────────────────────────────────────────────────────────────────────────
-
-4.  Cuellos de botella principales
-
-Cuello 1 — Memoria útil vs memoria acumulada
-
-El problema no es guardar más.
-El problema es:
-
-│ qué memoria cambia decisiones futuras de forma fiable
-
-Los experimentos ya mostraron que:
-
-- más memoria no implica mejor rendimiento
-- complejidad de memoria no equivale a mejor capacidad
-- la memoria útil parece estar más cerca de:
-- causalidad
-- interferencia
-- reanudación
-- corrección localizada
-
-Ese sigue siendo uno de los muros principales.
-
-────────────────────────────────────────────────────────────────────────────────
-
-Cuello 2 — Recovery y edición selectiva
-
-Esta sí es la frontera con más señal.
-
-Los experimentos y los cambios recientes empujan hacia:
-
-- revisión sin replay global
-- edición local
-- preservación de subestructura correcta
-- corrección bajo interferencia
-
-Mi lectura:
-
-│ este no es un detalle de tooling; es una propiedad cognitiva importante
-
-Porque un sistema más general necesita justamente:
+La direccion buena sigue siendo:
 
 - corregir sin destruir
-- actualizar sin recomputar todo
-- cambiar una crencia/acción local sin colapsar el resto
+- editar localmente
+- preservar subestructura correcta
+- evitar replay global innecesario
 
-Ahí hay muro y oportunidad a la vez.
+Esto no es un detalle menor de tooling.
+Es una propiedad cognitiva util y una de las pocas lineas con senal empirica real.
 
-────────────────────────────────────────────────────────────────────────────────
+### 5.3 Politica de control y economia cognitiva
 
-Cuello 3 — Política de control / cuándo pensar / cuándo actuar
+Sigue faltando una economia cognitiva dura.
 
-OpenSkyNet ya tiene algo de esto, pero sigue siendo insuficiente.
+Todavia puede:
 
-Problema:
+- pensar demasiado donde no conviene
+- despertar sin valor suficiente
+- sostener objetivos de bajo retorno
+- mezclar observacion, mantenimiento y accion correctiva sin umbral duro
 
-- puede gastar iteraciones donde no conviene
-- puede reintentar demasiado pronto o demasiado tarde
-- puede sostener objetivos con costo alto y retorno bajo
-- no tiene aún una economía cognitiva completamente dura
+Esto se ve tambien en la operacion autonoma: el sistema puede comportarse razonablemente, pero la politica aun es demasiado blanda para dejarlo actuar sin vigilancia fuerte sobre el workspace.
 
-Para acercarse a AGI, necesita mejor:
+### 5.4 Construccion y seleccion de hipotesis
 
-- asignación de esfuerzo
-- selección de foco
-- abandono racional
-- exploración vs explotación
+La induccion cientifica ya no esta rota como antes.
+Pero eso no equivale a autonomia epistemica fuerte.
 
-────────────────────────────────────────────────────────────────────────────────
+Sigue faltando:
 
-Cuello 4 — Construcción de hipótesis propias
+- mejor priorizacion de hipotesis
+- mejor descarte de hipotesis malas
+- mejor cierre entre hypothesis, benchmark y kill criteria
 
-Esto es central para tu visión científica.
+### 5.5 Transferencia entre escalas
 
-OpenSkyNet aún no muestra de forma robusta:
-
-- generación de hipótesis nuevas valiosas
-- selección de hipótesis con buena priorización
-- descarte rápido de ideas malas
-- refinamiento teórico acumulativo
-
-Hoy puede colaborar en esto, pero no liderarlo de forma autónoma fuerte.
-
-────────────────────────────────────────────────────────────────────────────────
-
-Cuello 5 — Transferencia entre escalas
-
-Puede hacer bien cosas locales:
+OpenSkyNet ya opera mejor en la escala:
 
 - archivo
-- task
-- recovery
-- validación
+- tarea
+- recovery puntual
 
-Pero falta mejor unión entre escalas:
+Pero sigue flojo en la union entre:
 
-- archivo ↔ tarea
-- tarea ↔ proyecto
-- proyecto ↔ agenda científica
-- agenda ↔ arquitectura
+- tarea y proyecto
+- proyecto y agenda cientifica
+- agenda cientifica y arquitectura durable
 
-Ese salto de escala es uno de los muros más duros.
+Ese salto de escala sigue siendo uno de los muros duros.
 
-────────────────────────────────────────────────────────────────────────────────
+## 6. Critica operativa nueva: autonomia todavia demasiado abierta
 
-5.  Qué dicen los experimentos sobre estos muros
+Esta parte no estaba suficientemente clara en la critica vieja y hoy si merece quedar escrita.
 
-Lo que ya sabemos que NO basta
+El problema ya no es solo arquitectonico.
+Tambien es operativo.
 
-Del laboratorio, el mensaje es bastante claro:
+En modo heartbeat/cron, OpenSkyNet puede observar, escribir memoria y potencialmente actuar sobre el repo si interpreta que esta "combatiendo entropia".
 
-### No basta:
+Eso significa:
 
-- agregar módulos
-- meter memoria multifase por sí sola
-- hacer stacks más “ricos”
-- usar lenguaje grandilocuente tipo OMEGA totalizante
-- asumir sinergia por complejidad acumulada
-- hacer probes black-box blandos
+- la ultima pasada observada fue razonable y no danina
+- pero la politica autonoma todavia no es suficientemente segura para dejarla sin restricciones fuertes sobre `~/openskynet`
 
-Eso ya fue suficientemente tensionado.
+La critica correcta hoy incluye esto:
 
-────────────────────────────────────────────────────────────────────────────────
+- OpenSkyNet ya tiene mas autonomia instrumental de la que su economia cognitiva puede gobernar con seguridad plena
 
-Lo que sí muestra señal
+## 7. Donde estamos hoy
 
-La señal real está más cerca de:
+La formulacion mas precisa hoy es esta:
 
-### A. corrección selectiva
+OpenSkyNet ya no falla por ausencia de piezas cognitivas.
+OpenSkyNet falla por:
 
-- exp48
-- exp66
-- exp66b
-- exp67
-- exp68
+- soberania arquitectonica incompleta
+- economia cognitiva insuficiente
+- validacion experimental insuficiente
+- autonomia operativa todavia demasiado abierta para el riesgo que implica
 
-### B. recuperación bajo interferencia
+Eso es progreso real.
+La critica correcta ya no es "no hay nada".
+La critica correcta ahora es "hay convergencia util, pero no cierre".
 
-- exp61
-- exp62
-- exp63
-- exp65b
+## 8. Continuidad correcta
 
-### C. dualidad temporal con cuidado
+No seguiria con:
 
-- exp39
-- exp40
+- mas refactor lateral
+- otra capa de estado canonico
+- mas narrativa arquitectonica sin medicion
+- mas autonomia abierta sobre el repo sin restricciones
 
-Eso sugiere que el avance real no está en “hacer un cerebro más barroco”, sino en:
+Seguiria con este orden:
 
-│ lograr que el sistema preserve estructura correcta mientras corrige estructura equivocada
+1. hardening del modo autonomo
+   - heartbeat observacional por defecto
+   - sin write/edit/exec libre sobre el workspace
+   - ask/on o agente separado para cron
 
-Eso es muy importante.
+2. benchmark and authority hardening
+   - A/B sobre dispatch util
+   - falsos positivos autonomos
+   - WSP drives vs kernel drives
+   - valor real del scoring agregado
 
-────────────────────────────────────────────────────────────────────────────────
+3. kill criteria explicitos
+   - matar motores que no mejoren conducta
+   - matar rutas autonomas de bajo valor
 
-6.  Puntos críticos reales de OpenSkyNet hoy
+4. recien despues
+   - adapters formales para los engines supervivientes
+   - separacion fria/caliente real
 
-Si tuviera que enumerarlos en orden:
+## 9. Veredicto corto
 
-1.  No sabe aprender mecanismos con suficiente permanencia
+OpenSkyNet esta mejor de lo que decia la critica mas dura.
+Tambien esta menos cerrado de lo que implicaba el entusiasmo arquitectonico.
 
-Aprende estados, no todavía mecanismos durables de forma fuerte.
+La conclusion correcta hoy es:
 
-2.  La memoria aún no está optimizada por utilidad causal futura
+- ya hay convergencia util
+- ya hay baseline ejecutivo defendible
+- pero todavia no hay soberania cerrada ni evidencia suficiente para cantar victoria
 
-Está mejorando, pero todavía no es una memoria verdaderamente científica.
+El siguiente trabajo serio no es "mas arquitectura".
+Es:
 
-3.  El control ejecutivo aún es parcial
-
-Tiene policy, pero no economía cognitiva madura.
-
-4.  Falta una capa de abstracción científica propia
-
-Todavía no convierte bien:
-
-- resultados experimentales
-  en
-- principios arquitectónicos duraderos
-
-5.  La frontera entre asistencia y autonomía sigue siendo gruesa
-
-Todavía necesita demasiado empuje humano para elegir bien qué investigar y qué matar.
-
-────────────────────────────────────────────────────────────────────────────────
-
-7.  Qué sí tiene a favor
-
-No todo es déficit.
-
-OpenSkyNet sí tiene cosas prometedoras:
-
-A. Infraestructura experimental real
-
-Eso ya es una ventaja enorme.
-Muchos sistemas hablan; aquí ya hay:
-
-- probes
-- benchmarks
-- comparativas
-- recovery tests
-- validación contra parent
-
-B. Un camino propio empieza a emerger
-
-No desde papers, sino desde evidencia:
-
-- locality-aware correction
-- causal recovery
-- operational memory
-- executive control
-
-C. Capacidad de poda
-
-Esto es raro y valioso.
-Ya hay suficiente disciplina para matar líneas que no sirven.
-
-D. Integración rápida de hallazgos
-
-Lo que salió de exp67/68 ya empezó a entrar al sistema real.
-
-Eso es exactamente lo que tú querías:
-
-- experimentar rápido
-- validar
-- si gana, integrarlo
-
-────────────────────────────────────────────────────────────────────────────────
-
-8.  Mi conclusión sobre “qué lo separa de AGI”
-
-Si lo tengo que resumir sin humo:
-
-OpenSkyNet todavía no es AGI porque:
-
-- no aprende estructuras nuevas de forma suficientemente acumulativa
-- no tiene modelo del mundo suficientemente general
-- no hace descubrimiento autónomo fuerte
-- no transfiere bien entre dominios y escalas
-- no controla su economía cognitiva con suficiente rigor
-- no abstrae principios nuevos con suficiente compresión causal
-
-Pero sí puede estar construyendo algo valioso si:
-
-- se enfoca en capacidades mecanísticas reales
-- deja de perseguir complejidad ornamental
-- convierte experimentos ganadores en invariantes del sistema
-- ataca continuidad, corrección selectiva y control ejecutivo
-
-────────────────────────────────────────────────────────────────────────────────
-
-9.  ¿Puede hacerse el estudio?
-
-Sí.
-
-Y te diría que debe hacerse en dos niveles:
-
-Nivel 1 — Diagnóstico del sistema actual
-
-Documento duro:
-
-- fortalezas
-- debilidades
-- muros
-- cuellos de botella
-- líneas muertas
-- líneas vivas
-
-Nivel 2 — Programa de investigación
-
-No papers.
-No teoría blanda.
-Sino algo como:
-
-- problema
-- hipótesis
-- mecanismo
-- prueba adversarial
-- criterio de integración o poda
-
-────────────────────────────────────────────────────────────────────────────────
-
-10. Qué recomiendo ahora
-
-No seguir improvisando intuiciones sueltas.
-
-Recomiendo hacer el estudio en esta forma:
-
-Parte A — Mapa brutal del sistema
-
-- qué es hoy
-- qué no es
-- dónde falla
-- qué ya fue falsado
-
-Parte B — Mapa de muros hacia AGI
-
-- aprendizaje acumulativo
-- modelo del mundo
-- transferencia
-- control ejecutivo
-- ciencia autónoma
-
-Parte C — Agenda de ataque
-
-Sólo 3 frentes:
-
-1.  memoria causal útil
-2.  corrección selectiva / update local
-3.  control ejecutivo / economía cognitiva
-
-────────────────────────────────────────────────────────────────────────────────
-
-Mi recomendación final
-
-Sí, puedo realizar ese estudio.
-Y creo que es el paso correcto antes de seguir agregando mecanismos.
-
-Si quieres, procedo ya con el entregable correcto:
-
-│ “Estudio crítico de OpenSkyNet: debilidades de fondo, cuellos de botella, muros hacia AGI y líneas de avance reales”
-
-y te lo estructuro en formato duro, útil para tomar decisiones, no para decorar.
+- hardening operativo de la autonomia
+- medicion dura de la arquitectura que ya existe

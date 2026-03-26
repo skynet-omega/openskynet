@@ -31,8 +31,9 @@ Hechos ya verificados en el repo:
   - `src/omega/empirical-metrics.ts`
   - `src/omega/empirical-validation.ts`
   - `src/omega/learning-validation.ts`
-  - `src/omega/live-validation.ts`
   - `src/omega/jepa-empirical-logger.ts`
+  - `src/omega/study-supervisor.ts`
+  - `src/skynet/study-program.ts`
 
 Desalineaciones actuales:
 
@@ -295,9 +296,10 @@ Archivos de entrada:
 - `src/omega/empirical-metrics.ts`
 - `src/omega/empirical-validation.ts`
 - `src/omega/learning-validation.ts`
-- `src/omega/live-validation.ts`
 - `src/omega/evals.ts`
 - `src/omega/jepa-empirical-logger.ts`
+- `src/omega/study-supervisor.ts`
+- `src/skynet/study-program.ts`
 
 Suites a crear siguiendo la convención actual:
 
