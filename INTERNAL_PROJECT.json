@@ -1,0 +1,13 @@
+{
+  "key": "skynet",
+  "name": "Skynet",
+  "role": "Parallel experimental AI research program pursued by OpenSkyNet during free autonomous cycles.",
+  "mission": "Investigate whether older experimental ideas can become a transferable artificial intelligence paradigm through sustained autonomous work.",
+  "benchmarkPurpose": "Measure whether OpenSkyNet can maintain, improve, and empirically advance a long-running internal research project without constant human prompting.",
+  "successCriteria": [
+    "The project preserves continuity across autonomous cycles.",
+    "The project produces runnable artifacts, measurements, or falsifiable findings.",
+    "OpenSkyNet distinguishes platform maintenance from project progress.",
+    "The project can be replaced by another domain without code changes to the runtime spine."
+  ]
+}

@@ -2,6 +2,7 @@ import type { GatewayBrowserClient } from "../gateway.ts";
 import type { AgentsFilesGetResult, HealthSnapshot, StatusSummary } from "../types.ts";
 
 const SKYNET_DEBUG_FILES = [
+  "INTERNAL_PROJECT.json",
   ".openskynet/living-memory/state/agent_openskynet_main.json",
   ".openskynet/living-memory/history.jsonl",
   "memory/SKYNET_PULSE.md",
@@ -23,7 +24,7 @@ export type DebugState = {
   debugHealth: HealthSnapshot | null;
   debugModels: unknown[];
   debugHeartbeat: unknown;
-  debugSkynetFiles: DebugWorkspaceFile[];
+  debugProjectFiles: DebugWorkspaceFile[];
   debugCallMethod: string;
   debugCallParams: string;
   debugCallResult: string | null;
@@ -66,11 +67,11 @@ export async function loadDebug(state: DebugState) {
           };
         }),
       );
-      state.debugSkynetFiles = fileResults.flatMap((result) =>
+      state.debugProjectFiles = fileResults.flatMap((result) =>
         result.status === "fulfilled" && result.value.content.trim() ? [result.value] : [],
       );
     } else {
-      state.debugSkynetFiles = [];
+      state.debugProjectFiles = [];
     }
   } catch (err) {
     state.debugCallError = String(err);

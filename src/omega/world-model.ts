@@ -1,8 +1,4 @@
-import {
-  formatSkynetBifurcationBlock,
-  loadSkynetBifurcationState,
-  type SkynetBifurcationState,
-} from "../skynet/bifurcation-engine.js";
+import { type SkynetBifurcationState } from "../skynet/bifurcation-engine.js";
 import {
   formatSkynetContinuityBlock,
   syncSkynetContinuityState,
@@ -35,7 +31,7 @@ import {
   type OmegaProblemAgendaItem,
 } from "./problem-agenda.js";
 import type { OmegaSelfTimeKernelState } from "./self-time-kernel.js";
-import { loadOmegaSessionRuntimeSnapshot, loadOmegaSessionSelfState } from "./session-context.js";
+import { loadOmegaSessionAuthority } from "./session-context.js";
 import {
   formatOmegaStudySupervisorBlock,
   syncOmegaStudySupervisor,
@@ -351,9 +347,8 @@ export async function loadOmegaWorldModelSnapshot(params: {
   expectedPaths?: string[];
   watchedPaths?: string[];
 }): Promise<OmegaWorldModelSnapshot> {
-  const [runtime, selfState, empiricalMetrics] = await Promise.all([
-    loadOmegaSessionRuntimeSnapshot(params),
-    loadOmegaSessionSelfState(params),
+  const [sessionAuthority, empiricalMetrics] = await Promise.all([
+    loadOmegaSessionAuthority(params),
     loadOmegaEmpiricalMetrics({ workspaceRoot: params.workspaceRoot }),
   ]);
   const allDurableMemory = await loadOmegaDurableMemory(params);
@@ -371,12 +366,12 @@ export async function loadOmegaWorldModelSnapshot(params: {
   const problemAgenda = await syncOmegaProblemAgenda({
     workspaceRoot: params.workspaceRoot,
     sessionKey: params.sessionKey,
-    kernel: runtime.kernel,
+    kernel: sessionAuthority.kernel,
     durableMemory: allDurableMemory,
     operationalSignals,
   }).catch(() => loadOmegaProblemAgenda(params));
-  const activeGoalTask = runtime.kernel?.goals.find(
-    (goal) => goal.id === runtime.kernel?.activeGoalId,
+  const activeGoalTask = sessionAuthority.kernel?.goals.find(
+    (goal) => goal.id === sessionAuthority.kernel?.activeGoalId,
   )?.task;
 
   // Inherit constraints from Durable Memory (The Bridge)
@@ -389,12 +384,12 @@ export async function loadOmegaWorldModelSnapshot(params: {
     (m) => m.learnedConstraints ?? [],
   );
   const mergedLearnedConstraints = Array.from(
-    new Set([...(selfState?.learnedConstraints ?? []), ...inheritedConstraints]),
+    new Set([...(sessionAuthority.state?.learnedConstraints ?? []), ...inheritedConstraints]),
   ).slice(-6); // OMEGA_STATE_CONSTRAINT_LIMIT equivalent
 
-  const enrichedSelfState: OmegaSessionSelfState | undefined = selfState
+  const enrichedSelfState: OmegaSessionSelfState | undefined = sessionAuthority.state
     ? {
-        ...selfState,
+        ...sessionAuthority.state,
         learnedConstraints: mergedLearnedConstraints,
       }
     : inheritedConstraints.length > 0
@@ -454,20 +449,20 @@ export async function loadOmegaWorldModelSnapshot(params: {
 
   return {
     sessionKey: params.sessionKey,
-    kernel: runtime.kernel,
+    kernel: sessionAuthority.kernel,
     selfState: enrichedSelfState,
     activeRecoveryPreference: deriveActiveRecoveryPreference({
-      kernel: runtime.kernel,
+      kernel: sessionAuthority.kernel,
       metrics: empiricalMetrics,
     }),
     generalizedRecoveryPreference: deriveGeneralizedRecoveryPreference({
-      kernel: runtime.kernel,
+      kernel: sessionAuthority.kernel,
       metrics: empiricalMetrics,
     }),
     localityRoutingPreference: deriveLocalityRoutingPreference(relevantMemories),
     localityExecutionGuard,
     problemAgenda,
-    timelineLength: runtime.timeline.length,
+    timelineLength: sessionAuthority.timeline.length,
     activeGoalTask,
     relevantMemories,
     operationalSignals,

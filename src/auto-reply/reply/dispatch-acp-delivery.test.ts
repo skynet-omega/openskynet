@@ -1,12 +1,30 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createAcpDispatchDeliveryCoordinator } from "./dispatch-acp-delivery.js";
 import type { ReplyDispatcher } from "./reply-dispatcher.js";
 import { buildTestCtx } from "./test-ctx.js";
 import { createAcpTestConfig } from "./test-fixtures/acp-runtime.js";
 
 const ttsMocks = vi.hoisted(() => ({
+  state: {
+    synthesizeWhenAllowed: false,
+  },
   maybeApplyTtsToPayload: vi.fn(async (paramsUnknown: unknown) => {
-    const params = paramsUnknown as { payload: unknown };
+    const params = paramsUnknown as {
+      payload: { text?: string; mediaUrl?: string; audioAsVoice?: boolean };
+      suppressSynthesis?: boolean;
+    };
+    if (
+      ttsMocks.state.synthesizeWhenAllowed &&
+      params.suppressSynthesis !== true &&
+      typeof params.payload?.text === "string" &&
+      params.payload.text.trim()
+    ) {
+      return {
+        ...params.payload,
+        mediaUrl: "https://example.com/final.opus",
+        audioAsVoice: true,
+      };
+    }
     return params.payload;
   }),
 }));
@@ -42,6 +60,26 @@ function createCoordinator(onReplyStart?: (...args: unknown[]) => Promise<void>)
 }
 
 describe("createAcpDispatchDeliveryCoordinator", () => {
+  beforeEach(() => {
+    ttsMocks.state.synthesizeWhenAllowed = false;
+    ttsMocks.maybeApplyTtsToPayload.mockClear();
+  });
+
+  it("suppresses final auto-TTS after an explicit audio tool delivery", async () => {
+    ttsMocks.state.synthesizeWhenAllowed = true;
+    const coordinator = createCoordinator();
+
+    await coordinator.deliver("tool", {
+      mediaUrl: "https://example.com/tool.opus",
+      audioAsVoice: true,
+    });
+    await coordinator.deliver("final", { text: "[[tts:widowmaker]] Hola [[/tts:text]]" });
+
+    expect(ttsMocks.maybeApplyTtsToPayload).toHaveBeenLastCalledWith(
+      expect.objectContaining({ suppressSynthesis: true }),
+    );
+  });
+
   it("starts reply lifecycle only once when called directly and through deliver", async () => {
     const onReplyStart = vi.fn(async () => {});
     const coordinator = createCoordinator(onReplyStart);

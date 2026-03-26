@@ -1,6 +1,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { loadOmegaEmpiricalMetrics } from "../../omega/empirical-metrics.js";
+import type { OmegaEmpiricalMetrics } from "../../omega/empirical-metrics.js";
 import { loadOmegaWorldModelSnapshot } from "../../omega/world-model.js";
 
 export type SkynetBenchmarkHardeningResult = {
@@ -36,6 +38,7 @@ function resolveBenchmarkMarkdownPath(workspaceRoot: string): string {
 export function deriveSkynetBenchmarkHardening(params: {
   sessionKey: string;
   operationalSignals: any[];
+  empiricalMetrics: OmegaEmpiricalMetrics;
 }): SkynetBenchmarkHardeningResult {
   const samples = params.operationalSignals.slice(-10);
   if (samples.length === 0) {
@@ -51,13 +54,27 @@ export function deriveSkynetBenchmarkHardening(params: {
 
   // En una implementación real, compararíamos el vector de policy del kernel vs omega.
   // Aquí simulamos una métrica basada en la salud del turno y el gasto metabólico.
-  const agreementSum = samples.reduce((sum, sample) => {
-    const healthBonus = sample.turnHealth === "nominal" ? 0.2 : 0;
-    const latencyPenalty = Math.max(0, (sample.latencyBreakdown?.totalMs ?? 0) - 10000) / 20000;
-    return sum + clamp01(0.8 + healthBonus - latencyPenalty);
-  }, 0);
+  const metrics = params.empiricalMetrics;
 
-  const agreementScore = clamp01(agreementSum / samples.length);
+  const agreementSum =
+    samples.length > 0
+      ? samples.reduce((sum, sample) => {
+          const healthBonus = sample.turnHealth === "nominal" ? 0.2 : 0;
+          const latencyPenalty =
+            Math.max(0, (sample.latencyBreakdown?.totalMs ?? 0) - 10000) / 20000;
+          return sum + clamp01(0.8 + healthBonus - latencyPenalty);
+        }, 0)
+      : 0;
+
+  const baseAgreement = samples.length > 0 ? agreementSum / samples.length : 0.85; // Baseline si no hay señales operacionales
+
+  // Incorporar métricas empíricas: penalizar si hay muchas iteraciones sin acciones ejecutivas
+  const heartbeatEfficiency =
+    metrics?.heartbeat.cyclesCompleted > 0
+      ? (metrics.heartbeat.executiveActions || 1) / metrics.heartbeat.cyclesCompleted
+      : 1;
+
+  const agreementScore = clamp01(baseAgreement * 0.7 + heartbeatEfficiency * 0.3);
   const divergenceDetected = agreementScore < 0.65;
 
   return {
@@ -108,6 +125,7 @@ export async function runSkynetBenchmarkHardening(params: {
   const result = deriveSkynetBenchmarkHardening({
     sessionKey: params.sessionKey,
     operationalSignals: snapshot.operationalSignals,
+    empiricalMetrics: await loadOmegaEmpiricalMetrics({ workspaceRoot: params.workspaceRoot }),
   });
 
   const jsonPath = resolveBenchmarkJsonPath(params);

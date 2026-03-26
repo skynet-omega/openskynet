@@ -456,21 +456,39 @@ export async function loadOmegaSessionTimeline(params: {
   workspaceRoot: string;
   sessionKey: string;
 }): Promise<OmegaSessionTimelineEntry[]> {
-  return (await loadOmegaSessionDecisionState(params)).timeline;
+  return (await loadOmegaSessionAuthority(params)).timeline;
 }
 
 export async function loadOmegaSessionSelfState(params: {
   workspaceRoot: string;
   sessionKey: string;
 }): Promise<OmegaSessionSelfState | undefined> {
-  return (await loadOmegaSessionDecisionState(params)).state;
+  return (await loadOmegaSessionAuthority(params)).state;
 }
 
 export async function loadOmegaSelfTimeKernel(params: {
   workspaceRoot: string;
   sessionKey: string;
 }): Promise<OmegaSelfTimeKernelState | undefined> {
-  return (await loadOmegaSessionDecisionState(params)).kernel;
+  return (await loadOmegaSessionAuthority(params)).kernel;
+}
+
+export async function loadOmegaSessionAuthority(params: {
+  workspaceRoot: string;
+  sessionKey: string;
+}): Promise<{
+  timeline: OmegaSessionTimelineEntry[];
+  state?: OmegaSessionSelfState;
+  kernel?: OmegaSelfTimeKernelState;
+  transactions: OmegaTaskTransaction[];
+}> {
+  const timeline = await readOmegaSessionTimeline(params);
+  return {
+    timeline: timeline?.entries ?? [],
+    state: timeline?.state,
+    kernel: timeline?.kernel,
+    transactions: cloneOmegaTaskTransactions(timeline?.transactions ?? []),
+  };
 }
 
 export async function loadOmegaSessionDecisionState(params: {
@@ -481,11 +499,11 @@ export async function loadOmegaSessionDecisionState(params: {
   state?: OmegaSessionSelfState;
   kernel?: OmegaSelfTimeKernelState;
 }> {
-  const timeline = await readOmegaSessionTimeline(params);
+  const snapshot = await loadOmegaSessionAuthority(params);
   return {
-    timeline: timeline?.entries ?? [],
-    state: timeline?.state,
-    kernel: timeline?.kernel,
+    timeline: snapshot.timeline,
+    state: snapshot.state,
+    kernel: snapshot.kernel,
   };
 }
 
@@ -493,8 +511,7 @@ export async function loadOmegaTaskTransactions(params: {
   workspaceRoot: string;
   sessionKey: string;
 }): Promise<OmegaTaskTransaction[]> {
-  const timeline = await readOmegaSessionTimeline(params);
-  return cloneOmegaTaskTransactions(timeline?.transactions ?? []);
+  return (await loadOmegaSessionAuthority(params)).transactions;
 }
 
 export async function loadOmegaSessionRuntimeSnapshot(params: {
@@ -504,10 +521,10 @@ export async function loadOmegaSessionRuntimeSnapshot(params: {
   kernel?: OmegaSelfTimeKernelState;
   timeline: OmegaSessionTimelineEntry[];
 }> {
-  const file = await readOmegaSessionTimeline(params);
+  const file = await loadOmegaSessionAuthority(params);
   return {
-    kernel: file?.kernel,
-    timeline: file?.entries ?? [],
+    kernel: file.kernel,
+    timeline: file.timeline,
   };
 }
 

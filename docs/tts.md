@@ -247,6 +247,11 @@ for a single reply, plus an optional `[[tts:text]]...[[/tts:text]]` block to
 provide expressive tags (laughter, singing cues, etc) that should only appear in
 the audio.
 
+These inline directives are **not** the canonical persistence surface for user
+preferences. Persistent provider/voice/language/format changes should be done
+through `/tts ...` commands or config/prefs, not by relying on model-emitted
+inline tags.
+
 `provider=...` directives are ignored unless `modelOverrides.allowProvider: true`.
 
 Example reply payload:

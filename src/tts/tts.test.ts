@@ -350,6 +350,16 @@ describe("tts", () => {
       expect(result.overrides.openai?.voice).toBeUndefined();
       expect(result.warnings).toContain('invalid OpenAI voice "kokoro-chinese"');
     });
+
+    it("strips orphaned closing tags and bare directives from visible text", () => {
+      const policy = resolveModelOverridePolicy({ enabled: true });
+      const input = "[[tts:widowmaker]] [[tts:es]] Entendido. [[/tts:text]] [[/tts:texto]]";
+
+      const result = parseTtsDirectives(input, policy);
+
+      expect(result.cleanedText.trim()).toBe("Entendido.");
+      expect(result.hasDirective).toBe(true);
+    });
   });
 
   describe("summarizeText", () => {
@@ -742,6 +752,21 @@ describe("tts", () => {
 
         expect(result.mediaUrl).toBeDefined();
         expect(fetchMock).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it("can suppress synthesis while still stripping visible TTS residue", async () => {
+      await withMockedAutoTtsFetch(async (fetchMock) => {
+        const result = await maybeApplyTtsToPayload({
+          payload: { text: "[[tts:widowmaker]] Hola [[/tts:text]]" },
+          cfg: taggedCfg,
+          kind: "final",
+          suppressSynthesis: true,
+        });
+
+        expect(result.text).toBe("Hola");
+        expect(result.mediaUrl).toBeUndefined();
+        expect(fetchMock).not.toHaveBeenCalled();
       });
     });
   });

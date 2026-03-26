@@ -5,14 +5,15 @@ Autor: Codex
 
 ## Proposito
 
-`Skynet` es el nombre oficial del nuevo nucleo experimental que debe crecer dentro de `~/openskynet`.
+`Skynet` es hoy el nombre por defecto del proyecto interno autónomo configurado en `INTERNAL_PROJECT.json`.
 
-No reemplaza inmediatamente a `OpenSkyNet`.
+No reemplaza a `OpenSkyNet`. Tampoco define por sí solo la identidad completa del sistema.
 
 La division correcta ahora es:
 
-- `OpenSkyNet`: supervision, memoria, evaluacion, tooling, canales, benchmark
-- `Skynet`: nucleo experimental de continuidad, agenda propia y metabolismo cognitivo
+- `OpenSkyNet`: agente principal, supervision, memoria, evaluacion, tooling, canales y benchmark global
+- `Omega`: linea experimental interna del propio agente/plataforma
+- `Skynet`: proyecto interno por defecto para trabajo libre y benchmarking de autonomia agentica
 
 ## Tesis
 

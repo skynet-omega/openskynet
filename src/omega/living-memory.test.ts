@@ -61,13 +61,19 @@ describe("omega living memory", () => {
       commitment,
     });
 
-    expect(state.skynet.focusKey).toBe("endogenous_science_agenda");
-    expect(state.skynet.commitment?.kind).toBe("artifact");
+    expect(state.internalProjectState.focusKey).toBe("endogenous_science_agenda");
+    expect(state.internalProjectState.commitment?.kind).toBe("artifact");
+    expect(state.selfModel.platform.name).toBe("OpenSkyNet");
+    expect(state.selfModel.internalProject.name).toBe("Skynet");
+    expect(state.selfModel.reporting.separatePlatformFromInternalProject).toBe(true);
+    expect(state.agenticBenchmark.projectKey).toBe("skynet");
+    expect(state.agenticBenchmark.benchmarkScore).toBeGreaterThan(0);
 
     const persisted = JSON.parse(
       await fs.readFile(resolveOpenSkynetLivingStateFile({ workspaceRoot, sessionKey }), "utf-8"),
     ) as typeof state;
-    expect(persisted.skynet.recommendedAction).toBe("Execute the top item");
+    expect(persisted.internalProjectState.recommendedAction).toBe("Execute the top item");
+    expect(persisted.selfModel.reporting.maintenanceIsNotProjectProgress).toBe(true);
 
     const historyLines = (
       await fs.readFile(resolveOpenSkynetLivingHistoryFile(workspaceRoot), "utf-8")
@@ -106,5 +112,38 @@ describe("omega living memory", () => {
     expect(resetTargets.some((item) => item.endsWith(path.join("memory", "SKYNET_PULSE.md")))).toBe(
       true,
     );
+  });
+
+  it("loads the internal project profile from config instead of hardcoding Skynet semantics", async () => {
+    await fs.writeFile(
+      path.join(workspaceRoot, "INTERNAL_PROJECT.json"),
+      JSON.stringify(
+        {
+          key: "protein-lab",
+          name: "Protein Lab",
+          role: "Protein folding discovery program.",
+          mission: "Search for useful protein structures autonomously.",
+          benchmarkPurpose: "Measure whether OpenSkyNet can sustain scientific work on proteins.",
+          successCriteria: ["produces measurable protein artifacts"],
+        },
+        null,
+        2,
+      ),
+      "utf-8",
+    );
+
+    const snapshot = await loadOmegaWorldModelSnapshot({
+      workspaceRoot,
+      sessionKey,
+    });
+    const state = await syncOpenSkynetLivingMemory({
+      workspaceRoot,
+      sessionKey,
+      snapshot,
+    });
+
+    expect(state.selfModel.internalProject.key).toBe("protein-lab");
+    expect(state.selfModel.internalProject.name).toBe("Protein Lab");
+    expect(state.agenticBenchmark.projectName).toBe("Protein Lab");
   });
 });

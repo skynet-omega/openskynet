@@ -12,10 +12,7 @@ import {
 } from "./operational-memory.js";
 import { deriveOmegaPolicySnapshot, type OmegaPolicySnapshot } from "./policy-engine.js";
 import type { OmegaSelfTimeKernelState } from "./self-time-kernel.js";
-import {
-  loadOmegaSessionDecisionState,
-  type OmegaSessionTimelineEntry,
-} from "./session-context.js";
+import { loadOmegaSessionAuthority, type OmegaSessionTimelineEntry } from "./session-context.js";
 import {
   deriveOmegaStateAuthoritySnapshot,
   type OmegaStateAuthoritySnapshot,
@@ -43,7 +40,7 @@ export async function loadOmegaDecisionContext(params: {
   watchedPaths?: string[];
 }): Promise<OmegaDecisionContext> {
   const [sessionSnapshot, controllerState, fallbackOperationalTail, wsp] = await Promise.all([
-    loadOmegaSessionDecisionState(params),
+    loadOmegaSessionAuthority(params),
     syncOmegaExecutionControllerState({
       workspaceRoot: params.workspaceRoot,
       sessionKey: params.sessionKey,

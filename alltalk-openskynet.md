@@ -22,6 +22,12 @@ Cómo usarlo por Telegram:
 - Para forzar AllTalk desde Telegram: /tts provider alltalk
 - Para apagarlo: /tts off
 
+Regla importante:
+
+- Los cambios persistentes van por `/tts ...` y se guardan en `~/.openskynet/settings/tts.json`.
+- Los tags inline `[[tts:...]]` o `[[tts:text]]...[[/tts:text]]` son solo control puntual de una respuesta.
+- No debes depender de tags inline para fijar voz, idioma o provider entre sesiones.
+
 Para respuestas normales con texto + audio opcional, déjalo en tagged y pídele cosas como:
 
 - respóndeme además con TTS
@@ -69,3 +75,9 @@ Resumen de comandos actualizados:
 - /tts idiom <es|en> — Cambia el acento (Español o Inglés).
 - /tts format <opus|wav> — Cambia el tipo de archivo enviado.
 - /tts status — Te muestra toda tu configuración actual.
+
+Autoridad real de configuración:
+
+- `openclaw.json` define defaults base del sistema.
+- `~/.openskynet/settings/tts.json` guarda tus overrides persistentes por comandos.
+- El código no debería necesitar cambios para cambiar voz, idioma, formato o provider.

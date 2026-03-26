@@ -357,6 +357,12 @@ export function parseTtsDirectives(
     return "";
   });
 
+  const strayClosingTagRegex = /\[\[\/tts:[^\]]+\]\]/gi;
+  cleanedText = cleanedText.replace(strayClosingTagRegex, () => {
+    hasDirective = true;
+    return "";
+  });
+
   return {
     cleanedText,
     ttsText: overrides.ttsText,

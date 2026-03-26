@@ -14,11 +14,12 @@ import path from "node:path";
 import { promisify } from "node:util";
 import type { InnerDriveSignal } from "./inner-life/drives.js";
 import { evaluateInnerDrives } from "./inner-life/drives.js";
-import { collectOpenSkynetMemoryCandidates } from "./living-memory.js";
+import { loadOpenSkynetInternalProjectProfile } from "./internal-project.js";
 import { runResearchLoop, hasRecentResearchProse } from "./research-loop.js";
+import { loadOpenSkynetOmegaRuntimeAuthority } from "./runtime-authority.js";
 import { compressScienceBase } from "./science-base-compressor.js";
 import type { OmegaSelfTimeKernelState } from "./self-time-kernel.js";
-import { loadOmegaSelfTimeKernel, recordOmegaSessionOutcome } from "./session-context.js";
+import { loadOmegaSelfTimeKernel } from "./session-context.js";
 
 const execAsync = promisify(exec);
 
@@ -118,36 +119,74 @@ async function executeStatusCheck(
   }
 }
 
-async function proposeExperiment(
-  workspaceRoot: string,
-): Promise<{ hypothesis: string; testable: boolean }> {
-  // Leer MEMORY.md para proponer experimento basado en trabajo pendiente
-  try {
-    const memoryPath = path.join(workspaceRoot, "MEMORY.md");
-    const content = await fs.readFile(memoryPath, "utf-8").catch(() => null);
+type AutonomousExperimentProposal = {
+  hypothesis: string;
+  testable: boolean;
+};
 
-    if (content) {
-      // Buscar secciones de "Current Strategic Direction" o "Scientific Priority"
-      const match = content.match(/##\s*Current Strategic Direction[\s\S]*?(?=##|$)/i);
-      if (match) {
-        const lines = match[0]
-          .split("\n")
-          .filter((l: string) => l.trim().startsWith("- ") || l.trim().startsWith("* "));
-        if (lines.length > 0) {
-          const item = lines[0].replace(/^[-*]\s+/, "").trim();
-          return {
-            hypothesis: `Validar: ${item}`,
-            testable: true,
-          };
-        }
-      }
+async function loadLivingStateProposal(params: {
+  workspaceRoot: string;
+  sessionKey: string;
+}): Promise<AutonomousExperimentProposal | undefined> {
+  try {
+    const authority = await loadOpenSkynetOmegaRuntimeAuthority({
+      workspaceRoot: params.workspaceRoot,
+      sessionKey: params.sessionKey,
+    });
+    const livingState = authority.livingState;
+    const project = authority.project;
+    if (!livingState) {
+      return undefined;
+    }
+    const benchmark = livingState.agenticBenchmark;
+    const projectState = livingState.internalProjectState;
+    const commitmentTask = projectState.commitment?.executableTask?.trim();
+
+    if (commitmentTask) {
+      return {
+        hypothesis: `[${project.name}] Execute committed task: ${commitmentTask}`,
+        testable: true,
+      };
+    }
+
+    if (projectState.topWorkItem?.trim()) {
+      return {
+        hypothesis: `[${project.name}] Materialize top work item: ${projectState.topWorkItem.trim()}`,
+        testable: true,
+      };
+    }
+
+    if (typeof benchmark?.benchmarkScore === "number" && benchmark.benchmarkScore < 0.7) {
+      return {
+        hypothesis: `[${project.name}] Raise agentic benchmark score above 0.70 by producing a runnable artifact or explicit commitment.`,
+        testable: true,
+      };
+    }
+
+    if (projectState.recommendedAction?.trim()) {
+      return {
+        hypothesis: `[${project.name}] ${projectState.recommendedAction.trim()}`,
+        testable: true,
+      };
     }
   } catch {
-    // Ignorar
+    return undefined;
+  }
+  return undefined;
+}
+
+async function proposeExperiment(params: {
+  workspaceRoot: string;
+  sessionKey: string;
+}): Promise<AutonomousExperimentProposal> {
+  const fromLivingState = await loadLivingStateProposal(params);
+  if (fromLivingState) {
+    return fromLivingState;
   }
 
+  const project = await loadOpenSkynetInternalProjectProfile(params.workspaceRoot);
   return {
-    hypothesis: "Continuar mejora de autonomía operativa",
+    hypothesis: `[${project.name}] Advance the configured internal project with one measurable artifact, benchmark, or falsifiable result.`,
     testable: true,
   };
 }
@@ -230,7 +269,10 @@ export async function executeAutonomousAction(params: {
         }
       }
       // Fallback: proponer experimento desde MEMORY.md
-      const experiment = await proposeExperiment(workspaceRoot);
+      const experiment = await proposeExperiment({
+        workspaceRoot,
+        sessionKey: params.sessionKey,
+      });
       return {
         kind: "experiment_proposed",
         hypothesis: experiment.hypothesis,
@@ -268,13 +310,16 @@ export async function runAutonomousCycle(params: {
   if (!kernel) {
     return null;
   }
-  const memoryCandidates = await collectOpenSkynetMemoryCandidates(params.workspaceRoot);
+  const authority = await loadOpenSkynetOmegaRuntimeAuthority({
+    workspaceRoot: params.workspaceRoot,
+    sessionKey: params.sessionKey,
+  });
 
   // Evaluar drives
   const signal = evaluateInnerDrives({
     kernel,
     nowMs: Date.now(),
-    memoryCandidates,
+    memoryCandidates: authority.memoryCandidates,
   });
 
   if (signal.kind === "idle") {

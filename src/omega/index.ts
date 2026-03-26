@@ -69,6 +69,7 @@ export {
   deriveShadowedGoalTasks,
   deriveSupersededGoalTasks,
   focusActiveOmegaGoalTargets,
+  loadOmegaSessionAuthority,
   loadOmegaSelfTimeKernel,
   loadOmegaSessionSelfState,
   loadOmegaSessionTimeline,

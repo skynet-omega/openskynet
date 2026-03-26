@@ -9,7 +9,7 @@ export type DebugProps = {
   health: Record<string, unknown> | null;
   models: unknown[];
   heartbeat: unknown;
-  skynetFiles: DebugWorkspaceFile[];
+  projectFiles: DebugWorkspaceFile[];
   eventLog: EventLogEntry[];
   methods: string[];
   callMethod: string;
@@ -130,18 +130,18 @@ export function renderDebug(props: DebugProps) {
     </section>
 
     <section class="card" style="margin-top: 18px;">
-      <div class="card-title">Skynet</div>
+      <div class="card-title">Internal Project</div>
       <div class="card-sub">
-        Structured living memory first, then human-readable derived artifacts.
+        Structured living memory first, then derived project artifacts.
       </div>
       ${
-        props.skynetFiles.length === 0
+        props.projectFiles.length === 0
           ? html`
-              <div class="muted" style="margin-top: 12px">No Skynet artifacts available.</div>
+              <div class="muted" style="margin-top: 12px">No internal project artifacts available.</div>
             `
           : html`
               <div class="stack" style="margin-top: 12px;">
-                ${props.skynetFiles.map(
+                ${props.projectFiles.map(
                   (file) => html`
                     <div>
                       <div class="muted">${file.name}</div>

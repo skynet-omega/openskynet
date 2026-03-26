@@ -1,7 +1,4 @@
-import * as fs from "node:fs/promises";
-import * as path from "node:path";
 import { runAutonomousCycle } from "./autonomous-executor.js";
-import { loadOmegaDecisionContext } from "./decision-context.js";
 import { recordOmegaHeartbeatCycleMetrics } from "./empirical-metrics.js";
 import { getOmegaHeartbeatEngineRegistry } from "./engines/registry.js";
 import {
@@ -18,13 +15,13 @@ import {
   enhanceDriveWithJepaTension,
   parseJepaTensionFromKernelTimeline,
 } from "./jepa-drive-enhancement.js";
-import { collectOpenSkynetMemoryCandidates } from "./living-memory.js";
 import {
   loadOmegaOperationalMemoryTail,
   summarizeOmegaOperationalMemory,
 } from "./operational-memory.js";
 import { deriveOmegaAgendaExecutionContract } from "./problem-agenda.js";
 import { resumeInterruptedOmegaGoal } from "./recovery-runner.js";
+import { loadOpenSkynetOmegaRuntimeAuthority } from "./runtime-authority.js";
 import { queryScienceBase } from "./science-base-rag.js";
 import {
   focusActiveOmegaGoalTargets,
@@ -34,7 +31,6 @@ import {
   pruneStaleOmegaGoals,
   pruneSupersededOmegaGoals,
 } from "./session-context.js";
-import { deriveFocusedActiveTargets } from "./session-context.js";
 
 type OmegaHeartbeatPromptWakeAction =
   | ReturnType<typeof decideOmegaWakeAction>
@@ -45,14 +41,6 @@ type OmegaHeartbeatPromptWakeAction =
       selectedWorkItemDetail?: string;
       selectedAction?: string;
     };
-
-/**
- * Recolecta candidatos de memoria para exploración por la drive de curiosidad.
- * Busca archivos en memory/ y MEMORY.md en la raíz del workspace.
- */
-async function collectMemoryCandidates(workspaceRoot: string): Promise<string[]> {
-  return collectOpenSkynetMemoryCandidates(workspaceRoot);
-}
 
 export type OmegaHeartbeatExecutiveResult =
   | {
@@ -108,13 +96,12 @@ async function loadOmegaHeartbeatDecisionContext(params: {
   sessionKey: string;
   kernel?: Awaited<ReturnType<typeof loadOmegaSelfTimeKernel>>;
 }) {
-  const memoryCandidates = await collectMemoryCandidates(params.workspaceRoot);
-  const decisionContext = await loadOmegaDecisionContext({
+  const authority = await loadOpenSkynetOmegaRuntimeAuthority({
     workspaceRoot: params.workspaceRoot,
     sessionKey: params.sessionKey,
-    memoryCandidates,
     includeWorldSnapshot: "urgent_maintenance",
   });
+  const decisionContext = authority.decisionContext;
   const kernel = params.kernel ?? decisionContext.kernel;
   const wakeAction = decideOmegaWakeAction({ kernel });
   const shouldDispatchPrompt = decisionContext.shouldDispatchHeartbeatPrompt;

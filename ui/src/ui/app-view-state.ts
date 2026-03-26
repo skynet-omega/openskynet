@@ -279,7 +279,7 @@ export type AppViewState = {
     debugHealth: HealthSummary | null;
     debugModels: ModelCatalogEntry[];
     debugHeartbeat: unknown;
-    debugSkynetFiles: DebugWorkspaceFile[];
+    debugProjectFiles: DebugWorkspaceFile[];
     debugCallMethod: string;
     debugCallParams: string;
     debugCallResult: string | null;

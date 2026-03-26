@@ -1,117 +1,148 @@
-# OpenSkyNet 🤖
+# OpenSkyNet
 
 ![Banner](assets/banner.png)
 
 _Read this in [Spanish (Español)](README.es.md)._
 
-**OpenSkyNet** is the scientific and practical evolution of [OpenClaw](https://github.com/openclaw/openclaw).
+**OpenSkyNet** is an empirical, autonomy-focused evolution of [OpenClaw](https://github.com/openclaw/openclaw).
 
-Unlike generic "chat with tools" agents, OpenSkyNet focuses on **real, long-term autonomy, causal reasoning, and empirical validation** of AI systems. It is designed to be a robust engineering and scientific assistant that thinks beyond single conversational turns.
+It is not positioned as a generic "chat with tools" shell. The core goal is to turn an assistant runtime into something more robust across sessions: better state continuity, better recovery after failure, better routing, and better long-horizon autonomous work.
 
-## Official Repository
+## Repository
 
-Active development and issues are tracked at:
+Active development happens at:
 [github.com/skynet-omega/openskynet](https://github.com/skynet-omega/openskynet)
 
----
+## Current Direction
 
-## 🚀 Key Differences from OpenClaw
+OpenSkyNet now has three clearly separated layers:
 
-While **OpenClaw** is a general-purpose framework for routing, tools, and multi-agent execution, **OpenSkyNet** is a more opinionated stack built around empirical continuity, recovery, and long-horizon assistant behavior. It introduces the **Omega** layer as a practical attempt to move beyond one-shot "chat with tools":
+- **Gateway / agent platform**: channels, sessions, tools, cron, UI, and the operational shell inherited from OpenClaw.
+- **Omega runtime**: the main experimental spine for decision context, recovery, routing, executive dispatch, world modeling, and structured memory.
+- **Internal project benchmark**: a configurable autonomous background project defined by [INTERNAL_PROJECT.json](/home/daroch/openskynet/INTERNAL_PROJECT.json). By default that project is `Skynet`, but it is not the identity of OpenSkyNet and can be replaced by another domain.
 
-- **Biological Framing**: Some Omega components borrow concepts like tension, decay, and bounded energy as control metaphors for autonomous work.
-- **Persistent Session Context**: The system keeps more durable task/context state than a plain ephemeral chat loop.
-- **Policy and Recovery Paths**: Omega can react to repeated failures with explicit recovery and rerouting logic instead of always stopping at first error.
-- **Empirical Memory Direction**: The repo is moving toward reusable learned constraints and durable state, rather than only retrieving old text.
-- **Autonomy Hooks**: Heartbeat, cron, and executive-state mechanisms allow work to continue outside a single user turn.
+The practical benchmark is simple:
 
-### OpenSkyNet Empirical Architecture
+- if OpenSkyNet can sustain useful autonomous work on an internal project over time, it is becoming a better agent than the parent runtime
+- if it cannot, the architecture still needs work
 
-The following diagram is a **high-level sketch** of the Omega direction in this repository. It is not a formal source of truth for every runtime path; for exact behavior, inspect `src/omega`, tests, and current architecture notes.
+## What Is Different From OpenClaw
+
+OpenClaw is the parent platform and still provides essential plumbing. OpenSkyNet diverges where it matters:
+
+- **Structured living memory**: present state is no longer supposed to come from plain text diaries alone. Runtime state lives in `.openskynet/living-memory/` and related structured stores.
+- **Runtime sovereignty**: `heartbeat`, `omega_work`, and autonomous execution are moving toward a shared runtime authority instead of rebuilding context independently.
+- **Decision + recovery emphasis**: Omega explicitly models recovery paths, routing preferences, world state, and maintenance pressure.
+- **Internal benchmark workload**: the system can work on a configurable internal project during free cycles, and that workload doubles as an empirical benchmark of autonomy quality.
+- **Empirical posture**: the repo tries to keep architecture tied to tests, state snapshots, logs, and benchmarkable behavior rather than pure narrative.
+
+## Architecture Snapshot
+
+This is a simplified map of the current runtime shape. It is a guide, not a legal source of truth. For exact behavior, inspect [src/omega](/home/daroch/openskynet/src/omega), [src/skynet](/home/daroch/openskynet/src/skynet), tests, and `docs/architecture/`.
 
 ```mermaid
 graph TD
-    %% Base Infrastructure
-    User(User Prompt / Cron) --> Router{OpenClaw Gateway}
-    Router --> |Standard| Agent[Reactive Agent]
+    User[User / Cron / Channel Event] --> Gateway[OpenClaw Gateway]
+    Gateway --> Agent[Standard Agent Flow]
+    Gateway --> Omega[Omega Runtime Spine]
 
-    %% Omega Autonomous Flow
-    Router --> |Omega Work| Heartbeat[Self-Time Kernel Heartbeat]
+    subgraph Omega Runtime
+        Omega --> Session[Session Authority]
+        Session --> Decision[Decision Context]
+        Session --> World[World Model]
+        Session --> Living[Living Memory]
 
-    subgraph Omega Engine
-        Heartbeat --> Drives[Evaluate Inner Drives & Tension]
-        Drives --> |Needs Maintenance / High Tension| Policy[Policy Engine]
+        Decision --> Executive[Executive State + Execution Controller]
+        World --> Executive
+        Living --> Executive
 
-        Policy --> |Action Required| Memory[Inject SCIENCE_BASE in Context]
-        Memory --> Action[Execute Tool / Sub-Agent]
-
-        Action --> |Success| Extract[Extract Constraints / Signals]
-        Extract --> ScienceBase[(Durable Memory / State)]
-
-        Action --> |Failure / Anomaly| Research[Recovery / Research Path]
-        Research --> Notes[Persist Notes / Hypotheses]
-        Notes --> Action
-
-        Action --> |Repeated Failure| Routing[Policy / Routing Update]
-        Routing --> Rule[Update State Authority]
+        Executive --> Route[Routing / Recovery / Validation]
+        Route --> Work[Tools / Sessions / Subagents]
+        Work --> Metrics[Empirical Metrics + Durable Memory]
+        Metrics --> World
+        Metrics --> Living
     end
 
-    Rule -.-> |Biases Next Action| Action
-    ScienceBase -.-> |Recovered Context| Memory
+    Living --> Internal[Internal Project Benchmark]
+    Internal --> OpenSkyNet[OpenSkyNet Autonomy Quality]
 ```
 
----
+## Installation
 
-## 🛠️ Installation
+Requirements:
 
-OpenSkyNet requires **Node.js 22+** and **pnpm**.
+- Node.js `22+`
+- `pnpm`
 
 ```bash
-# Clone the repository
 git clone https://github.com/skynet-omega/openskynet.git
-
-# Navigate to the project folder
 cd openskynet
-
-# Install dependencies using pnpm
 pnpm install
-
-# Build the project
 pnpm build
 ```
 
-## 🖥️ Running OpenSkyNet
+## Running
 
-For a standard graphical experience during development, start the gateway and UI in two separate terminals:
-
-**Terminal 1 (Backend Gateway):**
+Development:
 
 ```bash
 pnpm gateway:dev
-```
-
-**Terminal 2 (Frontend UI):**
-
-```bash
 pnpm ui:dev
 ```
 
-### Terminal UI
-
-OpenSkyNet also includes a Terminal UI for local monitoring and interaction:
+Terminal UI:
 
 ```bash
 pnpm tui
 ```
 
-_Note: review your model/auth setup before first run (for example Gemini CLI OAuth, OpenAI Codex OAuth, or local Ollama models)._
+Production-style local build:
 
----
+```bash
+pnpm build
+openskynet daemon restart
+```
 
-## 📚 Acknowledgments & Documentation
+## Internal Project Benchmark
 
-- **Author**: Gonzalo Daroch I.
-- For deep-dive architectural decisions, check the `docs/architecture` and `docs/history` folders.
-- Special thanks to **[OpenClaw](https://openclaw.ai/)** for providing the fundamental plumbing and robust multi-agent architecture this project is built upon.
+OpenSkyNet can keep a configurable internal project as background autonomous work. The default file is [INTERNAL_PROJECT.json](/home/daroch/openskynet/INTERNAL_PROJECT.json).
 
-_OpenSkyNet: Turn ambiguous ideas into tested, useful, reproducible progress._
+That project can be:
+
+- AI research
+- protein design
+- architecture design
+- any other long-running workload the user wants
+
+By default this repository uses `Skynet` as that benchmark project, but the platform should not depend on that name to remain useful.
+
+## Observability
+
+Important operational references:
+
+- [docs/OPERABILIDAD_Y_LOGS.md](/home/daroch/openskynet/docs/OPERABILIDAD_Y_LOGS.md)
+- `.openskynet/living-memory/`
+- `~/.openskynet/agents/*/sessions/`
+- `~/.openskynet/cron/`
+- `/tmp/openclaw/openclaw-YYYY-MM-DD.log`
+
+## Project Status
+
+The repo is beyond the original "chatbot with tools" baseline, but it is not finished. The current critical work is no longer cosmetic cleanup; it is:
+
+- consolidating runtime sovereignty in Omega
+- improving autonomous decision quality
+- tightening memory authority
+- measuring whether OpenSkyNet actually outperforms OpenClaw on long-horizon autonomous work
+
+See:
+
+- [docs/architecture/LIMITACIONES_CRITICAS_OPENSKYNET_2026-03-26.md](/home/daroch/openskynet/docs/architecture/LIMITACIONES_CRITICAS_OPENSKYNET_2026-03-26.md)
+- [docs/architecture/OPENCLAW_VS_OPENSKYNET_2026-03-26.md](/home/daroch/openskynet/docs/architecture/OPENCLAW_VS_OPENSKYNET_2026-03-26.md)
+
+## Acknowledgments
+
+- Author: Gonzalo Daroch I.
+- Parent platform: [OpenClaw](https://openclaw.ai/)
+
+OpenSkyNet exists to move from reactive assistance toward measurable autonomous scientific and engineering work.

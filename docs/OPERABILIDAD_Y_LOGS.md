@@ -135,6 +135,7 @@ Importante:
 - esto no es un “log lineal” como `journalctl`
 - la autoridad operativa vive primero en `.openskynet/`
 - `memory/SKYNET_*.md` debe leerse como vista humana derivada, no como fuente primaria
+- `memory/YYYY-MM-DD.md` es historia humana y puede quedar obsoleto rápido; no debe usarse para responder estado actual del sistema
 
 ## Logs Especializados
 
@@ -242,6 +243,10 @@ Hay snapshots muy útiles, pero menos “timeline continua” de bajo costo para
 - qué cambió entre ciclos
 
 Esto mejora ahora con `living-memory/history.jsonl`, pero todavía no cubre todo el runtime general.
+
+### 6. Artefactos humanos redundantes pueden contaminar la lectura
+
+Si aparecen archivos como `memory/SKYNET_FOCAL_POINT.md`, `memory/SKYNET_RESEARCH_HARVEST.md` o diarios autónomos nuevos, trátalos como derivados/experimentales a menos que estén respaldados por un store estructurado y un pipeline canónico.
 
 ### 5. Algunas rutas especializadas no usan siempre la raíz canónica
 

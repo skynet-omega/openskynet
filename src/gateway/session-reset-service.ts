@@ -8,6 +8,7 @@ import { clearSessionQueues } from "../auto-reply/reply/queue.js";
 import { closeTrackedBrowserTabsForSessions } from "../browser/session-tab-registry.js";
 import { loadConfig } from "../config/config.js";
 import {
+  resolveAgentMainSessionKey,
   snapshotSessionOrigin,
   type SessionEntry,
   updateSessionStore,
@@ -296,6 +297,8 @@ export async function performGatewaySessionReset(params: {
     const parsed = parseAgentSessionKey(primaryKey);
     const sessionAgentId = normalizeAgentId(parsed?.agentId ?? resolveDefaultAgentId(cfg));
     const resolvedModel = resolveSessionModelRef(cfg, resetEntry, sessionAgentId);
+    const isAgentMainSession =
+      primaryKey === resolveAgentMainSessionKey({ cfg, agentId: sessionAgentId });
     oldSessionId = currentEntry?.sessionId;
     oldSessionFile = currentEntry?.sessionFile;
     const now = Date.now();
@@ -314,11 +317,12 @@ export async function performGatewaySessionReset(params: {
       contextTokens: resetEntry?.contextTokens,
       sendPolicy: currentEntry?.sendPolicy,
       label: currentEntry?.label,
-      origin: snapshotSessionOrigin(currentEntry),
-      lastChannel: currentEntry?.lastChannel,
-      lastTo: currentEntry?.lastTo,
-      lastAccountId: currentEntry?.lastAccountId,
-      lastThreadId: currentEntry?.lastThreadId,
+      origin: isAgentMainSession ? undefined : snapshotSessionOrigin(currentEntry),
+      lastChannel: isAgentMainSession ? undefined : currentEntry?.lastChannel,
+      lastTo: isAgentMainSession ? undefined : currentEntry?.lastTo,
+      lastAccountId: isAgentMainSession ? undefined : currentEntry?.lastAccountId,
+      lastThreadId: isAgentMainSession ? undefined : currentEntry?.lastThreadId,
+      deliveryContext: isAgentMainSession ? undefined : currentEntry?.deliveryContext,
       skillsSnapshot: currentEntry?.skillsSnapshot,
       inputTokens: 0,
       outputTokens: 0,

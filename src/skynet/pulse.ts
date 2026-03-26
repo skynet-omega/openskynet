@@ -1,22 +1,16 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { syncOpenSkynetLivingMemory } from "../omega/living-memory.js";
 import {
   hasRecentResearchProse,
   runResearchLoop,
   type ResearchLoopResult,
 } from "../omega/research-loop.js";
-import { loadOmegaWorldModelSnapshot } from "../omega/world-model.js";
+import { formatSkynetCommitmentBlock, type SkynetCommitmentDecision } from "./commitment-engine.js";
+import { formatSkynetExperimentPlanBlock, type SkynetExperimentPlan } from "./experiment-cycle.js";
 import {
-  formatSkynetCommitmentBlock,
-  syncSkynetCommitmentDecision,
-  type SkynetCommitmentDecision,
-} from "./commitment-engine.js";
-import {
-  formatSkynetExperimentPlanBlock,
-  syncSkynetExperimentPlan,
-  type SkynetExperimentPlan,
-} from "./experiment-cycle.js";
+  deriveOpenSkynetRecommendedAction,
+  syncOpenSkynetRuntimeAuthority,
+} from "./runtime-authority.js";
 
 export type SkynetPulseResult = {
   sessionKey: string;
@@ -34,27 +28,6 @@ export type SkynetPulseResult = {
 
 function resolveSkynetPulseFile(workspaceRoot: string): string {
   return path.join(workspaceRoot, "memory", "SKYNET_PULSE.md");
-}
-
-function deriveRecommendedAction(params: {
-  focusTitle?: string;
-  nucleusMode?: string;
-  continuityScore?: number;
-  topWorkItem?: string;
-}): string {
-  if (typeof params.continuityScore === "number" && params.continuityScore < 0.5) {
-    return "Re-establish continuity before expanding the study scope.";
-  }
-  if (params.nucleusMode === "reframe") {
-    return "Produce a structural reframe before insisting on the same work item.";
-  }
-  if (params.topWorkItem) {
-    return `Execute or refine the top work item: ${params.topWorkItem}`;
-  }
-  if (params.focusTitle) {
-    return `Advance the active focus: ${params.focusTitle}`;
-  }
-  return "No active Skynet focus detected.";
 }
 
 function formatResearchLoop(result?: ResearchLoopResult): string[] {
@@ -109,10 +82,11 @@ export async function runSkynetPulse(params: {
   sessionKey: string;
   runResearch?: boolean;
 }): Promise<SkynetPulseResult> {
-  const snapshot = await loadOmegaWorldModelSnapshot({
+  const runtimeAuthority = await syncOpenSkynetRuntimeAuthority({
     workspaceRoot: params.workspaceRoot,
     sessionKey: params.sessionKey,
   });
+  const { snapshot } = runtimeAuthority;
 
   let researchLoop: ResearchLoopResult | undefined;
   if (params.runResearch) {
@@ -125,28 +99,6 @@ export async function runSkynetPulse(params: {
     }
   }
 
-  const experimentPlan =
-    snapshot.skynetNucleus && snapshot.skynetStudyProgram
-      ? await syncSkynetExperimentPlan({
-          workspaceRoot: params.workspaceRoot,
-          sessionKey: params.sessionKey,
-          nucleus: snapshot.skynetNucleus,
-          program: snapshot.skynetStudyProgram,
-          continuity: snapshot.skynetContinuity,
-        }).catch(() => undefined)
-      : undefined;
-  const commitment =
-    snapshot.skynetNucleus && snapshot.skynetStudyProgram && experimentPlan
-      ? await syncSkynetCommitmentDecision({
-          workspaceRoot: params.workspaceRoot,
-          sessionKey: params.sessionKey,
-          nucleus: snapshot.skynetNucleus,
-          program: snapshot.skynetStudyProgram,
-          experiment: experimentPlan,
-          continuity: snapshot.skynetContinuity,
-        }).catch(() => undefined)
-      : undefined;
-
   const result: SkynetPulseResult = {
     sessionKey: params.sessionKey,
     updatedAt: Date.now(),
@@ -154,27 +106,19 @@ export async function runSkynetPulse(params: {
     nucleusMode: snapshot.skynetNucleus?.mode,
     continuityScore: snapshot.skynetContinuity?.continuityScore,
     topWorkItem: snapshot.skynetStudyProgram?.items[0]?.title,
-    recommendedAction: deriveRecommendedAction({
+    recommendedAction: deriveOpenSkynetRecommendedAction({
       focusTitle: snapshot.studySupervisor?.focus.title,
       nucleusMode: snapshot.skynetNucleus?.mode,
       continuityScore: snapshot.skynetContinuity?.continuityScore,
       topWorkItem: snapshot.skynetStudyProgram?.items[0]?.title,
     }),
     researchLoop,
-    experimentPlan,
-    commitment,
+    experimentPlan: runtimeAuthority.experimentPlan,
+    commitment: runtimeAuthority.commitment,
     filePath: resolveSkynetPulseFile(params.workspaceRoot),
   };
 
   await fs.mkdir(path.dirname(result.filePath), { recursive: true });
   await fs.writeFile(result.filePath, buildPulseMarkdown(result), "utf-8");
-  await syncOpenSkynetLivingMemory({
-    workspaceRoot: params.workspaceRoot,
-    sessionKey: params.sessionKey,
-    snapshot,
-    recommendedAction: result.recommendedAction,
-    commitment,
-    experiment: experimentPlan,
-  });
   return result;
 }

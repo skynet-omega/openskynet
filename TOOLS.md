@@ -31,6 +31,8 @@ This file stores environment-specific facts for OpenSkyNet.
 - State dir: `~/.openskynet`
 - Sandbox mode: `off`
 - Important runtime notes: systemd user service `openskynet-gateway.service`
+- Preferred Node runtime on this machine: `/home/daroch/miniconda3/envs/GPU/bin/node`
+- Do not assume `nvm` or `/usr/local/bin/node` exists in autonomous exec contexts
 
 ## SSH / Machines
 

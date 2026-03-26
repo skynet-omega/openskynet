@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runSkynetPulse } from "./pulse.js";
+import { syncOpenSkynetRuntimeAuthority } from "./runtime-authority.js";
 
 describe("skynet pulse", () => {
   let workspaceRoot = "";
@@ -41,8 +42,24 @@ describe("skynet pulse", () => {
         "utf-8",
       ),
     ) as {
-      skynet?: { focusKey?: string };
+      internalProjectState?: { focusKey?: string };
     };
-    expect(livingState.skynet?.focusKey).toBe("endogenous_science_agenda");
+    expect(livingState.internalProjectState?.focusKey).toBe("endogenous_science_agenda");
+  });
+
+  it("keeps pulse aligned with the shared runtime authority", async () => {
+    const runtime = await syncOpenSkynetRuntimeAuthority({
+      workspaceRoot,
+      sessionKey: "agent:openskynet:main",
+    });
+    const pulse = await runSkynetPulse({
+      workspaceRoot,
+      sessionKey: "agent:openskynet:main",
+      runResearch: false,
+    });
+
+    expect(pulse.topWorkItem).toBe(runtime.snapshot.skynetStudyProgram?.items[0]?.title);
+    expect(pulse.commitment?.kind).toBe(runtime.commitment?.kind);
+    expect(pulse.experimentPlan?.focusKey).toBe(runtime.experimentPlan?.focusKey);
   });
 });

@@ -46,7 +46,7 @@ export type OverviewProps = {
   attentionItems: AttentionItem[];
   eventLog: EventLogEntry[];
   overviewLogLines: string[];
-  skynetFiles: DebugWorkspaceFile[];
+  projectFiles: DebugWorkspaceFile[];
   showGatewayToken: boolean;
   showGatewayPassword: boolean;
   onSettingsChange: (next: UiSettings) => void;
@@ -193,16 +193,24 @@ export function renderOverview(props: OverviewProps) {
   })();
 
   const currentLocale = i18n.getLocale();
-  const skynetStateFile =
-    props.skynetFiles.find((file) => file.name.includes(".openskynet/living-memory/state/")) ??
+  const projectStateFile =
+    props.projectFiles.find((file) => file.name.includes(".openskynet/living-memory/state/")) ??
     null;
-  const skynetState = (() => {
-    if (!skynetStateFile) {
+  const projectState = (() => {
+    if (!projectStateFile) {
       return null;
     }
     try {
-      return JSON.parse(skynetStateFile.content) as {
-        skynet?: {
+      return JSON.parse(projectStateFile.content) as {
+        selfModel?: {
+          internalProject?: {
+            name?: string | null;
+          } | null;
+        };
+        agenticBenchmark?: {
+          benchmarkScore?: number | null;
+        } | null;
+        internalProjectState?: {
           focusTitle?: string | null;
           mode?: string | null;
           continuityScore?: number | null;
@@ -215,22 +223,31 @@ export function renderOverview(props: OverviewProps) {
       return null;
     }
   })();
-  const skynetPrimary =
-    skynetStateFile ??
-    props.skynetFiles.find((file) => file.name.endsWith("SKYNET_PULSE.md")) ??
-    props.skynetFiles[0] ??
+  const internalProjectName =
+    projectState?.selfModel?.internalProject?.name?.trim() || "Internal Project";
+  const benchmarkScore = projectState?.agenticBenchmark?.benchmarkScore;
+  const projectPrimary =
+    projectStateFile ??
+    props.projectFiles.find((file) => file.name.endsWith("SKYNET_PULSE.md")) ??
+    props.projectFiles[0] ??
     null;
-  const skynetPreview = skynetState
+  const projectPreview = projectState
     ? [
-        skynetState.skynet?.focusTitle ? `Focus: ${skynetState.skynet.focusTitle}` : "",
-        skynetState.skynet?.mode ? `Mode: ${skynetState.skynet.mode}` : "",
-        typeof skynetState.skynet?.continuityScore === "number"
-          ? `Continuity: ${skynetState.skynet.continuityScore.toFixed(2)}`
+        projectState.internalProjectState?.focusTitle
+          ? `Focus: ${projectState.internalProjectState.focusTitle}`
           : "",
-        skynetState.skynet?.topWorkItem ? `Top item: ${skynetState.skynet.topWorkItem}` : "",
+        projectState.internalProjectState?.mode
+          ? `Mode: ${projectState.internalProjectState.mode}`
+          : "",
+        typeof projectState.internalProjectState?.continuityScore === "number"
+          ? `Continuity: ${projectState.internalProjectState.continuityScore.toFixed(2)}`
+          : "",
+        projectState.internalProjectState?.topWorkItem
+          ? `Top item: ${projectState.internalProjectState.topWorkItem}`
+          : "",
       ].filter(Boolean)
-    : skynetPrimary
-      ? skynetPrimary.content
+    : projectPrimary
+      ? projectPrimary.content
           .split("\n")
           .map((line) => line.trim())
           .filter(Boolean)
@@ -435,32 +452,37 @@ export function renderOverview(props: OverviewProps) {
     <section class="card" style="margin-top: 18px;">
       <div class="row" style="justify-content: space-between; gap: 12px;">
         <div>
-          <div class="card-title">Skynet</div>
-          <div class="card-sub">Living memory first, then derived pulse artifacts.</div>
+          <div class="card-title">${internalProjectName}</div>
+          <div class="card-sub">Internal project benchmark. Living memory first, then derived pulse artifacts.</div>
         </div>
         <button class="btn btn--sm" @click=${() => props.onNavigate("debug")}>Open Debug</button>
       </div>
       ${
-        skynetPrimary
+        projectPrimary
           ? html`
               <div class="stack" style="margin-top: 12px;">
-                <div class="muted">${skynetPrimary.name}</div>
+                <div class="muted">${projectPrimary.name}</div>
                 <div class="callout" style="margin-top: 4px;">
                   ${
-                    skynetPreview.length > 0
-                      ? skynetPreview.map((line) => html`<div>${line}</div>`)
+                    projectPreview.length > 0
+                      ? projectPreview.map((line) => html`<div>${line}</div>`)
                       : html`
                           <div>No summary available.</div>
                         `
                   }
                 </div>
+                ${
+                  typeof benchmarkScore === "number"
+                    ? html`<div class="muted">Agentic benchmark score: ${benchmarkScore.toFixed(2)}</div>`
+                    : nothing
+                }
                 <div class="muted">
-                  ${props.skynetFiles.length} persisted artifacts available in Debug.
+                  ${props.projectFiles.length} persisted artifacts available in Debug.
                 </div>
               </div>
             `
           : html`
-              <div class="muted" style="margin-top: 12px">No Skynet artifacts available yet.</div>
+              <div class="muted" style="margin-top: 12px">No internal project artifacts available yet.</div>
             `
       }
     </section>

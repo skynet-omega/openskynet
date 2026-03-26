@@ -5,6 +5,7 @@ import { runMessageAction } from "../../infra/outbound/message-action-runner.js"
 import { maybeApplyTtsToPayload } from "../../tts/tts.js";
 import type { FinalizedMsgContext } from "../templating.js";
 import type { ReplyPayload } from "../types.js";
+import { isAudioPayload } from "./agent-runner-helpers.js";
 import type { ReplyDispatcher, ReplyDispatchKind } from "./reply-dispatcher.js";
 import { routeReply } from "./route-reply.js";
 
@@ -27,6 +28,7 @@ type AcpDispatchDeliveryState = {
   blockCount: number;
   routedCounts: Record<ReplyDispatchKind, number>;
   toolMessageByCallId: Map<string, ToolMessageHandle>;
+  deliveredToolAudio: boolean;
 };
 
 export type AcpDispatchDeliveryCoordinator = {
@@ -64,6 +66,7 @@ export function createAcpDispatchDeliveryCoordinator(params: {
       final: 0,
     },
     toolMessageByCallId: new Map(),
+    deliveredToolAudio: false,
   };
 
   const startReplyLifecycleOnce = async () => {
@@ -138,7 +141,11 @@ export function createAcpDispatchDeliveryCoordinator(params: {
       kind,
       inboundAudio: params.inboundAudio,
       ttsAuto: params.sessionTtsAuto,
+      suppressSynthesis: kind !== "tool" && state.deliveredToolAudio,
     });
+    if (kind === "tool" && isAudioPayload(ttsPayload)) {
+      state.deliveredToolAudio = true;
+    }
 
     if (params.shouldRouteToOriginating && params.originatingChannel && params.originatingTo) {
       const toolCallId = meta?.toolCallId?.trim();

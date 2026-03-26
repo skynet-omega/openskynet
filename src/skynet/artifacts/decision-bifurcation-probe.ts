@@ -1,17 +1,12 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { loadOmegaWorldModelSnapshot } from "../../omega/world-model.js";
 import type { SkynetCommitmentDecision } from "../commitment-engine.js";
-import { syncSkynetCommitmentDecision } from "../commitment-engine.js";
 import type { SkynetContinuityState } from "../continuity-tracker.js";
-import { syncSkynetContinuityState } from "../continuity-tracker.js";
 import type { SkynetExperimentPlan } from "../experiment-cycle.js";
-import { syncSkynetExperimentPlan } from "../experiment-cycle.js";
 import type { SkynetNucleusState } from "../nucleus.js";
-import { syncSkynetNucleus } from "../nucleus.js";
+import { syncOpenSkynetRuntimeAuthority } from "../runtime-authority.js";
 import type { SkynetStudyProgram } from "../study-program.js";
-import { syncSkynetStudyProgram } from "../study-program.js";
 
 export type SkynetDecisionBifurcationVerdict = "hold" | "branch" | "commit";
 
@@ -121,70 +116,22 @@ export async function runSkynetDecisionBifurcationProbe(params: {
   workspaceRoot: string;
   sessionKey: string;
 }): Promise<SkynetDecisionBifurcationProbeResult> {
-  const snapshot = await loadOmegaWorldModelSnapshot({
+  const runtimeAuthority = await syncOpenSkynetRuntimeAuthority({
     workspaceRoot: params.workspaceRoot,
     sessionKey: params.sessionKey,
   });
-  const studySupervisor = snapshot.studySupervisor;
-  const nucleus = studySupervisor
-    ? await syncSkynetNucleus({
-        workspaceRoot: params.workspaceRoot,
-        sessionKey: params.sessionKey,
-        studyFocus: studySupervisor.focus,
-        operationalSignals: snapshot.operationalSignals,
-        learnedConstraints: snapshot.selfState?.learnedConstraints ?? [],
-      })
-    : snapshot.skynetNucleus;
-  const program =
-    studySupervisor && nucleus
-      ? await syncSkynetStudyProgram({
-          workspaceRoot: params.workspaceRoot,
-          sessionKey: params.sessionKey,
-          supervisor: studySupervisor,
-          nucleus,
-        })
-      : snapshot.skynetStudyProgram;
-  const continuity =
-    nucleus && program
-      ? await syncSkynetContinuityState({
-          workspaceRoot: params.workspaceRoot,
-          sessionKey: params.sessionKey,
-          nucleus,
-          program,
-        })
-      : snapshot.skynetContinuity;
-  const experiment =
-    nucleus && program
-      ? await syncSkynetExperimentPlan({
-          workspaceRoot: params.workspaceRoot,
-          sessionKey: params.sessionKey,
-          nucleus,
-          program,
-          continuity,
-        })
-      : undefined;
-  const commitment =
-    nucleus && program && experiment
-      ? await syncSkynetCommitmentDecision({
-          workspaceRoot: params.workspaceRoot,
-          sessionKey: params.sessionKey,
-          nucleus,
-          program,
-          experiment,
-          continuity,
-        })
-      : undefined;
+  const { snapshot } = runtimeAuthority;
 
   const stalledTurns = snapshot.operationalSignals.filter(
     (entry) => entry.turnHealth === "stalled",
   ).length;
   const result = deriveSkynetDecisionBifurcationProbe({
     sessionKey: params.sessionKey,
-    nucleus,
-    continuity,
-    commitment,
-    experiment,
-    program,
+    nucleus: snapshot.skynetNucleus,
+    continuity: snapshot.skynetContinuity,
+    commitment: runtimeAuthority.commitment,
+    experiment: runtimeAuthority.experimentPlan,
+    program: snapshot.skynetStudyProgram,
     stalledTurns,
   });
 

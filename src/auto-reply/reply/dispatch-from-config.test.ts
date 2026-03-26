@@ -51,9 +51,11 @@ const ttsMocks = vi.hoisted(() => {
       const params = paramsUnknown as {
         payload: ReplyPayload;
         kind: "tool" | "block" | "final";
+        suppressSynthesis?: boolean;
       };
       if (
         state.synthesizeFinalAudio &&
+        params.suppressSynthesis !== true &&
         params.kind === "final" &&
         typeof params.payload?.text === "string" &&
         params.payload.text.trim()
@@ -257,6 +259,35 @@ describe("dispatchReplyFromConfig", () => {
 
     expect(mocks.routeReply).not.toHaveBeenCalled();
     expect(dispatcher.sendFinalReply).toHaveBeenCalledTimes(1);
+  });
+
+  it("suppresses final auto-TTS after an explicit audio tool result in the same turn", async () => {
+    setNoAbort();
+    ttsMocks.state.synthesizeFinalAudio = true;
+    const dispatcher = createDispatcher();
+    const ctx = buildTestCtx({
+      Provider: "telegram",
+      Surface: "telegram",
+    });
+
+    const replyResolver = async (_ctx: MsgContext, opts?: GetReplyOptions) => {
+      await opts?.onToolResult?.({
+        mediaUrl: "https://example.com/voice.opus",
+        audioAsVoice: true,
+      });
+      return { text: "[[tts:widowmaker]] Hola [[/tts:text]]" } satisfies ReplyPayload;
+    };
+
+    await dispatchReplyFromConfig({ ctx, cfg: emptyConfig, dispatcher, replyResolver });
+
+    expect(dispatcher.sendToolResult).toHaveBeenCalledTimes(1);
+    expect(dispatcher.sendFinalReply).toHaveBeenCalledTimes(1);
+    const finalPayload = (dispatcher.sendFinalReply as ReturnType<typeof vi.fn>).mock.calls[0]?.[0];
+    expect(finalPayload.mediaUrl).toBeUndefined();
+    expect(finalPayload.text).toBe("[[tts:widowmaker]] Hola [[/tts:text]]");
+    expect(ttsMocks.maybeApplyTtsToPayload).toHaveBeenLastCalledWith(
+      expect.objectContaining({ suppressSynthesis: true }),
+    );
   });
 
   it("routes when OriginatingChannel differs from Provider", async () => {

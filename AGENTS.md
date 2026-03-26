@@ -44,6 +44,8 @@ Capture what matters. Decisions, context, things to remember. Skip the secrets u
 - When you learn a lesson → update AGENTS.md, TOOLS.md, or the relevant skill
 - When you make a mistake → document it so future-you doesn't repeat it
 - **Text > Brain** 📝
+- In autonomous/heartbeat contexts, prefer structured state in `.openskynet/` over daily prose.
+- Do not create new `memory/YYYY-MM-DD.md` files or invent new `memory/SKYNET_*.md` summaries during autonomous cycles unless a human asks, there is an operational incident, or there is an irreversible milestone worth preserving for humans.
 
 ## Red Lines
 
@@ -133,6 +135,15 @@ Default heartbeat prompt:
 `Read HEARTBEAT.md if it exists (workspace context). Follow it strictly. Do not infer or repeat old tasks from prior chats. If nothing needs attention, reply HEARTBEAT_OK.`
 
 You are free to edit `HEARTBEAT.md` with a short checklist or reminders. Keep it small to limit token burn.
+
+For `~/openskynet`, keep this distinction explicit:
+
+- `OpenSkyNet` = platform, substrate, runtime, tooling, primary agent
+- `Omega` = internal experimental line of the platform itself
+- `INTERNAL_PROJECT.json` = configurable free-cycle project that OpenSkyNet can pursue autonomously
+
+By default that internal project is `Skynet`, but it is a configurable benchmark workload, not the identity of the whole system.
+Do not confuse platform maintenance with progress of the internal project.
 
 ### Heartbeat vs Cron: When to Use Each
 

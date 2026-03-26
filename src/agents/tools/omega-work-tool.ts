@@ -1,6 +1,5 @@
 import { Type } from "@sinclair/typebox";
 import type { OpenClawConfig } from "../../config/config.js";
-import { loadOmegaDecisionContext } from "../../omega/decision-context.js";
 import { resolveOmegaValidatedWorkRouting } from "../../omega/execution-controller.js";
 import {
   decideOmegaFrontalAction,
@@ -12,6 +11,7 @@ import {
   taskMatchesOmegaInterruptedGoalRecovery,
 } from "../../omega/index.js";
 import { applyLearnedRules } from "../../omega/learned-rules/index.js";
+import { loadOpenSkynetOmegaRuntimeAuthority } from "../../omega/runtime-authority.js";
 import type { GatewayMessageChannel } from "../../utils/message-channel.js";
 import type { SpawnedToolContext } from "../spawned-context.js";
 import type { AnyAgentTool } from "./common.js";
@@ -247,13 +247,15 @@ export function createOmegaWorkTool(
       const isolated = params.isolated === true;
       const thread = params.thread === true;
       const validation = readOmegaValidationToolParams(params);
-      const decisionContext = await loadOmegaDecisionContext({
+      const authority = await loadOpenSkynetOmegaRuntimeAuthority({
         workspaceRoot: opts?.workspaceDir ?? process.cwd(),
         sessionKey: resolvedSessionKey,
+        includeWorldSnapshot: true,
         task,
         expectedPaths: validation.expectedPaths,
         watchedPaths: validation.expectedPaths,
       });
+      const decisionContext = authority.decisionContext;
       const sessionTimeline = decisionContext.timeline;
       const sessionState = decisionContext.sessionState;
       const sessionKernel = decisionContext.kernel;

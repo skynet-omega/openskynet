@@ -644,6 +644,64 @@ describe("gateway server sessions", () => {
     ws.close();
   });
 
+  test("sessions.reset clears stale heartbeat routing metadata from the main session", async () => {
+    await createSessionStoreDir();
+
+    await writeSessionStore({
+      entries: {
+        main: {
+          sessionId: "sess-heartbeat-main",
+          updatedAt: Date.now(),
+          origin: {
+            label: "heartbeat",
+            provider: "heartbeat",
+            from: "heartbeat",
+            to: "heartbeat",
+          },
+          deliveryContext: {
+            to: "heartbeat",
+          },
+          lastTo: "heartbeat",
+          lastChannel: "heartbeat",
+          lastAccountId: "heartbeat",
+        },
+      },
+    });
+
+    const { ws } = await openClient();
+    const reset = await rpcReq<{
+      ok: true;
+      key: string;
+      entry: {
+        sessionId: string;
+        origin?: unknown;
+        deliveryContext?: unknown;
+        lastTo?: string;
+        lastChannel?: string;
+        lastAccountId?: string;
+      };
+    }>(ws, "sessions.reset", { key: "main" });
+
+    expect(reset.ok).toBe(true);
+    expect(reset.payload?.key).toBe("agent:main:main");
+    expect(reset.payload?.entry.sessionId).not.toBe("sess-heartbeat-main");
+    expect(reset.payload?.entry.origin).toBeUndefined();
+    expect(reset.payload?.entry.deliveryContext).toBeUndefined();
+    expect(reset.payload?.entry.lastTo).toBeUndefined();
+    expect(reset.payload?.entry.lastChannel).toBeUndefined();
+    expect(reset.payload?.entry.lastAccountId).toBeUndefined();
+
+    const persisted = JSON.parse(await fs.readFile(testState.sessionStorePath, "utf-8")) as Record<
+      string,
+      Record<string, unknown>
+    >;
+    expect(persisted["agent:main:main"]?.origin).toBeUndefined();
+    expect(persisted["agent:main:main"]?.deliveryContext).toBeUndefined();
+    expect(persisted["agent:main:main"]?.lastTo).toBeUndefined();
+
+    ws.close();
+  });
+
   test("sessions.preview resolves legacy mixed-case main alias with custom mainKey", async () => {
     const { dir, storePath } = await createSessionStoreDir();
     testState.agentsConfig = { list: [{ id: "ops", default: true }] };

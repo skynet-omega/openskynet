@@ -400,7 +400,8 @@ export function buildTtsSystemPromptHint(cfg: OpenClawConfig): string | undefine
     "Voice (TTS) is enabled.",
     autoHint,
     `Keep spoken text ≤${maxLength} chars to avoid auto-summary (summary ${summarize}).`,
-    "Use [[tts:...]] and optional [[tts:text]]...[[/tts:text]] to control voice/expressiveness.",
+    "Use /tts commands to persist provider/voice/language/format settings.",
+    "Use [[tts:text]]...[[/tts:text]] only for per-reply spoken text or expressive cues; do not treat inline tags as persistent configuration.",
   ]
     .filter(Boolean)
     .join("\n");
@@ -869,7 +870,7 @@ export async function textToSpeechTelephony(params: {
     return { success: false, error: setup.error };
   }
 
-  const { config, providers, prefsPath } = setup;
+  const { config, providers, prefsPath: _prefsPath } = setup;
 
   const errors: string[] = [];
 
@@ -949,6 +950,7 @@ export async function maybeApplyTtsToPayload(params: {
   kind?: "tool" | "block" | "final";
   inboundAudio?: boolean;
   ttsAuto?: string;
+  suppressSynthesis?: boolean;
 }): Promise<ReplyPayload> {
   const config = resolveTtsConfig(params.cfg);
   const prefsPath = resolveTtsPrefsPath(config);
@@ -979,6 +981,10 @@ export async function maybeApplyTtsToPayload(params: {
           ...params.payload,
           text: visibleText.length > 0 ? visibleText : undefined,
         };
+
+  if (params.suppressSynthesis === true) {
+    return nextPayload;
+  }
 
   if (autoMode === "tagged" && !directives.hasDirective) {
     return nextPayload;

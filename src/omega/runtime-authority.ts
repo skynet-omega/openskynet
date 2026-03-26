@@ -1,0 +1,70 @@
+import { loadOmegaDecisionContext, type OmegaDecisionContext } from "./decision-context.js";
+import {
+  loadOpenSkynetInternalProjectProfile,
+  type OpenSkynetInternalProjectProfile,
+} from "./internal-project.js";
+import {
+  collectOpenSkynetMemoryCandidates,
+  loadOpenSkynetLivingState,
+  type OpenSkynetLivingState,
+} from "./living-memory.js";
+import { loadOmegaWorldModelSnapshot, type OmegaWorldModelSnapshot } from "./world-model.js";
+
+export type OpenSkynetOmegaRuntimeAuthority = {
+  workspaceRoot: string;
+  sessionKey: string;
+  project: OpenSkynetInternalProjectProfile;
+  memoryCandidates: string[];
+  decisionContext: OmegaDecisionContext;
+  worldSnapshot?: OmegaWorldModelSnapshot;
+  livingState?: OpenSkynetLivingState;
+};
+
+export async function loadOpenSkynetOmegaRuntimeAuthority(params: {
+  workspaceRoot: string;
+  sessionKey: string;
+  includeWorldSnapshot?: boolean | "urgent_maintenance";
+  task?: string;
+  expectedPaths?: string[];
+  watchedPaths?: string[];
+}): Promise<OpenSkynetOmegaRuntimeAuthority> {
+  const memoryCandidates = await collectOpenSkynetMemoryCandidates(params.workspaceRoot);
+  const [project, decisionContext, livingState] = await Promise.all([
+    loadOpenSkynetInternalProjectProfile(params.workspaceRoot),
+    loadOmegaDecisionContext({
+      workspaceRoot: params.workspaceRoot,
+      sessionKey: params.sessionKey,
+      memoryCandidates,
+      includeWorldSnapshot: params.includeWorldSnapshot,
+      task: params.task,
+      expectedPaths: params.expectedPaths,
+      watchedPaths: params.watchedPaths,
+    }),
+    loadOpenSkynetLivingState({
+      workspaceRoot: params.workspaceRoot,
+      sessionKey: params.sessionKey,
+    }),
+  ]);
+
+  const worldSnapshot =
+    decisionContext.controllerState?.worldSnapshot ??
+    (params.includeWorldSnapshot || params.task || (params.expectedPaths?.length ?? 0) > 0
+      ? await loadOmegaWorldModelSnapshot({
+          workspaceRoot: params.workspaceRoot,
+          sessionKey: params.sessionKey,
+          task: params.task,
+          expectedPaths: params.expectedPaths,
+          watchedPaths: params.watchedPaths,
+        }).catch(() => undefined)
+      : undefined);
+
+  return {
+    workspaceRoot: params.workspaceRoot,
+    sessionKey: params.sessionKey,
+    project,
+    memoryCandidates,
+    decisionContext,
+    worldSnapshot,
+    livingState,
+  };
+}

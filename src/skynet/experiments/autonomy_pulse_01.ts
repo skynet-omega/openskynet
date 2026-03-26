@@ -1,14 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { loadOmegaWorldModelSnapshot } from "../../omega/world-model.js";
 import type { SkynetCommitmentDecision } from "../commitment-engine.js";
-import { syncSkynetCommitmentDecision } from "../commitment-engine.js";
 import type { SkynetContinuityState } from "../continuity-tracker.js";
 import type { SkynetExperimentPlan } from "../experiment-cycle.js";
-import { syncSkynetExperimentPlan } from "../experiment-cycle.js";
 import type { SkynetNucleusState } from "../nucleus.js";
-import { runSkynetPulse } from "../pulse.js";
+import { syncOpenSkynetRuntimeAuthority } from "../runtime-authority.js";
 import type { SkynetStudyProgram } from "../study-program.js";
 
 export type SkynetAutonomyPulseVerdict = "intensify" | "maintain" | "stabilize" | "reframe";
@@ -155,42 +152,17 @@ export async function runSkynetAutonomyPulse01(params: {
   workspaceRoot: string;
   sessionKey: string;
 }): Promise<SkynetAutonomyPulse01Result> {
-  await runSkynetPulse({
-    workspaceRoot: params.workspaceRoot,
-    sessionKey: params.sessionKey,
-    runResearch: false,
-  });
-  const snapshot = await loadOmegaWorldModelSnapshot({
+  const runtimeAuthority = await syncOpenSkynetRuntimeAuthority({
     workspaceRoot: params.workspaceRoot,
     sessionKey: params.sessionKey,
   });
-  const experiment =
-    snapshot.skynetNucleus && snapshot.skynetStudyProgram
-      ? await syncSkynetExperimentPlan({
-          workspaceRoot: params.workspaceRoot,
-          sessionKey: params.sessionKey,
-          nucleus: snapshot.skynetNucleus,
-          program: snapshot.skynetStudyProgram,
-          continuity: snapshot.skynetContinuity,
-        })
-      : undefined;
-  const commitment =
-    snapshot.skynetNucleus && snapshot.skynetStudyProgram && experiment
-      ? await syncSkynetCommitmentDecision({
-          workspaceRoot: params.workspaceRoot,
-          sessionKey: params.sessionKey,
-          nucleus: snapshot.skynetNucleus,
-          program: snapshot.skynetStudyProgram,
-          experiment,
-          continuity: snapshot.skynetContinuity,
-        })
-      : undefined;
+  const { snapshot } = runtimeAuthority;
   const result = deriveSkynetAutonomyPulse01({
     sessionKey: params.sessionKey,
     continuity: snapshot.skynetContinuity,
     nucleus: snapshot.skynetNucleus,
-    commitment,
-    experiment,
+    commitment: runtimeAuthority.commitment,
+    experiment: runtimeAuthority.experimentPlan,
     program: snapshot.skynetStudyProgram,
   });
 
