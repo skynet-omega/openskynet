@@ -1,3 +1,5 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import {
   resolveAgentConfig,
   resolveAgentDir,
@@ -197,6 +199,51 @@ function appendCronDeliveryInstruction(params: {
     return params.commandBody;
   }
   return `${params.commandBody}\n\nReturn your summary as plain text; it will be delivered automatically. If the task explicitly calls for messaging a specific external recipient, note who/where it should go instead of sending it yourself.`.trim();
+}
+
+function sanitizeSessionKeyForFile(sessionKey: string): string {
+  return (sessionKey.trim() || "main").replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 64) || "main";
+}
+
+async function readInternalProjectCycleSummary(params: {
+  workspaceDir: string;
+  sessionKey: string;
+  runStartedAt: number;
+}): Promise<string | undefined> {
+  const filePath = path.join(
+    params.workspaceDir,
+    ".openskynet",
+    "internal-project-benchmark",
+    `${sanitizeSessionKeyForFile(params.sessionKey)}-last-cycle.json`,
+  );
+  try {
+    const stat = await fs.stat(filePath);
+    if (stat.mtimeMs + 1000 < params.runStartedAt) {
+      return undefined;
+    }
+    const raw = JSON.parse(await fs.readFile(filePath, "utf-8")) as {
+      resultKind?: string;
+      summary?: string;
+      next?: string;
+    };
+    const resultKind =
+      typeof raw.resultKind === "string" && raw.resultKind.trim()
+        ? raw.resultKind.trim()
+        : "improvement";
+    const impact =
+      typeof raw.summary === "string" && raw.summary.trim() ? raw.summary.trim() : undefined;
+    const next = typeof raw.next === "string" && raw.next.trim() ? raw.next.trim() : undefined;
+    if (!impact) {
+      return undefined;
+    }
+    return [
+      `RESULT: ${resultKind}`,
+      `IMPACT: ${impact}`,
+      `NEXT: ${next ?? "inspect cycle result file for follow-up"}`,
+    ].join("\n");
+  } catch {
+    return undefined;
+  }
 }
 
 export async function runCronIsolatedAgentTurn(params: {
@@ -776,6 +823,19 @@ export async function runCronIsolatedAgentTurn(params: {
   const firstText = payloads[0]?.text ?? "";
   let summary = pickSummaryFromPayloads(payloads) ?? pickSummaryFromOutput(firstText);
   let outputText = pickLastNonEmptyTextFromPayloads(payloads);
+  if (!summary?.trim()) {
+    const cycleSummary = await readInternalProjectCycleSummary({
+      workspaceDir,
+      sessionKey: agentSessionKey,
+      runStartedAt,
+    });
+    if (cycleSummary) {
+      summary = cycleSummary;
+      if (!outputText?.trim()) {
+        outputText = cycleSummary;
+      }
+    }
+  }
   let synthesizedText = outputText?.trim() || summary?.trim() || undefined;
   const deliveryPayload = pickLastDeliverablePayload(payloads);
   let deliveryPayloads =

@@ -249,6 +249,23 @@ describe("omega world model", () => {
   });
 
   it("persists a proactive problem agenda item when no active goal is open", async () => {
+    await fs.writeFile(
+      path.join(workspaceRoot, "INTERNAL_PROJECT.json"),
+      JSON.stringify(
+        {
+          key: "protein-lab",
+          name: "Protein Lab",
+          role: "Protein discovery project.",
+          mission: "Find useful protein structures.",
+          benchmarkPurpose: "Measure sustained autonomous scientific work.",
+          successCriteria: ["produces measurable protein artifacts"],
+        },
+        null,
+        2,
+      ),
+      "utf-8",
+    );
+
     const snapshot = await loadOmegaWorldModelSnapshot({
       workspaceRoot,
       sessionKey,
@@ -258,7 +275,7 @@ describe("omega world model", () => {
     expect(snapshot.problemAgenda[0]?.classKey).toBe("initiative:autonomy_improvement");
     expect(snapshot.studySupervisor?.focus.key).toBe("endogenous_science_agenda");
     expect(snapshot.studySupervisor?.tracks.length).toBeGreaterThanOrEqual(5);
-    expect(snapshot.skynetNucleus?.name).toBe("Skynet");
+    expect(snapshot.skynetNucleus?.name).toBe("Protein Lab");
     expect(snapshot.skynetNucleus?.mode).toBe("explore");
     expect(snapshot.skynetStudyProgram?.items.length).toBe(3);
     expect(snapshot.skynetStudyProgram?.items[0]?.title).toContain("Empujar foco activo");
@@ -266,6 +283,23 @@ describe("omega world model", () => {
   });
 
   it("includes the study supervisor focus in the idle heartbeat prompt", async () => {
+    await fs.writeFile(
+      path.join(workspaceRoot, "INTERNAL_PROJECT.json"),
+      JSON.stringify(
+        {
+          key: "protein-lab",
+          name: "Protein Lab",
+          role: "Protein discovery project.",
+          mission: "Find useful protein structures.",
+          benchmarkPurpose: "Measure sustained autonomous scientific work.",
+          successCriteria: ["produces measurable protein artifacts"],
+        },
+        null,
+        2,
+      ),
+      "utf-8",
+    );
+
     const prompt = await buildIdleOmegaHeartbeatPrompt({
       workspaceRoot,
       sessionKey,
@@ -273,9 +307,9 @@ describe("omega world model", () => {
     });
 
     expect(prompt).toContain("[SKYNET Study Supervisor]");
-    expect(prompt).toContain("[Skynet Nucleus]");
-    expect(prompt).toContain("[Skynet Study Program]");
-    expect(prompt).toContain("[Skynet Continuity]");
+    expect(prompt).toContain("[Protein Lab Nucleus]");
+    expect(prompt).toContain("[Protein Lab Study Program]");
+    expect(prompt).toContain("[Protein Lab Continuity]");
     expect(prompt).toContain("Agenda científica endógena");
   });
 

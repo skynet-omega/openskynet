@@ -27,7 +27,7 @@ export type SkynetPatternField = {
 export type SkynetNucleusState = {
   sessionKey: string;
   updatedAt: number;
-  name: "Skynet";
+  name: string;
   mode: SkynetNucleusMode;
   executive: SkynetExecutiveLobe;
   metabolism: SkynetMetabolism;
@@ -88,24 +88,22 @@ function deriveMode(params: {
 }
 
 function buildExecutive(params: {
+  projectName: string;
   studyFocus: OmegaStudyFocus;
   mode: SkynetNucleusMode;
 }): SkynetExecutiveLobe {
   const activeQuestionByTrack: Record<OmegaStudyFocus["key"], string> = {
-    memory_selective_rewrite:
-      "How can Skynet change local structure without destroying coherent global state?",
+    memory_selective_rewrite: `How can ${params.projectName} change local structure without destroying coherent global state?`,
     decision_bifurcation: "What stabilizes a real commitment instead of another local score bump?",
-    cognitive_metabolism:
-      "What should Skynet stop doing so cognition has real cost and real pressure?",
-    bicameral_core: "How should Skynet split executive logic from dynamic pattern processing?",
-    endogenous_science_agenda:
-      "What study line should Skynet carry across cycles without external prompting?",
+    cognitive_metabolism: `What should ${params.projectName} stop doing so cognition has real cost and real pressure?`,
+    bicameral_core: `How should ${params.projectName} split executive logic from dynamic pattern processing?`,
+    endogenous_science_agenda: `What study line should ${params.projectName} carry across cycles without external prompting?`,
   };
   const commitmentBase =
     params.mode === "reframe" ? 0.68 : params.mode === "stabilize" ? 0.72 : 0.62;
 
   return {
-    macroGoal: `Advance ${params.studyFocus.title} as the next concrete Skynet line.`,
+    macroGoal: `Advance ${params.studyFocus.title} as the next concrete ${params.projectName} line.`,
     activeQuestion: activeQuestionByTrack[params.studyFocus.key],
     commitment: clamp01(commitmentBase + params.studyFocus.priority * 0.2),
   };
@@ -164,10 +162,12 @@ function formatUnique(values: string[]): string[] {
 
 export function deriveSkynetNucleusState(params: {
   sessionKey: string;
+  projectName?: string;
   studyFocus: OmegaStudyFocus;
   operationalSignals: OmegaOperationalTurnMemoryEntry[];
   learnedConstraints?: string[];
 }): SkynetNucleusState {
+  const projectName = params.projectName?.trim() || "Skynet";
   const learnedConstraints = formatUnique(params.learnedConstraints ?? []);
   const mode = deriveMode({
     studyFocus: params.studyFocus,
@@ -176,9 +176,10 @@ export function deriveSkynetNucleusState(params: {
   return {
     sessionKey: params.sessionKey,
     updatedAt: Date.now(),
-    name: "Skynet",
+    name: projectName,
     mode,
     executive: buildExecutive({
+      projectName,
       studyFocus: params.studyFocus,
       mode,
     }),
@@ -200,12 +201,14 @@ export function deriveSkynetNucleusState(params: {
 export async function syncSkynetNucleus(params: {
   workspaceRoot: string;
   sessionKey: string;
+  projectName?: string;
   studyFocus: OmegaStudyFocus;
   operationalSignals: OmegaOperationalTurnMemoryEntry[];
   learnedConstraints?: string[];
 }): Promise<SkynetNucleusState> {
   const state = deriveSkynetNucleusState({
     sessionKey: params.sessionKey,
+    projectName: params.projectName,
     studyFocus: params.studyFocus,
     operationalSignals: params.operationalSignals,
     learnedConstraints: params.learnedConstraints,
@@ -221,7 +224,7 @@ export async function syncSkynetNucleus(params: {
 
 export function formatSkynetNucleusBlock(state: SkynetNucleusState): string[] {
   return [
-    "[Skynet Nucleus]",
+    `[${state.name} Nucleus]`,
     `Mode: ${state.mode}`,
     `Macro goal: ${state.executive.macroGoal}`,
     `Active question: ${state.executive.activeQuestion}`,

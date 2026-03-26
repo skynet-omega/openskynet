@@ -11,6 +11,7 @@ export type SkynetArtifactKind = "module" | "benchmark" | "note";
 export type SkynetCommitmentDecision = {
   sessionKey: string;
   updatedAt: number;
+  projectName: string;
   kind: SkynetCommitmentKind;
   artifactKind: SkynetArtifactKind;
   targetFocusKey: string;
@@ -43,12 +44,13 @@ function resolveCommitmentMarkdownPath(workspaceRoot: string): string {
 }
 
 function buildArtifactTask(params: {
+  projectName: string;
   focusKey: string;
   itemTitle?: string;
   experiment: SkynetExperimentPlan;
 }): string {
   if (params.focusKey === "endogenous_science_agenda") {
-    return "Implement one executable Skynet study artifact that can be validated in the next cycle.";
+    return `Implement one executable ${params.projectName} study artifact that can be validated in the next cycle.`;
   }
   return params.itemTitle
     ? `Implement or update the artifact implied by: ${params.itemTitle}.`
@@ -90,6 +92,7 @@ export function deriveSkynetCommitmentDecision(params: {
     return {
       sessionKey: params.sessionKey,
       updatedAt: Date.now(),
+      projectName: params.nucleus.name,
       kind: "stabilize",
       artifactKind: "benchmark",
       targetFocusKey: params.program.focusKey,
@@ -109,6 +112,7 @@ export function deriveSkynetCommitmentDecision(params: {
     return {
       sessionKey: params.sessionKey,
       updatedAt: Date.now(),
+      projectName: params.nucleus.name,
       kind: "reframe",
       artifactKind: "note",
       targetFocusKey: params.program.focusKey,
@@ -127,6 +131,7 @@ export function deriveSkynetCommitmentDecision(params: {
   return {
     sessionKey: params.sessionKey,
     updatedAt: Date.now(),
+    projectName: params.nucleus.name,
     kind: "artifact",
     artifactKind: params.program.focusKey === "endogenous_science_agenda" ? "module" : "benchmark",
     targetFocusKey: params.program.focusKey,
@@ -135,6 +140,7 @@ export function deriveSkynetCommitmentDecision(params: {
     rationale:
       "Continuity is strong enough to commit to a concrete artifact instead of another planning-only cycle.",
     executableTask: buildArtifactTask({
+      projectName: params.nucleus.name,
       focusKey: params.program.focusKey,
       itemTitle: topItem?.title,
       experiment: params.experiment,
@@ -148,7 +154,7 @@ export function deriveSkynetCommitmentDecision(params: {
 
 function buildCommitmentMarkdown(decision: SkynetCommitmentDecision): string {
   return [
-    "# SKYNET Commitment",
+    `# ${decision.projectName.toUpperCase()} Commitment`,
     "",
     `Updated: ${new Date(decision.updatedAt).toISOString()}`,
     `Session: ${decision.sessionKey}`,
@@ -195,7 +201,7 @@ export function formatSkynetCommitmentBlock(decision?: SkynetCommitmentDecision)
   }
   return [
     "",
-    "[Skynet Commitment]",
+    `[${decision.projectName} Commitment]`,
     `Kind: ${decision.kind} | artifact ${decision.artifactKind} | confidence ${decision.confidence.toFixed(2)}`,
     `Rationale: ${decision.rationale}`,
     `Executable task: ${decision.executableTask}`,

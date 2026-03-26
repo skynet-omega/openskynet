@@ -38,6 +38,8 @@ export type OmegaExecutiveDecision = {
   mode: OmegaExecutiveMode;
   selectedAction: "direct_execute" | "recover" | "maintain" | "idle";
   selectedGoalId?: string;
+  selectedWorkItemId?: string;
+  selectedQueueKind?: "goal" | "maintenance" | "anomaly";
   rationale: string[];
   expectedUtility: number;
   utilityBreakdown: OmegaUtilityBreakdown;
@@ -268,6 +270,8 @@ export function observeOmegaExecutiveState(params: {
   let selectedAction: OmegaExecutiveDecision["selectedAction"] = "idle";
   const rationale: string[] = [];
   let selectedGoalId: string | undefined;
+  let selectedWorkItemId: string | undefined;
+  let selectedQueueKind: OmegaExecutiveDecision["selectedQueueKind"];
   let expectedUtility = 0.1;
   let confidence = 0.5;
   const provisionalBudget = buildDefaultBudget("idle");
@@ -292,6 +296,8 @@ export function observeOmegaExecutiveState(params: {
     mode = "active";
     selectedAction = "maintain";
     selectedGoalId = failureProbeItem.goalId;
+    selectedWorkItemId = `maintenance:${failureProbeItem.goalId}`;
+    selectedQueueKind = "maintenance";
     rationale.push(
       "Repeated verified failures suggest a causal limit; run a probe experiment before another recovery attempt.",
     );
@@ -301,6 +307,16 @@ export function observeOmegaExecutiveState(params: {
     mode = "recovering";
     selectedAction = "recover";
     selectedGoalId = queue[0]?.goalId;
+    selectedWorkItemId = anomalies.find((anomaly) => anomaly.kind === "repeated_failure")
+      ? "anomaly:repeated_failure"
+      : queue[0]
+        ? `goal:${queue[0].goalId}`
+        : undefined;
+    selectedQueueKind = anomalies.find((anomaly) => anomaly.kind === "repeated_failure")
+      ? "anomaly"
+      : queue[0]
+        ? "goal"
+        : undefined;
     rationale.push("Repeated verified failures require recovery-first arbitration.");
     expectedUtility = queue[0]?.expectedUtility ?? 0.85;
     confidence = 0.78;
@@ -310,6 +326,8 @@ export function observeOmegaExecutiveState(params: {
     selectedGoalId =
       maintenanceQueue.find((item) => item.kind === "self_repair")?.goalId ??
       maintenanceQueue[0]?.goalId;
+    selectedWorkItemId = selectedGoalId ? `maintenance:${selectedGoalId}` : undefined;
+    selectedQueueKind = selectedGoalId ? "maintenance" : undefined;
     rationale.push(
       "Recent stalled turns require plan reframing before another direct execution attempt.",
     );
@@ -322,6 +340,8 @@ export function observeOmegaExecutiveState(params: {
     mode = "active";
     selectedAction = "direct_execute";
     selectedGoalId = queue[0]?.goalId;
+    selectedWorkItemId = queue[0] ? `goal:${queue[0].goalId}` : undefined;
+    selectedQueueKind = queue[0] ? "goal" : undefined;
     rationale.push("Active goals remain unresolved and should keep focus.");
     expectedUtility = queue[0]?.expectedUtility ?? 0.72;
     confidence = 0.74;
@@ -329,6 +349,10 @@ export function observeOmegaExecutiveState(params: {
     mode = "active";
     selectedAction = "maintain";
     selectedGoalId = maintenanceQueue[0]?.goalId;
+    selectedWorkItemId = maintenanceQueue[0]
+      ? `maintenance:${maintenanceQueue[0].goalId}`
+      : undefined;
+    selectedQueueKind = maintenanceQueue[0] ? "maintenance" : undefined;
     rationale.push(
       maintenanceQueue[0]?.goalId.startsWith("agenda:")
         ? "Persistent problem agenda suggests a proactive line worth reopening."
@@ -362,6 +386,8 @@ export function observeOmegaExecutiveState(params: {
     mode = "idle";
     selectedAction = "idle";
     selectedGoalId = undefined;
+    selectedWorkItemId = undefined;
+    selectedQueueKind = undefined;
     rationale.push("Budget pressure is too high; defer direct execution work.");
     confidence = Math.min(confidence, 0.7);
   }
@@ -375,6 +401,8 @@ export function observeOmegaExecutiveState(params: {
       mode,
       selectedAction,
       selectedGoalId,
+      selectedWorkItemId,
+      selectedQueueKind,
       rationale,
       expectedUtility,
       utilityBreakdown,

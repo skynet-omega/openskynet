@@ -16,6 +16,7 @@ export type SkynetStudyWorkItem = {
 export type SkynetStudyProgram = {
   sessionKey: string;
   updatedAt: number;
+  projectName: string;
   focusKey: OmegaStudyTrack["key"];
   mode: SkynetNucleusState["mode"];
   items: SkynetStudyWorkItem[];
@@ -121,8 +122,7 @@ export function deriveSkynetStudyProgram(params: {
       title: "Cerrar el bucle empírico del estudio",
       track: metabolismTrack,
       priority: clamp01(Math.max(0.45, metabolismTrack.priority)),
-      rationale:
-        "Skynet no debe acumular teoría sin medición; cada ciclo libre debe dejar evidencia o criterio de descarte.",
+      rationale: `${params.nucleus.name} no debe acumular teoría sin medición; cada ciclo libre debe dejar evidencia o criterio de descarte.`,
       deliverable:
         "Agregar o actualizar un benchmark, test, logger o criterio de kill que mida si el estudio cambió conducta futura.",
       doneWhen:
@@ -133,6 +133,7 @@ export function deriveSkynetStudyProgram(params: {
   return {
     sessionKey: params.sessionKey,
     updatedAt: Date.now(),
+    projectName: params.nucleus.name,
     focusKey: focusTrack.key,
     mode: params.nucleus.mode,
     items,
@@ -141,7 +142,7 @@ export function deriveSkynetStudyProgram(params: {
 
 function buildStudyProgramMarkdown(program: SkynetStudyProgram): string {
   const lines = [
-    "# SKYNET Study Program",
+    `# ${program.projectName.toUpperCase()} Study Program`,
     "",
     `Actualizado: ${new Date(program.updatedAt).toISOString()}`,
     `Sesion: ${program.sessionKey}`,
@@ -187,7 +188,7 @@ export function formatSkynetStudyProgramBlock(program?: SkynetStudyProgram): str
   if (!program || program.items.length === 0) {
     return [];
   }
-  const lines = ["", "[Skynet Study Program]"];
+  const lines = ["", `[${program.projectName} Study Program]`];
   const top = program.items[0]!;
   lines.push(`Mode: ${program.mode}`);
   lines.push(`Primary work item: ${top.title} (${top.priority.toFixed(2)})`);

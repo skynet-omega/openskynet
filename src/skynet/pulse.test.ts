@@ -26,10 +26,27 @@ describe("skynet pulse", () => {
     expect(result.focusTitle).toBe("Agenda científica endógena");
     expect(result.nucleusMode).toBe("explore");
     expect(result.topWorkItem).toContain("Empujar foco activo");
+    expect(result.benchmarkSnapshotPath).toContain(
+      path.join(".openskynet", "internal-project-benchmark", "agent_openskynet_main.json"),
+    );
 
     const pulse = await fs.readFile(path.join(workspaceRoot, "memory", "SKYNET_PULSE.md"), "utf-8");
     expect(pulse).toContain("# SKYNET Pulse");
     expect(pulse).toContain("Agenda científica endógena");
+    const benchmarkSnapshot = JSON.parse(
+      await fs.readFile(
+        path.join(
+          workspaceRoot,
+          ".openskynet",
+          "internal-project-benchmark",
+          "agent_openskynet_main.json",
+        ),
+        "utf-8",
+      ),
+    ) as {
+      benchmark?: { focusKey?: string | null };
+    };
+    expect(benchmarkSnapshot.benchmark?.focusKey).toBe("endogenous_science_agenda");
     const livingState = JSON.parse(
       await fs.readFile(
         path.join(

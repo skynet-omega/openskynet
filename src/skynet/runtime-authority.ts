@@ -1,3 +1,7 @@
+import {
+  loadOpenSkynetInternalProjectProfile,
+  type OpenSkynetInternalProjectProfile,
+} from "../omega/internal-project.js";
 import { syncOpenSkynetLivingMemory, type OpenSkynetLivingState } from "../omega/living-memory.js";
 import { loadOmegaWorldModelSnapshot, type OmegaWorldModelSnapshot } from "../omega/world-model.js";
 import {
@@ -8,6 +12,7 @@ import { syncSkynetExperimentPlan, type SkynetExperimentPlan } from "./experimen
 
 export type OpenSkynetRuntimeAuthority = {
   sessionKey: string;
+  project: OpenSkynetInternalProjectProfile;
   snapshot: OmegaWorldModelSnapshot;
   recommendedAction: string;
   experimentPlan?: SkynetExperimentPlan;
@@ -43,6 +48,7 @@ export async function syncOpenSkynetRuntimeAuthority(params: {
   expectedPaths?: string[];
   watchedPaths?: string[];
 }): Promise<OpenSkynetRuntimeAuthority> {
+  const project = await loadOpenSkynetInternalProjectProfile(params.workspaceRoot);
   const snapshot = await loadOmegaWorldModelSnapshot({
     workspaceRoot: params.workspaceRoot,
     sessionKey: params.sessionKey,
@@ -90,6 +96,7 @@ export async function syncOpenSkynetRuntimeAuthority(params: {
 
   return {
     sessionKey: params.sessionKey,
+    project,
     snapshot,
     recommendedAction,
     experimentPlan,

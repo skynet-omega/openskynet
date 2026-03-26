@@ -51,6 +51,10 @@ describe("omega executive state", () => {
     expect(state?.runtime.dispatchAccounting.llmDispatches).toBe(1);
     expect(state?.runtime.dispatchAccounting.recentSelectedWorkItemIds).toHaveLength(1);
     expect(state?.runtime.dispatchAccounting.recentDispatchedWorkItemIds).toHaveLength(1);
+    expect(state?.sourceSessionAuthority?.timeline).toHaveLength(1);
+    expect(state?.sourceSessionAuthority?.kernel?.sessionKey).toBe("agent:test:main");
+    expect(state?.sourceWorldSnapshot?.sessionKey).toBe("agent:test:main");
+    expect(state?.sourceWorldSnapshot?.problemAgenda).toBeDefined();
   });
 
   it("switches to recovering when stalled operational memory and failures accumulate", async () => {

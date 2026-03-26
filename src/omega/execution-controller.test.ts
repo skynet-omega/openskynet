@@ -1,9 +1,31 @@
-import { describe, expect, it } from "vitest";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   deriveOmegaExecutiveActionStopReason,
   deriveOmegaHeartbeatCorrectiveControl,
+  syncOmegaExecutionControllerState,
   shouldDispatchOmegaHeartbeatPrompt,
 } from "./execution-controller.js";
+import { syncOmegaExecutiveObserverState } from "./executive-state.js";
+import { recordOmegaSessionOutcome } from "./session-context.js";
+import * as worldModel from "./world-model.js";
+
+const tempDirs: string[] = [];
+
+async function createWorkspaceRoot() {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "openskynet-omega-controller-"));
+  tempDirs.push(root);
+  return root;
+}
+
+afterEach(async () => {
+  vi.restoreAllMocks();
+  await Promise.all(
+    tempDirs.splice(0, tempDirs.length).map((dir) => fs.rm(dir, { recursive: true, force: true })),
+  );
+});
 
 describe("omega execution controller", () => {
   it("suppresses heartbeat prompt when autonomy is idle and dispatch is deferred", () => {
@@ -94,5 +116,77 @@ describe("omega execution controller", () => {
         status: "ok",
       }),
     ).toBe("structured_idle");
+  });
+
+  it("reuses the persisted executive world snapshot when no task-specific context is requested", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    await recordOmegaSessionOutcome({
+      workspaceRoot,
+      sessionKey: "agent:test:main",
+      task: "repair src/app.ts",
+      validation: {
+        expectsJson: false,
+        expectedKeys: [],
+        expectedPaths: ["src/app.ts"],
+      },
+      outcome: {
+        status: "ok",
+        observedChangedFiles: ["src/app.ts"],
+        writeOk: true,
+      },
+    });
+
+    const executiveState = await syncOmegaExecutiveObserverState({
+      workspaceRoot,
+      sessionKey: "agent:test:main",
+    });
+    const snapshotSpy = vi.spyOn(worldModel, "loadOmegaWorldModelSnapshot");
+
+    const state = await syncOmegaExecutionControllerState({
+      workspaceRoot,
+      sessionKey: "agent:test:main",
+      skipExecutiveSync: true,
+      includeWorldSnapshot: true,
+    });
+
+    expect(snapshotSpy).not.toHaveBeenCalled();
+    expect(state.worldSnapshot).toEqual(executiveState.sourceWorldSnapshot);
+  });
+
+  it("reloads the world snapshot when validation needs task-specific context", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    await recordOmegaSessionOutcome({
+      workspaceRoot,
+      sessionKey: "agent:test:main",
+      task: "repair src/app.ts",
+      validation: {
+        expectsJson: false,
+        expectedKeys: [],
+        expectedPaths: ["src/app.ts"],
+      },
+      outcome: {
+        status: "ok",
+        observedChangedFiles: ["src/app.ts"],
+        writeOk: true,
+      },
+    });
+
+    await syncOmegaExecutiveObserverState({
+      workspaceRoot,
+      sessionKey: "agent:test:main",
+    });
+    const snapshotSpy = vi.spyOn(worldModel, "loadOmegaWorldModelSnapshot");
+
+    const state = await syncOmegaExecutionControllerState({
+      workspaceRoot,
+      sessionKey: "agent:test:main",
+      skipExecutiveSync: true,
+      includeWorldSnapshot: true,
+      task: "validate src/app.ts",
+      expectedPaths: ["src/app.ts"],
+    });
+
+    expect(snapshotSpy).toHaveBeenCalledTimes(1);
+    expect(state.worldSnapshot?.sessionKey).toBe("agent:test:main");
   });
 });

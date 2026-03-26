@@ -7,6 +7,7 @@ import type { SkynetStudyProgram } from "./study-program.js";
 export type SkynetExperimentPlan = {
   sessionKey: string;
   updatedAt: number;
+  projectName: string;
   focusKey: string;
   mode: SkynetNucleusState["mode"];
   hypothesis: string;
@@ -27,15 +28,16 @@ function resolveExperimentStatePath(params: { workspaceRoot: string; sessionKey:
 }
 
 function deriveHypothesis(params: {
+  projectName: string;
   focusKey: string;
   topWorkItem?: string;
   continuity?: SkynetContinuityState;
 }): string {
   if (params.focusKey === "endogenous_science_agenda") {
-    return "A persistent study queue is not enough; Skynet needs a concrete experimental artifact per cycle to preserve initiative across awakenings.";
+    return `A persistent study queue is not enough; ${params.projectName} needs a concrete experimental artifact per cycle to preserve initiative across awakenings.`;
   }
   if (params.focusKey === "decision_bifurcation") {
-    return "Decision quality will improve if Skynet materializes a reframe artifact instead of retaining only a textual recommendation.";
+    return `Decision quality will improve if ${params.projectName} materializes a reframe artifact instead of retaining only a textual recommendation.`;
   }
   if ((params.continuity?.continuityScore ?? 0) < 0.5) {
     return "Low continuity indicates the current cycle is not preserving enough structure to sustain autonomous work.";
@@ -44,12 +46,13 @@ function deriveHypothesis(params: {
 }
 
 function deriveDeliverable(params: {
+  projectName: string;
   focusKey: string;
   topWorkItem?: string;
   mode: SkynetNucleusState["mode"];
 }): string {
   if (params.focusKey === "endogenous_science_agenda") {
-    return "Create or update one executable experiment/module that moves Skynet from planning into measurable autonomous study work.";
+    return `Create or update one executable experiment/module that moves ${params.projectName} from planning into measurable autonomous study work.`;
   }
   if (params.mode === "reframe") {
     return "Produce one alternate framing artifact that changes the next cycle's target or decision route.";
@@ -84,7 +87,7 @@ function deriveBenchmarkHook(params: { focusKey: string }): string {
 
 function buildExperimentMarkdown(plan: SkynetExperimentPlan): string {
   return [
-    "# SKYNET Active Experiment",
+    `# ${plan.projectName.toUpperCase()} Active Experiment`,
     "",
     `Updated: ${new Date(plan.updatedAt).toISOString()}`,
     `Session: ${plan.sessionKey}`,
@@ -124,14 +127,17 @@ export function deriveSkynetExperimentPlan(params: {
   return {
     sessionKey: params.sessionKey,
     updatedAt: Date.now(),
+    projectName: params.nucleus.name,
     focusKey: params.program.focusKey,
     mode: params.nucleus.mode,
     hypothesis: deriveHypothesis({
+      projectName: params.nucleus.name,
       focusKey: params.program.focusKey,
       topWorkItem: topWorkItem?.title,
       continuity: params.continuity,
     }),
     deliverable: deriveDeliverable({
+      projectName: params.nucleus.name,
       focusKey: params.program.focusKey,
       topWorkItem: topWorkItem?.title,
       mode: params.nucleus.mode,
@@ -177,7 +183,7 @@ export function formatSkynetExperimentPlanBlock(plan?: SkynetExperimentPlan): st
   }
   return [
     "",
-    "[Skynet Active Experiment]",
+    `[${plan.projectName} Active Experiment]`,
     `Focus: ${plan.focusKey} | mode ${plan.mode}`,
     `Hypothesis: ${plan.hypothesis}`,
     `Deliverable: ${plan.deliverable}`,

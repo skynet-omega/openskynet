@@ -78,6 +78,7 @@ describe("deriveOmegaExecutiveDispatchPlan", () => {
     expect(plan.queueKind).toBe("anomaly");
     expect(plan.nextWakeDelayMs).toBe(1000);
     expect(plan.queueDepths.goals).toBe(1);
+    expect(observer.decision.selectedWorkItemId).toBe("anomaly:repeated_failure");
     expect(plan.selectedWorkItemId).toBe("anomaly:repeated_failure");
     expect(plan.dispatchedWorkItemId).toBe("anomaly:repeated_failure");
     expect(plan.expectedUtility).toBeGreaterThan(0);
@@ -99,6 +100,7 @@ describe("deriveOmegaExecutiveDispatchPlan", () => {
     expect(plan.shouldDispatchLlmTurn).toBe(false);
     expect(plan.selectedAction).toBe("maintain");
     expect(plan.queueKind).toBe("maintenance");
+    expect(observer.decision.selectedWorkItemId).toBe("maintenance:memory:revalidate");
     expect(plan.deferReason).toBe("maintenance_only");
   });
 

@@ -70,6 +70,8 @@ describe("observeOmegaExecutiveState", () => {
     expect(result.mode).toBe("recovering");
     expect(result.decision.selectedAction).toBe("recover");
     expect(result.decision.selectedGoalId).toBe("goal-1");
+    expect(result.decision.selectedWorkItemId).toBe("anomaly:repeated_failure");
+    expect(result.decision.selectedQueueKind).toBe("anomaly");
   });
 
   it("promotes a proactive failure probe when repeated failures hit a causal limit", () => {
@@ -131,6 +133,10 @@ describe("observeOmegaExecutiveState", () => {
     expect(result.mode).toBe("active");
     expect(result.decision.selectedAction).toBe("maintain");
     expect(result.decision.selectedGoalId).toBe("agenda:failure:target_not_touched");
+    expect(result.decision.selectedWorkItemId).toBe(
+      "maintenance:agenda:failure:target_not_touched",
+    );
+    expect(result.decision.selectedQueueKind).toBe("maintenance");
     expect(result.decision.rationale.join(" ")).toContain("probe experiment");
   });
 
@@ -210,6 +216,8 @@ describe("observeOmegaExecutiveState", () => {
     expect(result.mode).toBe("active");
     expect(result.decision.selectedAction).toBe("maintain");
     expect(result.decision.selectedGoalId).toBe("self_repair:stalled_progress");
+    expect(result.decision.selectedWorkItemId).toBe("maintenance:self_repair:stalled_progress");
+    expect(result.decision.selectedQueueKind).toBe("maintenance");
     expect(result.maintenanceQueue[0]?.kind).toBe("self_repair");
     expect(result.decision.rationale.join(" ")).toContain("stalled");
   });

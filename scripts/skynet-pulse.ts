@@ -25,6 +25,9 @@ async function main() {
     console.log(`Research loop: ${pulse.researchLoop.kind}`);
   }
   console.log(`Pulse file: ${pulse.filePath}`);
+  if (pulse.benchmarkSnapshotPath) {
+    console.log(`Benchmark snapshot: ${pulse.benchmarkSnapshotPath}`);
+  }
 }
 
 main().catch(console.error);

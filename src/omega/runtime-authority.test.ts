@@ -62,4 +62,19 @@ describe("omega runtime authority", () => {
     expect(authority.livingState?.selfModel.internalProject.name).toBe("Protein Lab");
     expect(authority.worldSnapshot?.problemAgenda).toBeDefined();
   });
+
+  it("derives the world snapshot through decision context when task-specific validation is present", async () => {
+    const authority = await loadOpenSkynetOmegaRuntimeAuthority({
+      workspaceRoot,
+      sessionKey,
+      task: "Create a protein benchmark artifact",
+      expectedPaths: ["src/protein-lab.ts"],
+      watchedPaths: ["src/protein-lab.ts", "src/other.ts"],
+    });
+
+    expect(authority.decisionContext.controllerState?.worldSnapshot).toBeDefined();
+    expect(authority.worldSnapshot).toEqual(
+      authority.decisionContext.controllerState?.worldSnapshot,
+    );
+  });
 });

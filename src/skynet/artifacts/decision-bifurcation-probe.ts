@@ -13,6 +13,7 @@ export type SkynetDecisionBifurcationVerdict = "hold" | "branch" | "commit";
 export type SkynetDecisionBifurcationProbeResult = {
   sessionKey: string;
   updatedAt: number;
+  projectName: string;
   focusKey?: string;
   bifurcationPressure: number;
   verdict: SkynetDecisionBifurcationVerdict;
@@ -79,6 +80,7 @@ export function deriveSkynetDecisionBifurcationProbe(params: {
   return {
     sessionKey: params.sessionKey,
     updatedAt: Date.now(),
+    projectName: params.nucleus?.name ?? "Skynet",
     focusKey: params.program?.focusKey,
     bifurcationPressure: pressure,
     verdict,
@@ -96,7 +98,7 @@ export function deriveSkynetDecisionBifurcationProbe(params: {
 
 function buildProbeMarkdown(result: SkynetDecisionBifurcationProbeResult): string {
   return [
-    "# SKYNET Decision Bifurcation Probe",
+    `# ${result.projectName.toUpperCase()} Decision Bifurcation Probe`,
     "",
     `Updated: ${new Date(result.updatedAt).toISOString()}`,
     `Session: ${result.sessionKey}`,
@@ -134,6 +136,7 @@ export async function runSkynetDecisionBifurcationProbe(params: {
     program: snapshot.skynetStudyProgram,
     stalledTurns,
   });
+  result.projectName = runtimeAuthority.project.name;
 
   const jsonPath = resolveProbeJsonPath(params);
   const markdownPath = resolveProbeMarkdownPath(params.workspaceRoot);
@@ -151,7 +154,7 @@ async function main() {
     workspaceRoot,
     sessionKey,
   });
-  console.log("--- SKYNET Artifact: Decision Bifurcation Probe ---");
+  console.log(`--- ${result.projectName} Artifact: Decision Bifurcation Probe ---`);
   console.log(`Bifurcation pressure: ${result.bifurcationPressure.toFixed(2)}`);
   console.log(`Verdict: ${result.verdict}`);
   console.log(`Stalled turns: ${result.stalledTurns}`);

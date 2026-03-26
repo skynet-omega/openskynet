@@ -33,6 +33,7 @@ OpenClaw sigue siendo la plataforma base y aporta mucho del plumbing esencial. O
 - **Memoria viva estructurada**: el estado presente ya no debería salir solo de diarios planos. El runtime vive en `.openskynet/living-memory/` y stores estructurados relacionados.
 - **Soberanía de runtime**: `heartbeat`, `omega_work` y la ejecución autónoma están convergiendo hacia una autoridad común en vez de reconstruir contexto por separado.
 - **Énfasis en decisión y recuperación**: Omega modela de forma explícita recuperación, preferencias de routing, world state y presión de mantenimiento.
+- **Motor de Bifurcación y Cosecha de Investigación**: Skynet emplea ahora rutas paralelas de decisión (bifurcación) y recolección autónoma de artefactos (cosecha) para asegurar la continuidad de la investigación incluso ante fallos de modelos.
 - **Proyecto interno benchmark**: el sistema puede trabajar en un proyecto configurable durante ciclos libres, y ese proyecto funciona además como benchmark empírico de autonomía.
 - **Postura empírica**: la arquitectura intenta mantenerse atada a tests, snapshots de estado, logs y comportamiento medible, no solo a narrativa.
 

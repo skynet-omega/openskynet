@@ -33,6 +33,7 @@ OpenClaw is the parent platform and still provides essential plumbing. OpenSkyNe
 - **Structured living memory**: present state is no longer supposed to come from plain text diaries alone. Runtime state lives in `.openskynet/living-memory/` and related structured stores.
 - **Runtime sovereignty**: `heartbeat`, `omega_work`, and autonomous execution are moving toward a shared runtime authority instead of rebuilding context independently.
 - **Decision + recovery emphasis**: Omega explicitly models recovery paths, routing preferences, world state, and maintenance pressure.
+- **Bifurcation Engine + Research Harvesting**: Skynet now employs parallel decision paths (bifurcation) and autonomous artifact collection (harvesting) to ensure research continuity even across model failures.
 - **Internal benchmark workload**: the system can work on a configurable internal project during free cycles, and that workload doubles as an empirical benchmark of autonomy quality.
 - **Empirical posture**: the repo tries to keep architecture tied to tests, state snapshots, logs, and benchmarkable behavior rather than pure narrative.
 

@@ -13,6 +13,7 @@ export type SkynetAutonomyPulseVerdict = "intensify" | "maintain" | "stabilize" 
 export type SkynetAutonomyPulse01Result = {
   sessionKey: string;
   updatedAt: number;
+  projectName: string;
   initiativePressure: number;
   verdict: SkynetAutonomyPulseVerdict;
   focusKey?: string;
@@ -117,6 +118,7 @@ export function deriveSkynetAutonomyPulse01(params: {
   return {
     sessionKey: params.sessionKey,
     updatedAt: Date.now(),
+    projectName: params.nucleus?.name ?? "Skynet",
     initiativePressure,
     verdict,
     focusKey: params.program?.focusKey,
@@ -128,7 +130,7 @@ export function deriveSkynetAutonomyPulse01(params: {
 
 function buildResultMarkdown(result: SkynetAutonomyPulse01Result): string {
   return [
-    "# SKYNET Experiment - Autonomy Pulse 01",
+    `# ${result.projectName.toUpperCase()} Experiment - Autonomy Pulse 01`,
     "",
     `Updated: ${new Date(result.updatedAt).toISOString()}`,
     `Session: ${result.sessionKey}`,
@@ -165,6 +167,7 @@ export async function runSkynetAutonomyPulse01(params: {
     experiment: runtimeAuthority.experimentPlan,
     program: snapshot.skynetStudyProgram,
   });
+  result.projectName = runtimeAuthority.project.name;
 
   const jsonPath = resolveResultJsonPath(params);
   const markdownPath = resolveResultMarkdownPath(params.workspaceRoot);
@@ -182,7 +185,7 @@ async function main() {
     workspaceRoot,
     sessionKey,
   });
-  console.log("--- SKYNET Experiment: Autonomy Pulse 01 ---");
+  console.log(`--- ${result.projectName} Experiment: Autonomy Pulse 01 ---`);
   console.log(`Initiative pressure: ${result.initiativePressure.toFixed(2)}`);
   console.log(`Verdict: ${result.verdict}`);
   console.log(`Top work item: ${result.topWorkItem ?? "none"}`);

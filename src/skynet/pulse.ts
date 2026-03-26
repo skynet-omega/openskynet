@@ -5,6 +5,7 @@ import {
   runResearchLoop,
   type ResearchLoopResult,
 } from "../omega/research-loop.js";
+import { writeOpenSkynetBenchmarkCycleSnapshot } from "./benchmark-cycle.js";
 import { formatSkynetCommitmentBlock, type SkynetCommitmentDecision } from "./commitment-engine.js";
 import { formatSkynetExperimentPlanBlock, type SkynetExperimentPlan } from "./experiment-cycle.js";
 import {
@@ -15,6 +16,7 @@ import {
 export type SkynetPulseResult = {
   sessionKey: string;
   updatedAt: number;
+  projectName: string;
   focusTitle?: string;
   nucleusMode?: string;
   continuityScore?: number;
@@ -24,6 +26,7 @@ export type SkynetPulseResult = {
   experimentPlan?: SkynetExperimentPlan;
   commitment?: SkynetCommitmentDecision;
   filePath: string;
+  benchmarkSnapshotPath?: string;
 };
 
 function resolveSkynetPulseFile(workspaceRoot: string): string {
@@ -56,7 +59,7 @@ function formatResearchLoop(result?: ResearchLoopResult): string[] {
 
 function buildPulseMarkdown(result: SkynetPulseResult): string {
   return [
-    "# SKYNET Pulse",
+    `# ${result.projectName.toUpperCase()} Pulse`,
     "",
     `Updated: ${new Date(result.updatedAt).toISOString()}`,
     `Session: ${result.sessionKey}`,
@@ -86,6 +89,10 @@ export async function runSkynetPulse(params: {
     workspaceRoot: params.workspaceRoot,
     sessionKey: params.sessionKey,
   });
+  const benchmarkSnapshot = await writeOpenSkynetBenchmarkCycleSnapshot({
+    workspaceRoot: params.workspaceRoot,
+    runtimeAuthority,
+  });
   const { snapshot } = runtimeAuthority;
 
   let researchLoop: ResearchLoopResult | undefined;
@@ -102,6 +109,7 @@ export async function runSkynetPulse(params: {
   const result: SkynetPulseResult = {
     sessionKey: params.sessionKey,
     updatedAt: Date.now(),
+    projectName: runtimeAuthority.project.name,
     focusTitle: snapshot.studySupervisor?.focus.title,
     nucleusMode: snapshot.skynetNucleus?.mode,
     continuityScore: snapshot.skynetContinuity?.continuityScore,
@@ -116,6 +124,7 @@ export async function runSkynetPulse(params: {
     experimentPlan: runtimeAuthority.experimentPlan,
     commitment: runtimeAuthority.commitment,
     filePath: resolveSkynetPulseFile(params.workspaceRoot),
+    benchmarkSnapshotPath: benchmarkSnapshot.runtime.benchmarkSnapshotFile,
   };
 
   await fs.mkdir(path.dirname(result.filePath), { recursive: true });

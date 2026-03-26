@@ -18,6 +18,7 @@ describe("skynet nucleus", () => {
   it("derives explore mode for endogenous study focus without recent stalls", () => {
     const state = deriveSkynetNucleusState({
       sessionKey: "agent:openskynet:main",
+      projectName: "Protein Lab",
       studyFocus: {
         key: "endogenous_science_agenda",
         title: "Agenda científica endógena",
@@ -32,9 +33,9 @@ describe("skynet nucleus", () => {
       learnedConstraints: [],
     });
 
-    expect(state.name).toBe("Skynet");
+    expect(state.name).toBe("Protein Lab");
     expect(state.mode).toBe("explore");
-    expect(state.executive.activeQuestion).toContain("study line");
+    expect(state.executive.activeQuestion).toContain("Protein Lab");
   });
 
   it("switches to reframe mode under stalled decision pressure and persists the state", async () => {

@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { writeJsonAtomic } from "../infra/json-files.js";
 import type { OmegaHeartbeatTurnResult } from "./heartbeat.js";
 import type { OmegaHeartbeatTurnPolicy } from "./policy-engine.js";
 import { withOmegaSessionLock } from "./state-lock.js";
@@ -100,19 +101,27 @@ function parseEntry(value: unknown): OmegaOperationalTurnMemoryEntry | undefined
   };
 }
 
+function parseOperationalStore(raw: string): OmegaOperationalMemoryStore {
+  const parsed = JSON.parse(raw) as Partial<OmegaOperationalMemoryStore>;
+  return {
+    sessionKey: typeof parsed.sessionKey === "string" ? parsed.sessionKey : "main",
+    revision: typeof parsed.revision === "number" ? parsed.revision : 0,
+    updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : 0,
+    entries: Array.isArray(parsed.entries)
+      ? parsed.entries
+          .map(parseEntry)
+          .filter((value): value is OmegaOperationalTurnMemoryEntry => value !== undefined)
+      : [],
+  };
+}
+
 export async function loadOmegaOperationalMemory(params: {
   workspaceRoot: string;
   sessionKey: string;
 }): Promise<OmegaOperationalTurnMemoryEntry[]> {
   try {
     const raw = await fs.readFile(resolveOmegaOperationalMemoryFile(params), "utf-8");
-    const parsed = JSON.parse(raw) as Partial<OmegaOperationalMemoryStore>;
-    if (!Array.isArray(parsed.entries)) {
-      return [];
-    }
-    return parsed.entries
-      .map(parseEntry)
-      .filter((value): value is OmegaOperationalTurnMemoryEntry => value !== undefined);
+    return parseOperationalStore(raw).entries;
   } catch {
     return [];
   }
@@ -190,12 +199,13 @@ export async function recordOmegaOperationalTurnMemoryBatch(params: {
 }): Promise<void> {
   if (params.turns.length === 0) return;
   await withOmegaSessionLock(params, async () => {
-    const existing = await loadOmegaOperationalMemory(params);
+    let existing: OmegaOperationalTurnMemoryEntry[] = [];
     let currentRevision = 0;
     try {
       const raw = await fs.readFile(resolveOmegaOperationalMemoryFile(params), "utf-8");
-      const parsed = JSON.parse(raw) as Partial<OmegaOperationalMemoryStore>;
-      currentRevision = typeof parsed.revision === "number" ? parsed.revision : 0;
+      const parsed = parseOperationalStore(raw);
+      existing = parsed.entries;
+      currentRevision = parsed.revision ?? 0;
     } catch {}
     const now = Date.now();
     const newEntries = params.turns.map(({ turn, turnPolicy }) => ({
@@ -218,19 +228,15 @@ export async function recordOmegaOperationalTurnMemoryBatch(params: {
     await fs
       .mkdir(resolveOmegaOperationalMemoryDir(params.workspaceRoot), { recursive: true })
       .catch(() => {});
-    await fs.writeFile(
+    await writeJsonAtomic(
       resolveOmegaOperationalMemoryFile(params),
-      JSON.stringify(
-        {
-          sessionKey: params.sessionKey,
-          revision: currentRevision + 1,
-          updatedAt: now,
-          entries: nextEntries,
-        },
-        null,
-        2,
-      ),
-      "utf-8",
+      {
+        sessionKey: params.sessionKey,
+        revision: currentRevision + 1,
+        updatedAt: now,
+        entries: nextEntries,
+      },
+      { trailingNewline: true },
     );
   });
 }

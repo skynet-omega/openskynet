@@ -21,6 +21,7 @@ import {
 } from "./durable-memory.js";
 import { loadOmegaEmpiricalMetrics } from "./empirical-metrics.js";
 import type { OmegaSessionSelfState } from "./event-model.js";
+import { loadOpenSkynetInternalProjectProfile } from "./internal-project.js";
 import {
   loadOmegaOperationalMemory,
   type OmegaOperationalTurnMemoryEntry,
@@ -32,6 +33,7 @@ import {
 } from "./problem-agenda.js";
 import type { OmegaSelfTimeKernelState } from "./self-time-kernel.js";
 import { loadOmegaSessionAuthority } from "./session-context.js";
+import type { OmegaSessionAuthority } from "./session-context.js";
 import {
   formatOmegaStudySupervisorBlock,
   syncOmegaStudySupervisor,
@@ -62,6 +64,7 @@ export type OmegaLocalityExecutionGuard = {
 
 export type OmegaWorldModelSnapshot = {
   sessionKey: string;
+  sessionAuthority: OmegaSessionAuthority;
   kernel?: OmegaSelfTimeKernelState;
   selfState?: OmegaSessionSelfState;
   activeRecoveryPreference?: OmegaRecoveryPreference;
@@ -347,9 +350,10 @@ export async function loadOmegaWorldModelSnapshot(params: {
   expectedPaths?: string[];
   watchedPaths?: string[];
 }): Promise<OmegaWorldModelSnapshot> {
-  const [sessionAuthority, empiricalMetrics] = await Promise.all([
+  const [sessionAuthority, empiricalMetrics, project] = await Promise.all([
     loadOmegaSessionAuthority(params),
     loadOmegaEmpiricalMetrics({ workspaceRoot: params.workspaceRoot }),
+    loadOpenSkynetInternalProjectProfile(params.workspaceRoot),
   ]);
   const allDurableMemory = await loadOmegaDurableMemory(params);
   const relevantMemories =
@@ -423,6 +427,7 @@ export async function loadOmegaWorldModelSnapshot(params: {
     ? await syncSkynetNucleus({
         workspaceRoot: params.workspaceRoot,
         sessionKey: params.sessionKey,
+        projectName: project.name,
         studyFocus: studySupervisor.focus,
         operationalSignals,
         learnedConstraints: enrichedSelfState?.learnedConstraints ?? [],
@@ -449,6 +454,7 @@ export async function loadOmegaWorldModelSnapshot(params: {
 
   return {
     sessionKey: params.sessionKey,
+    sessionAuthority,
     kernel: sessionAuthority.kernel,
     selfState: enrichedSelfState,
     activeRecoveryPreference: deriveActiveRecoveryPreference({

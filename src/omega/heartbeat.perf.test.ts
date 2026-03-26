@@ -14,11 +14,15 @@ test("Heartbeat Stress Test", async () => {
 
   let currentIteration = 0;
   const iterationsCount = 50;
+  const stableKernelUpdatedAt = Date.now();
 
   const mockDeps = {
     ...createDefaultHeartbeatDeps(),
     buildPrompt: async () => "Simulated prompt",
-    loadRuntimeSnapshot: async () => ({ timeline: [], kernel: { updatedAt: Date.now() } }),
+    loadRuntimeSnapshot: async () => ({
+      timeline: [],
+      kernel: { updatedAt: stableKernelUpdatedAt },
+    }),
     sendAgentTurn: async () => {
       await new Promise((r) => setTimeout(r, 10));
     },
@@ -40,7 +44,9 @@ test("Heartbeat Stress Test", async () => {
 
   console.log("\n📊 Results:");
   console.log(`Total duration: ${totalDuration.toFixed(2)}ms`);
-  console.log(`Average overhead per iteration: ${(totalDuration / currentIteration).toFixed(2)}ms`);
+  console.log(
+    `Average overhead per iteration: ${(totalDuration / Math.max(currentIteration, 1)).toFixed(2)}ms`,
+  );
   console.log(`Metrics file size: ${stats.size} bytes`);
 
   expect(totalDuration).toBeLessThan(10000); // 50 iterations * 10ms network + < 5000ms overhead

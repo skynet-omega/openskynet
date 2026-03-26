@@ -1,12 +1,12 @@
 # SKYNET Entropy Report
 
-Last check: 2026-03-26T14:35:30.113Z
-Entropy Score: **0.83**
+Last check: 2026-03-26T15:42:58.492Z
+Entropy Score: **0.79**
 Verdict: **stabilize**
 
 ## Signals
 
-- Uncommitted files: 50
+- Uncommitted files: 23
 - TODOs in source: 33
 
 ## Insights

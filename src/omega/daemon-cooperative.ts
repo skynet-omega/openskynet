@@ -12,6 +12,7 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
+import { writeJsonAtomic } from "../infra/json-files.js";
 import {
   OMEGA_DEFAULT_AUTONOMOUS_INTERVAL_MINUTES,
   OMEGA_INTERACTION_LOCK_REFRESH_MS,
@@ -47,7 +48,7 @@ async function writeInteractionLock(workspaceRoot: string): Promise<void> {
     pid: process.pid,
     refreshedAt: Date.now(),
   };
-  await fs.writeFile(lockFilePath, JSON.stringify(payload, null, 2), "utf-8");
+  await writeJsonAtomic(lockFilePath, payload, { trailingNewline: true });
 }
 
 export async function startAutonomousDaemon(params: DaemonParams, deps: DaemonDeps = {}) {

@@ -6,6 +6,7 @@ import type { SkynetStudyProgram } from "./study-program.js";
 export type SkynetContinuityState = {
   sessionKey: string;
   updatedAt: number;
+  projectName: string;
   cycleCount: number;
   currentFocusKey: SkynetStudyProgram["focusKey"];
   currentMode: SkynetNucleusState["mode"];
@@ -81,6 +82,7 @@ export function deriveSkynetContinuityState(params: {
   return {
     sessionKey: params.sessionKey,
     updatedAt: Date.now(),
+    projectName: params.nucleus.name,
     cycleCount,
     currentFocusKey: params.program.focusKey,
     currentMode: params.nucleus.mode,
@@ -93,7 +95,7 @@ export function deriveSkynetContinuityState(params: {
 
 function buildContinuityMarkdown(state: SkynetContinuityState): string {
   return [
-    "# SKYNET Continuity",
+    `# ${state.projectName.toUpperCase()} Continuity`,
     "",
     `Actualizado: ${new Date(state.updatedAt).toISOString()}`,
     `Sesion: ${state.sessionKey}`,
@@ -137,7 +139,7 @@ export function formatSkynetContinuityBlock(state?: SkynetContinuityState): stri
   }
   return [
     "",
-    "[Skynet Continuity]",
+    `[${state.projectName} Continuity]`,
     `Focus: ${state.currentFocusKey} (streak ${state.focusStreak})`,
     `Mode: ${state.currentMode} | mode shifts ${state.modeShiftCount}`,
     `Continuity score: ${state.continuityScore.toFixed(2)}`,

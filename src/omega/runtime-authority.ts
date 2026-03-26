@@ -8,7 +8,7 @@ import {
   loadOpenSkynetLivingState,
   type OpenSkynetLivingState,
 } from "./living-memory.js";
-import { loadOmegaWorldModelSnapshot, type OmegaWorldModelSnapshot } from "./world-model.js";
+import type { OmegaWorldModelSnapshot } from "./world-model.js";
 
 export type OpenSkynetOmegaRuntimeAuthority = {
   workspaceRoot: string;
@@ -46,25 +46,13 @@ export async function loadOpenSkynetOmegaRuntimeAuthority(params: {
     }),
   ]);
 
-  const worldSnapshot =
-    decisionContext.controllerState?.worldSnapshot ??
-    (params.includeWorldSnapshot || params.task || (params.expectedPaths?.length ?? 0) > 0
-      ? await loadOmegaWorldModelSnapshot({
-          workspaceRoot: params.workspaceRoot,
-          sessionKey: params.sessionKey,
-          task: params.task,
-          expectedPaths: params.expectedPaths,
-          watchedPaths: params.watchedPaths,
-        }).catch(() => undefined)
-      : undefined);
-
   return {
     workspaceRoot: params.workspaceRoot,
     sessionKey: params.sessionKey,
     project,
     memoryCandidates,
     decisionContext,
-    worldSnapshot,
+    worldSnapshot: decisionContext.controllerState?.worldSnapshot,
     livingState,
   };
 }

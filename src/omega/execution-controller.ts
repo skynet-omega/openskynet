@@ -79,6 +79,18 @@ function isUrgentMaintenanceWorkItem(item?: OmegaExecutiveScheduledItem): boolea
   );
 }
 
+function shouldReloadWorldSnapshotForTaskContext(params: {
+  task?: string;
+  expectedPaths?: string[];
+  watchedPaths?: string[];
+}): boolean {
+  return Boolean(
+    params.task?.trim() ||
+    (params.expectedPaths?.length ?? 0) > 0 ||
+    (params.watchedPaths?.length ?? 0) > 0,
+  );
+}
+
 export async function syncOmegaExecutionControllerState(params: {
   workspaceRoot: string;
   sessionKey: string;
@@ -109,19 +121,27 @@ export async function syncOmegaExecutionControllerState(params: {
   const selectedWorkItem = dispatchPlan.scheduledItems.find(
     (item) => item.id === dispatchPlan.selectedWorkItemId,
   );
+  const mustReloadForTaskContext = shouldReloadWorldSnapshotForTaskContext({
+    task: params.task,
+    expectedPaths: params.expectedPaths,
+    watchedPaths: params.watchedPaths,
+  });
   const hasUrgentMaintenance = isUrgentMaintenanceWorkItem(selectedWorkItem);
   const shouldLoadWorldSnapshot =
+    mustReloadForTaskContext ||
     params.includeWorldSnapshot === true ||
     (params.includeWorldSnapshot === "urgent_maintenance" && hasUrgentMaintenance);
-  const worldSnapshot = shouldLoadWorldSnapshot
-    ? await loadOmegaWorldModelSnapshot({
-        workspaceRoot: params.workspaceRoot,
-        sessionKey: params.sessionKey,
-        task: params.task,
-        expectedPaths: params.expectedPaths,
-        watchedPaths: params.watchedPaths,
-      }).catch(() => undefined)
-    : undefined;
+  const worldSnapshot = !shouldLoadWorldSnapshot
+    ? undefined
+    : !mustReloadForTaskContext && executiveState.sourceWorldSnapshot
+      ? executiveState.sourceWorldSnapshot
+      : await loadOmegaWorldModelSnapshot({
+          workspaceRoot: params.workspaceRoot,
+          sessionKey: params.sessionKey,
+          task: params.task,
+          expectedPaths: params.expectedPaths,
+          watchedPaths: params.watchedPaths,
+        }).catch(() => undefined);
 
   return {
     executiveState,

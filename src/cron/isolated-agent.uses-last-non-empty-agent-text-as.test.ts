@@ -190,6 +190,49 @@ describe("runCronIsolatedAgentTurn", () => {
     });
   });
 
+  it("falls back to the benchmark cycle result file when the run returns no final text", async () => {
+    await withTempHome(async (home) => {
+      vi.mocked(runEmbeddedPiAgent).mockImplementationOnce(async (opts) => {
+        const benchmarkDir = path.join(
+          opts.workspaceDir,
+          ".openskynet",
+          "internal-project-benchmark",
+        );
+        await fs.mkdir(benchmarkDir, { recursive: true });
+        await fs.writeFile(
+          path.join(benchmarkDir, "agent_main_cron_job-1-last-cycle.json"),
+          JSON.stringify(
+            {
+              resultKind: "improvement",
+              summary: "Cycle persisted a measurable benchmark artifact.",
+              next: "Validate carry-over in the next run.",
+            },
+            null,
+            2,
+          ),
+          "utf-8",
+        );
+        return {
+          payloads: [],
+          meta: {
+            durationMs: 5,
+            agentMeta: { sessionId: "s", provider: "p", model: "m" },
+          },
+        };
+      });
+
+      const { res } = await runCronTurn(home, {
+        jobPayload: DEFAULT_AGENT_TURN_PAYLOAD,
+        mockTexts: null,
+      });
+
+      expect(res.status).toBe("ok");
+      expect(res.summary).toContain("RESULT: improvement");
+      expect(res.summary).toContain("Cycle persisted a measurable benchmark artifact.");
+      expect(res.outputText).toContain("NEXT: Validate carry-over in the next run.");
+    });
+  });
+
   it("returns error when embedded run payload is marked as error", async () => {
     await withTempHome(async (home) => {
       mockEmbeddedPayloads([
@@ -294,7 +337,10 @@ describe("runCronIsolatedAgentTurn", () => {
         path.join(home, ".openclaw", "agents", "{agentId}", "sessions", "sessions.json"),
         {
           agents: {
-            defaults: { workspace: path.join(home, "default-workspace") },
+            defaults: {
+              workspace: path.join(home, "default-workspace"),
+              model: "anthropic/claude-opus-4-5",
+            },
             list: [
               { id: "main", default: true },
               { id: "ops", workspace: opsWorkspace },

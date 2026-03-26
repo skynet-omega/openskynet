@@ -17,14 +17,17 @@ import {
   type OmegaMemoryOrchestratorSummary,
 } from "./memory-orchestrator.js";
 import { loadOmegaOperationalMemory } from "./operational-memory.js";
+import type { OmegaSessionAuthority } from "./session-context.js";
 import { withOmegaSessionLock } from "./state-lock.js";
-import { loadOmegaWorldModelSnapshot } from "./world-model.js";
+import { loadOmegaWorldModelSnapshot, type OmegaWorldModelSnapshot } from "./world-model.js";
 
 export type OmegaExecutiveState = {
   sessionKey: string;
   revision?: number;
   updatedAt: number;
   syncFingerprint?: string;
+  sourceSessionAuthority?: OmegaSessionAuthority;
+  sourceWorldSnapshot?: OmegaWorldModelSnapshot;
   observer: OmegaExecutiveObserverSnapshot;
   memory: OmegaMemoryOrchestratorSummary;
   runtime: {
@@ -152,6 +155,13 @@ export async function syncOmegaExecutiveObserverState(
       revision: (existing?.revision ?? 0) + 1,
       updatedAt: now,
       syncFingerprint,
+      sourceSessionAuthority: {
+        timeline: snapshot.sessionAuthority.timeline,
+        state: snapshot.sessionAuthority.state,
+        kernel: snapshot.sessionAuthority.kernel,
+        transactions: snapshot.sessionAuthority.transactions,
+      },
+      sourceWorldSnapshot: snapshot,
       observer,
       memory,
       runtime: {

@@ -12,7 +12,7 @@ import {
 } from "./operational-memory.js";
 import { deriveOmegaPolicySnapshot, type OmegaPolicySnapshot } from "./policy-engine.js";
 import type { OmegaSelfTimeKernelState } from "./self-time-kernel.js";
-import { loadOmegaSessionAuthority, type OmegaSessionTimelineEntry } from "./session-context.js";
+import type { OmegaSessionTimelineEntry } from "./session-context.js";
 import {
   deriveOmegaStateAuthoritySnapshot,
   type OmegaStateAuthoritySnapshot,
@@ -39,8 +39,7 @@ export async function loadOmegaDecisionContext(params: {
   expectedPaths?: string[];
   watchedPaths?: string[];
 }): Promise<OmegaDecisionContext> {
-  const [sessionSnapshot, controllerState, fallbackOperationalTail, wsp] = await Promise.all([
-    loadOmegaSessionAuthority(params),
+  const [controllerState, fallbackOperationalTail, wsp] = await Promise.all([
     syncOmegaExecutionControllerState({
       workspaceRoot: params.workspaceRoot,
       sessionKey: params.sessionKey,
@@ -53,6 +52,12 @@ export async function loadOmegaDecisionContext(params: {
     loadOmegaOperationalMemoryTail(params).catch(() => []),
     loadOmegaWSP(params.workspaceRoot, params.sessionKey).catch(() => undefined),
   ]);
+  const sessionSnapshot = controllerState?.executiveState.sourceSessionAuthority ?? {
+    timeline: [],
+    state: undefined,
+    kernel: undefined,
+    transactions: [],
+  };
   const operationalSummary =
     controllerState?.operationalSummary ?? summarizeOmegaOperationalMemory(fallbackOperationalTail);
   const stateAuthority = deriveOmegaStateAuthoritySnapshot({

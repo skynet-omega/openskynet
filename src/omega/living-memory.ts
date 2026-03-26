@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { movePathToTrash } from "../browser/trash.js";
+import { writeJsonAtomic } from "../infra/json-files.js";
 import type { SkynetCommitmentDecision } from "../skynet/commitment-engine.js";
 import type { SkynetExperimentPlan } from "../skynet/experiment-cycle.js";
 import {
@@ -119,6 +120,18 @@ export type OpenSkynetLivingMemoryEvent = {
   payload: Record<string, unknown>;
 };
 
+type LegacyComparableProjectState = {
+  focusKey: string | null;
+  mode: string | null;
+  continuityScore: number | null;
+  commitment: {
+    kind: string;
+    artifactKind: string;
+    confidence: number;
+    executableTask: string;
+  } | null;
+};
+
 function sanitizeSessionKey(sessionKey: string): string {
   return (sessionKey.trim() || "main").replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 64) || "main";
 }
@@ -185,6 +198,7 @@ export async function collectOpenSkynetMemoryCandidates(workspaceRoot: string): 
     path.join(resolveOmegaStateDir(workspaceRoot), "skynet-commitment"),
     path.join(resolveOmegaStateDir(workspaceRoot), "skynet-experiments"),
     path.join(resolveOmegaStateDir(workspaceRoot), "skynet-artifacts"),
+    path.join(resolveOmegaStateDir(workspaceRoot), "internal-project-benchmark"),
     path.join(resolveOmegaStateDir(workspaceRoot), "omega-study-supervisor"),
     path.join(resolveOmegaStateDir(workspaceRoot), "omega-executive-state"),
     path.join(resolveOmegaStateDir(workspaceRoot), "omega-problem-agenda"),
@@ -387,6 +401,29 @@ export async function loadOpenSkynetLivingState(params: {
   }
 }
 
+function getComparableInternalProjectState(
+  state: Partial<OpenSkynetLivingState> | undefined,
+): LegacyComparableProjectState {
+  const nextLike = state?.internalProjectState;
+  if (nextLike) {
+    return {
+      focusKey: nextLike.focusKey ?? null,
+      mode: nextLike.mode ?? null,
+      continuityScore:
+        typeof nextLike.continuityScore === "number" ? nextLike.continuityScore : null,
+      commitment: nextLike.commitment ?? null,
+    };
+  }
+
+  const legacy = state?.skynet;
+  return {
+    focusKey: legacy?.focusKey ?? null,
+    mode: legacy?.mode ?? null,
+    continuityScore: typeof legacy?.continuityScore === "number" ? legacy.continuityScore : null,
+    commitment: legacy?.commitment ?? null,
+  };
+}
+
 function deriveEvents(params: {
   sessionKey: string;
   prior?: OpenSkynetLivingState;
@@ -395,53 +432,55 @@ function deriveEvents(params: {
   const ts = params.next.updatedAt;
   const events: OpenSkynetLivingMemoryEvent[] = [];
   if (!params.prior) {
+    const nextProject = getComparableInternalProjectState(params.next);
     events.push({
       ts,
       sessionKey: params.sessionKey,
       kind: "runtime_initialized",
       payload: {
-        focusKey: params.next.internalProjectState.focusKey,
-        mode: params.next.internalProjectState.mode,
+        focusKey: nextProject.focusKey,
+        mode: nextProject.mode,
       },
     });
     return events;
   }
 
-  if (params.prior.internalProjectState.focusKey !== params.next.internalProjectState.focusKey) {
+  const priorProject = getComparableInternalProjectState(params.prior);
+  const nextProject = getComparableInternalProjectState(params.next);
+
+  if (priorProject.focusKey !== nextProject.focusKey) {
     events.push({
       ts,
       sessionKey: params.sessionKey,
       kind: "skynet_focus_changed",
       payload: {
-        previous: params.prior.internalProjectState.focusKey,
-        next: params.next.internalProjectState.focusKey,
+        previous: priorProject.focusKey,
+        next: nextProject.focusKey,
       },
     });
   }
-  if (params.prior.internalProjectState.mode !== params.next.internalProjectState.mode) {
+  if (priorProject.mode !== nextProject.mode) {
     events.push({
       ts,
       sessionKey: params.sessionKey,
       kind: "skynet_mode_changed",
       payload: {
-        previous: params.prior.internalProjectState.mode,
-        next: params.next.internalProjectState.mode,
+        previous: priorProject.mode,
+        next: nextProject.mode,
       },
     });
   }
   if (
-    params.prior.internalProjectState.commitment?.kind !==
-      params.next.internalProjectState.commitment?.kind ||
-    params.prior.internalProjectState.commitment?.artifactKind !==
-      params.next.internalProjectState.commitment?.artifactKind
+    priorProject.commitment?.kind !== nextProject.commitment?.kind ||
+    priorProject.commitment?.artifactKind !== nextProject.commitment?.artifactKind
   ) {
     events.push({
       ts,
       sessionKey: params.sessionKey,
       kind: "skynet_commitment_changed",
       payload: {
-        previous: params.prior.internalProjectState.commitment ?? null,
-        next: params.next.internalProjectState.commitment ?? null,
+        previous: priorProject.commitment ?? null,
+        next: nextProject.commitment ?? null,
       },
     });
   }
@@ -456,8 +495,8 @@ function deriveEvents(params: {
       },
     });
   }
-  const priorContinuity = params.prior.internalProjectState.continuityScore;
-  const nextContinuity = params.next.internalProjectState.continuityScore;
+  const priorContinuity = priorProject.continuityScore;
+  const nextContinuity = nextProject.continuityScore;
   if (
     typeof priorContinuity === "number" &&
     typeof nextContinuity === "number" &&
@@ -498,8 +537,7 @@ export async function syncOpenSkynetLivingMemory(params: {
   const project = await loadOpenSkynetInternalProjectProfile(params.workspaceRoot);
   const next = deriveLivingState({ ...params, project });
   const statePath = resolveOpenSkynetLivingStateFile(params);
-  await fs.mkdir(path.dirname(statePath), { recursive: true });
-  await fs.writeFile(statePath, JSON.stringify(next, null, 2) + "\n", "utf-8");
+  await writeJsonAtomic(statePath, next, { trailingNewline: true });
   await appendEvents(
     params.workspaceRoot,
     deriveEvents({ sessionKey: params.sessionKey, prior, next }),
