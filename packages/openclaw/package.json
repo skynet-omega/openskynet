@@ -1,0 +1,13 @@
+{
+  "name": "openclaw",
+  "version": "2026.3.28",
+  "private": true,
+  "description": "Internal compatibility shim that maps legacy openclaw imports to openskynet build outputs",
+  "type": "module",
+  "exports": {
+    ".": "./index.js",
+    "./cli-entry": "./cli-entry.js",
+    "./plugin-sdk": "./plugin-sdk/index.js",
+    "./plugin-sdk/*": "./plugin-sdk/*.js"
+  }
+}
