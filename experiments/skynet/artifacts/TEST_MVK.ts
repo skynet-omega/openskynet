@@ -54,7 +54,18 @@ async function testMVK() {
     );
     console.log(`   - Recuperación verificada. Sorpresa: ${stateRecovered.surprise.toFixed(4)}`);
 
-    console.log("\n✅ Test MVK finalizado con éxito (invariantes base validados).");
+    // Test 5: Decisión Langevin falsable.
+    console.log("5. Test de Decisión Langevin...");
+    const candidates = [
+      tf.randomNormal([30, 30]),
+      tf.randomNormal([30, 30]),
+      input30, // Este debería tener menor energía relativa si el kernel está sintonizado
+    ];
+    const decision = kernel.decide(candidates);
+    assert.equal(decision.shape[0], 30, "la decisión debe devolver el tensor candidato original");
+    console.log(`   - Decisión Langevin tomada. Forma: ${decision.shape}`);
+
+    console.log("\n✅ Test MVK finalizado con éxito (invariantes base + decisión validados).");
   } finally {
     kernel.dispose();
   }

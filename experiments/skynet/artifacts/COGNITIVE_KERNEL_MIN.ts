@@ -22,14 +22,16 @@ export interface KernelConfig {
   fossilThreshold: number; // Similitud mínima para recuperación (0.85 en X)
   langevinStep: number; // Paso de la dinámica de Langevin
   explorationTemp: number; // Temperatura para el muestreo de Gibbs
+  historyLimit: number; // Límite de historia para escalamiento
 }
 
 export const DEFAULT_CONFIG: KernelConfig = {
-  spectralDim: 256,
-  fossilCapacity: 500,
+  spectralDim: 2048, // Escalamiento a "Cerebro Grande" (2B params class)
+  fossilCapacity: 5000, // Capacidad aumentada
   fossilThreshold: 0.85,
   langevinStep: 0.01,
   explorationTemp: 1.0,
+  historyLimit: 100,
 };
 
 export interface CognitiveState {
