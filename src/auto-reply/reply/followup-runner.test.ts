@@ -192,6 +192,73 @@ describe("createFollowupRunner bootstrap warning dedupe", () => {
   });
 });
 
+describe("createFollowupRunner non-silent outcome guard", () => {
+  it("surfaces a degraded payload after hidden tool work with no final payload", async () => {
+    const onBlockReply = createAsyncReplySpy();
+    runEmbeddedPiAgentMock.mockResolvedValueOnce({
+      payloads: [],
+      meta: { stopReason: "toolUse" },
+    });
+
+    const runner = createFollowupRunner({
+      opts: { onBlockReply },
+      typing: createMockTypingController(),
+      typingMode: "instant",
+      defaultModel: "anthropic/claude-opus-4-5",
+    });
+
+    await runner(baseQueuedRun("telegram"));
+
+    expect(onBlockReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining("did not finish a final reply"),
+      }),
+    );
+  });
+
+  it("keeps explicit no-op followups silent when there was no tool activity", async () => {
+    const onBlockReply = createAsyncReplySpy();
+    runEmbeddedPiAgentMock.mockResolvedValueOnce({
+      payloads: [],
+      meta: { stopReason: "stop" },
+    });
+
+    const runner = createFollowupRunner({
+      opts: { onBlockReply },
+      typing: createMockTypingController(),
+      typingMode: "instant",
+      defaultModel: "anthropic/claude-opus-4-5",
+    });
+
+    await runner(baseQueuedRun("telegram"));
+
+    expect(onBlockReply).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a degraded payload after an execution error with no final payload", async () => {
+    const onBlockReply = createAsyncReplySpy();
+    runEmbeddedPiAgentMock.mockResolvedValueOnce({
+      payloads: [],
+      meta: { stopReason: "error" },
+    });
+
+    const runner = createFollowupRunner({
+      opts: { onBlockReply },
+      typing: createMockTypingController(),
+      typingMode: "instant",
+      defaultModel: "anthropic/claude-opus-4-5",
+    });
+
+    await runner(baseQueuedRun("telegram"));
+
+    expect(onBlockReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining("did not finish a final reply"),
+      }),
+    );
+  });
+});
+
 describe("createFollowupRunner messaging tool dedupe", () => {
   function createMessagingDedupeRunner(
     onBlockReply: (payload: unknown) => Promise<void>,

@@ -5,7 +5,7 @@ import { lookupContextTokens } from "../../agents/context.js";
 import { DEFAULT_CONTEXT_TOKENS } from "../../agents/defaults.js";
 import { runWithModelFallback } from "../../agents/model-fallback.js";
 import { runEmbeddedPiAgent } from "../../agents/pi-embedded.js";
-import type { SessionEntry } from "../../config/sessions.js";
+import { clearSessionUnfinishedTurn, type SessionEntry } from "../../config/sessions.js";
 import type { TypingMode } from "../../config/types.js";
 import { logVerbose } from "../../globals.js";
 import { registerAgentRunContext } from "../../infra/agent-events.js";
@@ -16,6 +16,10 @@ import type { OriginatingChannelType } from "../templating.js";
 import { isSilentReplyText, SILENT_REPLY_TOKEN } from "../tokens.js";
 import type { GetReplyOptions, ReplyPayload } from "../types.js";
 import { resolveRunAuthProfile } from "./agent-runner-utils.js";
+import {
+  buildMissingFinalReplyDegradedPayload,
+  resolveInteractiveTurnOutcome,
+} from "./interactive-turn-outcome.js";
 import {
   resolveOriginAccountId,
   resolveOriginMessageProvider,
@@ -77,9 +81,10 @@ export function createFollowupRunner(params: {
 
     if (!shouldRouteToOriginating && !opts?.onBlockReply) {
       logVerbose("followup queue: no onBlockReply handler; dropping payloads");
-      return;
+      return 0;
     }
 
+    let deliveredCount = 0;
     for (const payload of payloads) {
       if (!payload?.text && !payload?.mediaUrl && !payload?.mediaUrls?.length) {
         continue;
@@ -121,12 +126,17 @@ export function createFollowupRunner(params: {
           });
           if (opts?.onBlockReply && origin && origin === provider) {
             await opts.onBlockReply(payload);
+            deliveredCount += 1;
           }
+        } else {
+          deliveredCount += 1;
         }
       } else if (opts?.onBlockReply) {
         await opts.onBlockReply(payload);
+        deliveredCount += 1;
       }
     }
+    return deliveredCount;
   };
 
   return async (queued: FollowupRun) => {
@@ -266,7 +276,34 @@ export function createFollowupRunner(params: {
       }
 
       const payloadArray = runResult.payloads ?? [];
+      const resolveTurnOutcome = (replyCount: number) =>
+        resolveInteractiveTurnOutcome({
+          replyCount,
+          deliveredVisibleBlockReply: false,
+          deliveredVisibleToolReply: false,
+          deliveredViaMessagingTool:
+            runResult.didSendViaMessagingTool === true ||
+            runResult.didSendDeterministicApprovalPrompt === true,
+          sawToolActivity:
+            runResult.meta?.stopReason === "toolUse" || runResult.meta?.stopReason === "tool_calls",
+          hadExecutionError:
+            runResult.meta?.stopReason === "error" || Boolean(runResult.meta?.error),
+        });
       if (payloadArray.length === 0) {
+        const turnOutcome = resolveTurnOutcome(0);
+        if (turnOutcome.shouldSynthesizeDegradedReply) {
+          const deliveredCount = await sendFollowupPayloads(
+            [buildMissingFinalReplyDegradedPayload()],
+            queued,
+          );
+          if (deliveredCount > 0) {
+            await clearSessionUnfinishedTurn({
+              sessionKey,
+              sessionStore,
+              storePath,
+            });
+          }
+        }
         return;
       }
       const sanitizedPayloads = payloadArray.flatMap((payload) => {
@@ -323,6 +360,20 @@ export function createFollowupRunner(params: {
       const finalPayloads = suppressMessagingToolReplies ? [] : mediaFilteredPayloads;
 
       if (finalPayloads.length === 0) {
+        const turnOutcome = resolveTurnOutcome(0);
+        if (turnOutcome.shouldSynthesizeDegradedReply) {
+          const deliveredCount = await sendFollowupPayloads(
+            [buildMissingFinalReplyDegradedPayload()],
+            queued,
+          );
+          if (deliveredCount > 0) {
+            await clearSessionUnfinishedTurn({
+              sessionKey,
+              sessionStore,
+              storePath,
+            });
+          }
+        }
         return;
       }
 
@@ -343,7 +394,14 @@ export function createFollowupRunner(params: {
         }
       }
 
-      await sendFollowupPayloads(finalPayloads, queued);
+      const deliveredCount = await sendFollowupPayloads(finalPayloads, queued);
+      if (deliveredCount > 0) {
+        await clearSessionUnfinishedTurn({
+          sessionKey,
+          sessionStore,
+          storePath,
+        });
+      }
     } finally {
       // Both signals are required for the typing controller to clean up.
       // The main inbound dispatch path calls markDispatchIdle() from the

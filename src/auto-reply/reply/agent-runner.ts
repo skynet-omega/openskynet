@@ -6,6 +6,7 @@ import { isCliProvider } from "../../agents/model-selection.js";
 import { queueEmbeddedPiMessage } from "../../agents/pi-embedded.js";
 import { hasNonzeroUsage } from "../../agents/usage.js";
 import {
+  markSessionUnfinishedTurn,
   resolveAgentIdFromSessionKey,
   resolveSessionFilePath,
   resolveSessionFilePathOptions,
@@ -48,6 +49,10 @@ import { appendUsageLine, formatResponseUsageLine } from "./agent-runner-utils.j
 import { createAudioAsVoiceBuffer, createBlockReplyPipeline } from "./block-reply-pipeline.js";
 import { resolveEffectiveBlockStreamingConfig } from "./block-streaming.js";
 import { createFollowupRunner } from "./followup-runner.js";
+import {
+  buildMissingFinalReplyDegradedPayload,
+  resolveInteractiveTurnOutcome,
+} from "./interactive-turn-outcome.js";
 import { resolveOriginMessageProvider, resolveOriginMessageTo } from "./origin-routing.js";
 import { readPostCompactionContext } from "./post-compaction-context.js";
 import { resolveActiveRunQueueAction } from "./queue-policy.js";
@@ -75,6 +80,7 @@ export async function runReplyAgent(params: {
   sessionStore?: Record<string, SessionEntry>;
   sessionKey?: string;
   storePath?: string;
+  resumePreviewText?: string;
   defaultModel: string;
   agentCfgContextTokens?: number;
   resolvedVerboseLevel: VerboseLevel;
@@ -106,6 +112,7 @@ export async function runReplyAgent(params: {
     sessionStore,
     sessionKey,
     storePath,
+    resumePreviewText,
     defaultModel,
     agentCfgContextTokens,
     resolvedVerboseLevel,
@@ -127,6 +134,25 @@ export async function runReplyAgent(params: {
     typing,
     mode: typingMode,
     isHeartbeat,
+  });
+
+  await markSessionUnfinishedTurn({
+    sessionId: followupRun.run.sessionId,
+    sessionKey,
+    sessionStore: activeSessionStore,
+    storePath,
+    prompt: resumePreviewText ?? commandBody,
+    turnId: generateSecureUuid(),
+    messageChannel: sessionCtx.OriginatingChannel ?? sessionCtx.Provider,
+    channel:
+      resolveOriginMessageProvider({
+        originatingChannel: sessionCtx.OriginatingChannel,
+        provider: sessionCtx.Surface ?? sessionCtx.Provider,
+      }) ?? undefined,
+    to: sessionCtx.To,
+    accountId: sessionCtx.AccountId,
+    threadId: sessionCtx.MessageThreadId,
+    senderIsOwner: followupRun.run.senderIsOwner,
   });
 
   const shouldEmitToolResult = createShouldEmitToolResult({
@@ -379,6 +405,8 @@ export async function runReplyAgent(params: {
       fallbackModel,
       fallbackAttempts,
       directlySentBlockKeys,
+      sawToolActivity,
+      deliveredVisibleToolReply,
     } = runOutcome;
     let { didLogHeartbeatStrip, autoCompactionCompleted } = runOutcome;
 
@@ -478,10 +506,34 @@ export async function runReplyAgent(params: {
       cliSessionId,
     });
 
+    const resolveTurnOutcome = (replyCount: number) =>
+      resolveInteractiveTurnOutcome({
+        replyCount,
+        deliveredVisibleBlockReply:
+          Boolean(blockReplyPipeline?.didStream()) || Boolean(directlySentBlockKeys?.size),
+        deliveredVisibleToolReply,
+        deliveredViaMessagingTool:
+          runResult.didSendViaMessagingTool === true ||
+          runResult.didSendDeterministicApprovalPrompt === true,
+        sawToolActivity:
+          sawToolActivity ||
+          runResult.meta?.stopReason === "toolUse" ||
+          runResult.meta?.stopReason === "tool_calls",
+        hadExecutionError: runResult.meta?.stopReason === "error" || Boolean(runResult.meta?.error),
+      });
+
     // Drain any late tool/block deliveries before deciding there's "nothing to send".
     // Otherwise, a late typing trigger (e.g. from a tool callback) can outlive the run and
     // keep the typing indicator stuck.
     if (payloadArray.length === 0) {
+      const turnOutcome = resolveTurnOutcome(0);
+      if (turnOutcome.shouldSynthesizeDegradedReply) {
+        return finalizeWithFollowup(
+          buildMissingFinalReplyDegradedPayload(),
+          queueKey,
+          runFollowupTurn,
+        );
+      }
       return finalizeWithFollowup(undefined, queueKey, runFollowupTurn);
     }
 
@@ -511,6 +563,14 @@ export async function runReplyAgent(params: {
     didLogHeartbeatStrip = payloadResult.didLogHeartbeatStrip;
 
     if (replyPayloads.length === 0) {
+      const turnOutcome = resolveTurnOutcome(0);
+      if (turnOutcome.shouldSynthesizeDegradedReply) {
+        return finalizeWithFollowup(
+          buildMissingFinalReplyDegradedPayload(),
+          queueKey,
+          runFollowupTurn,
+        );
+      }
       return finalizeWithFollowup(undefined, queueKey, runFollowupTurn);
     }
 
