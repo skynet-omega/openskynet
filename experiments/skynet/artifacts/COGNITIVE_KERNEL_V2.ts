@@ -69,11 +69,7 @@ export class SpectralCore {
       // zOld: [dim], rotation: [dim]
       const zRotated = tf.mul(zOld, rotation);
 
-      // Proyectar input a complejo: [dim] -> [dim] complejo (vía padding si es necesario)
-      // En V27, z es complejo [D]. El input u_t debe ser compatible.
-      // Opción A: u_t es complejo [D] (requiere 2D input).
-      // Opción B: u_t es real [D], proyectado a complex(u_t, 0).
-
+      // Proyectar input a complejo: [dim] -> [dim] complejo
       const inputResized = tf
         .pad(input, [[0, Math.max(0, this.config.spectralDim - input.shape[0])]])
         .slice([0], [this.config.spectralDim]);
@@ -154,16 +150,37 @@ export class FossilStore {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export class GeometryEngine {
-  constructor(private config: KernelConfig) {}
+  private ricciKernels: tf.Tensor[];
+
+  constructor(private config: KernelConfig) {
+    this.ricciKernels = this.config.ricciScales.map((size) => {
+      return tf.tidy(() => {
+        const center = (size - 1) / 2;
+        const kernelArr = new Float32Array(size * size);
+        for (let i = 0; i < size; i++) {
+          for (let j = 0; j < size; j++) {
+            const r = Math.sqrt(Math.pow(i - center, 2) + Math.pow(j - center, 2)) / center;
+            kernelArr[i * size + j] = Math.exp(-Math.pow(r - 0.5, 2) / 0.05);
+          }
+        }
+        return tf.keep(tf.tensor4d(kernelArr, [size, size, 1, 1]));
+      });
+    });
+  }
 
   project(input: tf.Tensor): tf.Tensor {
     return tf.tidy(() => {
-      const [h, w] = input.shape;
+      let tensor = input;
+      if (input.shape.length === 1) {
+        const side = Math.floor(Math.sqrt(input.shape[0]));
+        tensor = input.slice([0], [side * side]).reshape([side, side]);
+      }
+      const [h, w] = tensor.shape;
       const s = this.config.hologramSize;
       const padH = Math.max(0, s - h);
       const padW = Math.max(0, s - w);
       return tf
-        .pad(input, [
+        .pad(tensor as tf.Tensor2D, [
           [Math.floor(padH / 2), Math.ceil(padH / 2)],
           [Math.floor(padW / 2), Math.ceil(padW / 2)],
         ])
@@ -171,12 +188,26 @@ export class GeometryEngine {
     });
   }
 
-  ricciConsolidate(state: tf.Tensor, surprise: number): tf.Tensor {
+  ricciFlow(state: tf.Tensor, curvature: tf.Tensor): tf.Tensor {
     return tf.tidy(() => {
-      // Placeholder: en V2 real se usaría convolución multiescala real
-      const scale = surprise > 0.5 ? 0.9 : 1.1;
-      return state.mul(scale);
+      const s = this.config.hologramSize;
+      // Reducir estado a s*s si es más grande (ej. spectralDim)
+      const stateFlattened = state.flatten();
+      const stateResized = stateFlattened.slice([0], [s * s]).reshape([1, s, s, 1]);
+
+      const weights = tf.softmax(curvature);
+      const convs = this.ricciKernels.map((k, i) => {
+        const c = tf.conv2d(stateResized as tf.Tensor4d, k as tf.Tensor4d, 1, "same");
+        return c.mul(weights.slice([i % weights.shape[0]], [1]));
+      });
+
+      const mixed = tf.addN(convs);
+      return mixed.flatten();
     });
+  }
+
+  dispose() {
+    this.ricciKernels.forEach((k) => k.dispose());
   }
 }
 
@@ -193,13 +224,10 @@ export class SocialMirror {
 
   mirror(self: tf.Tensor): tf.Tensor {
     return tf.tidy(() => {
-      // z_partner = W * z_self (simulado en real para TFJS compat)
-      // self puede venir como [dim] o [1, dim]. Forzar [dim, 1] para matMul.
       const selfFlat = self.flatten();
       const realSelf = tf.real(selfFlat).expandDims(1);
       const imagSelf = tf.imag(selfFlat).expandDims(1);
 
-      // partnerW es [dim, dim]
       const realPartner = tf.matMul(this.partnerW, realSelf).flatten();
       const imagPartner = tf.matMul(this.partnerW, imagSelf).flatten();
 
@@ -247,9 +275,6 @@ export class CognitiveKernelV2 {
   }
 
   async perceive(input: tf.Tensor, partnerAction?: tf.Tensor): Promise<CognitiveState> {
-    // Nota: El tidy() solo envuelve el cálculo de los NUEVOS tensores.
-    // Los tensores que pasan al estado deben ser clonados y marcados con keep ANTES de salir del tidy.
-
     const { newSpectral, sensory, entorhinal, prefrontal, partnerModel, selfBelief, surprise } =
       tf.tidy(() => {
         // 1. Proyección Holográfica
@@ -259,7 +284,7 @@ export class CognitiveKernelV2 {
           .slice([0], [this.config.sensoryDim]);
 
         // 2. Recuperación
-        const recovered = this.fossils.retrieve(sensory);
+        const _recovered = this.fossils.retrieve(sensory);
 
         // 3. Evolución Espectral
         const newSpectral = this.spectral.step(this.state.spectral, sensory);
@@ -271,11 +296,22 @@ export class CognitiveKernelV2 {
         const surprise = tf
           .mean(tf.square(tf.sub(tf.abs(newSpectral), tf.abs(this.state.spectral))))
           .dataSync()[0];
-        const entorhinal = this.geometry.ricciConsolidate(this.state.entorhinal, surprise);
-        const prefrontal = this.state.prefrontal.clone();
-        const selfBelief = this.state.selfBelief.clone();
 
-        // Devolvemos clones marcados para persistencia
+        // Curvatura Ricci basada en la energía local
+        const curvature = tf.tensor1d([0.1, 0.2, surprise]);
+        const entorhinalBase = this.geometry.ricciFlow(this.state.entorhinal, curvature);
+        // Rescatar dimensiones para entorhinal (D)
+        const entorhinal = tf
+          .pad(entorhinalBase, [
+            [0, Math.max(0, this.config.spectralDim - entorhinalBase.shape[0])],
+          ])
+          .slice([0], [this.config.spectralDim]);
+
+        const prefrontal = this.state.prefrontal.clone();
+        const selfBelief = partnerAction
+          ? tf.sigmoid(tf.sub(partnerAction.flatten(), sensory.slice([0], [partnerAction.size])))
+          : this.state.selfBelief.clone();
+
         return {
           newSpectral: tf.keep(newSpectral.clone()),
           sensory: tf.keep(sensory.clone()),
@@ -287,7 +323,6 @@ export class CognitiveKernelV2 {
         };
       });
 
-    // 6. Ciclo de Vida: Limpiar estado anterior
     this.clearState();
 
     this.state = {
@@ -318,6 +353,7 @@ export class CognitiveKernelV2 {
   dispose() {
     this.spectral.dispose();
     this.fossils.dispose();
+    this.geometry.dispose();
     this.social.dispose();
     this.clearState();
   }
