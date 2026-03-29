@@ -26,6 +26,7 @@ describe("formatCliBannerLine", () => {
     const line = formatCliBannerLine("2026.3.7", {
       commit: "abc1234",
       richTty: false,
+      columns: 240,
     });
 
     expect(line).toBe("🤖 OpenSkynet 2026.3.7 (abc1234)");
@@ -41,7 +42,10 @@ describe("formatCliBannerLine", () => {
       richTty: false,
     });
 
-    expect(line).toBe("🤖 OpenSkynet 2026.3.7 (abc1234) — All your sessions, one OpenSkynet.");
+    expect(line).toContain("🤖 OpenSkynet 2026.3.7 (abc1234)");
+    expect(line).toContain(
+      "Tip: openskynet configure  interactive setup for credentials, channels, gateway, and agent defaults",
+    );
   });
 
   it("prefers explicit tagline mode over config", () => {
@@ -53,8 +57,12 @@ describe("formatCliBannerLine", () => {
       commit: "abc1234",
       richTty: false,
       mode: "default",
+      columns: 240,
     });
 
-    expect(line).toBe("🤖 OpenSkynet 2026.3.7 (abc1234) — All your sessions, one OpenSkynet.");
+    expect(line).toContain("🤖 OpenSkynet 2026.3.7 (abc1234)");
+    expect(line).toContain(
+      "Tip: openskynet configure  interactive setup for credentials, channels, gateway, and agent defaults",
+    );
   });
 });

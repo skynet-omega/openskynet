@@ -34,7 +34,7 @@ function inheritedUpdateTimeout(
 export function registerUpdateCli(program: Command) {
   const update = program
     .command("update")
-    .description("Update OpenClaw and inspect update channel status")
+    .description("Update OpenSkyNet and inspect update channel status")
     .option("--json", "Output result as JSON", false)
     .option("--no-restart", "Skip restarting the gateway service after a successful update")
     .option("--dry-run", "Preview update actions without making changes", false)
@@ -44,16 +44,16 @@ export function registerUpdateCli(program: Command) {
     .option("--yes", "Skip confirmation prompts (non-interactive)", false)
     .addHelpText("after", () => {
       const examples = [
-        ["openclaw update", "Update a source checkout (git)"],
-        ["openclaw update --channel beta", "Switch to beta channel (git + npm)"],
-        ["openclaw update --channel dev", "Switch to dev channel (git + npm)"],
-        ["openclaw update --tag beta", "One-off update to a dist-tag or version"],
-        ["openclaw update --dry-run", "Preview actions without changing anything"],
-        ["openclaw update --no-restart", "Update without restarting the service"],
-        ["openclaw update --json", "Output result as JSON"],
-        ["openclaw update --yes", "Non-interactive (accept downgrade prompts)"],
-        ["openclaw update wizard", "Interactive update wizard"],
-        ["openclaw --update", "Shorthand for openclaw update"],
+        ["openskynet update", "Update a source checkout (git)"],
+        ["openskynet update --channel beta", "Switch to beta channel (git + npm)"],
+        ["openskynet update --channel dev", "Switch to dev channel (git + npm)"],
+        ["openskynet update --tag beta", "One-off update to a dist-tag or version"],
+        ["openskynet update --dry-run", "Preview actions without changing anything"],
+        ["openskynet update --no-restart", "Update without restarting the service"],
+        ["openskynet update --json", "Output result as JSON"],
+        ["openskynet update --yes", "Non-interactive (accept downgrade prompts)"],
+        ["openskynet update wizard", "Interactive update wizard"],
+        ["openskynet --update", "Shorthand for openskynet update"],
       ] as const;
       const fmtExamples = examples
         .map(([cmd, desc]) => `  ${theme.command(cmd)} ${theme.muted(`# ${desc}`)}`)
@@ -65,7 +65,7 @@ ${theme.heading("What this does:")}
 
 ${theme.heading("Switch channels:")}
   - Use --channel stable|beta|dev to persist the update channel in config
-  - Run openclaw update status to see the active channel and source
+  - Run openskynet update status to see the active channel and source
   - Use --tag <dist-tag|version> for a one-off npm update without persisting
 
 ${theme.heading("Non-interactive:")}

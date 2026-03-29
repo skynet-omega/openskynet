@@ -68,6 +68,9 @@ export type AgentRunLoopResult =
       fallbackAttempts: RuntimeFallbackAttempt[];
       didLogHeartbeatStrip: boolean;
       autoCompactionCompleted: boolean;
+      sawToolActivity: boolean;
+      deliveredVisibleToolReply: boolean;
+      hasActiveBackgroundTask: boolean;
       /** Payload keys sent directly (not via pipeline) during tool flush. */
       directlySentBlockKeys?: Set<string>;
     }
@@ -114,6 +117,9 @@ export async function runAgentTurnWithFallback(params: {
     workspaceDir: params.followupRun.run.workspaceDir,
   });
   let didNotifyAgentRunStart = false;
+  let sawToolActivity = false;
+  let deliveredVisibleToolReply = false;
+  let hasActiveBackgroundTask = false;
   const notifyAgentRunStart = () => {
     if (didNotifyAgentRunStart) {
       return;
@@ -382,6 +388,7 @@ export async function runAgentTurnWithFallback(params: {
                 // Trigger typing when tools start executing.
                 // Must await to ensure typing indicator starts before tool summaries are emitted.
                 if (evt.stream === "tool") {
+                  sawToolActivity = true;
                   const phase = typeof evt.data.phase === "string" ? evt.data.phase : "";
                   const name = typeof evt.data.name === "string" ? evt.data.name : undefined;
                   if (phase === "start" || phase === "update") {
@@ -431,37 +438,55 @@ export async function runAgentTurnWithFallback(params: {
                 bootstrapPromptWarningSignaturesSeen[
                   bootstrapPromptWarningSignaturesSeen.length - 1
                 ],
-              onToolResult: onToolResult
-                ? (() => {
-                    // Serialize tool result delivery to preserve message ordering.
-                    // Without this, concurrent tool callbacks race through typing signals
-                    // and message sends, causing out-of-order delivery to the user.
-                    // See: https://github.com/openclaw/openclaw/issues/11044
-                    let toolResultChain: Promise<void> = Promise.resolve();
-                    return (payload: ReplyPayload) => {
-                      toolResultChain = toolResultChain
-                        .then(async () => {
-                          const { text, skip } = normalizeStreamingText(payload);
-                          if (skip) {
-                            return;
-                          }
-                          await params.typingSignals.signalTextDelta(text);
-                          await onToolResult({
-                            ...payload,
-                            text,
-                          });
-                        })
-                        .catch((err) => {
-                          // Keep chain healthy after an error so later tool results still deliver.
-                          logVerbose(`tool result delivery failed: ${String(err)}`);
+              onToolResult: (() => {
+                // Serialize tool result handling to preserve message ordering.
+                // This chain now also tracks long-running background tools even
+                // when the channel chooses not to surface tool output directly.
+                let toolResultChain: Promise<void> = Promise.resolve();
+                return (payload: ReplyPayload) => {
+                  toolResultChain = toolResultChain
+                    .then(async () => {
+                      const { text, skip } = normalizeStreamingText(payload);
+                      const rawText = payload.text;
+                      if (
+                        typeof rawText === "string" &&
+                        /\b(?:Command|Process) still running\b/i.test(rawText)
+                      ) {
+                        hasActiveBackgroundTask = true;
+                      }
+                      if (skip) {
+                        return;
+                      }
+                      if (
+                        onToolResult &&
+                        (text?.trim() || payload.mediaUrl || (payload.mediaUrls?.length ?? 0) > 0)
+                      ) {
+                        deliveredVisibleToolReply = true;
+                      }
+                      if (
+                        typeof text === "string" &&
+                        /\b(?:Command|Process) still running\b/i.test(text)
+                      ) {
+                        hasActiveBackgroundTask = true;
+                      }
+                      await params.typingSignals.signalTextDelta(text);
+                      if (onToolResult) {
+                        await onToolResult({
+                          ...payload,
+                          text,
                         });
-                      const task = toolResultChain.finally(() => {
-                        params.pendingToolTasks.delete(task);
-                      });
-                      params.pendingToolTasks.add(task);
-                    };
-                  })()
-                : undefined,
+                      }
+                    })
+                    .catch((err) => {
+                      // Keep chain healthy after an error so later tool results still deliver.
+                      logVerbose(`tool result delivery failed: ${String(err)}`);
+                    });
+                  const task = toolResultChain.finally(() => {
+                    params.pendingToolTasks.delete(task);
+                  });
+                  params.pendingToolTasks.add(task);
+                };
+              })(),
             });
             bootstrapPromptWarningSignaturesSeen = resolveBootstrapWarningSignaturesSeen(
               result.meta?.systemPromptReport,
@@ -655,6 +680,9 @@ export async function runAgentTurnWithFallback(params: {
     fallbackAttempts,
     didLogHeartbeatStrip,
     autoCompactionCompleted,
+    sawToolActivity,
+    deliveredVisibleToolReply,
+    hasActiveBackgroundTask,
     directlySentBlockKeys: directlySentBlockKeys.size > 0 ? directlySentBlockKeys : undefined,
   };
 }

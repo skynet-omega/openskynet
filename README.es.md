@@ -19,7 +19,7 @@ OpenSkyNet hoy tiene tres capas separadas con bastante más claridad:
 
 - **Gateway / plataforma agente**: canales, sesiones, herramientas, cron, UI y la base operativa heredada de OpenClaw.
 - **Runtime Omega**: el spine experimental principal para contexto de decisión, recuperación, routing, despacho ejecutivo, world model y memoria estructurada.
-- **Proyecto interno benchmark**: una carga de trabajo autónoma configurable mediante [INTERNAL_PROJECT.json](/home/daroch/openskynet/INTERNAL_PROJECT.json). Por defecto ese proyecto es `Skynet`, pero no es la identidad de OpenSkyNet y puede reemplazarse por otro dominio.
+- **Proyecto interno benchmark**: una carga de trabajo autónoma configurable mediante [`INTERNAL_PROJECT.json`](./INTERNAL_PROJECT.json). Por defecto ese proyecto es `Skynet`, pero no es la identidad de OpenSkyNet y puede reemplazarse por otro dominio.
 
 El benchmark práctico es este:
 
@@ -39,11 +39,11 @@ OpenClaw sigue siendo la plataforma base y aporta mucho del plumbing esencial. O
 
 ## Snapshot de Arquitectura
 
-Este diagrama resume la forma actual del runtime. Es una guía, no la fuente legal exacta. Para comportamiento preciso, revisa [src/omega](/home/daroch/openskynet/src/omega), [src/skynet](/home/daroch/openskynet/src/skynet), los tests y `docs/architecture/`.
+Este diagrama resume la forma actual del runtime. Es una guía, no la fuente legal exacta. Para comportamiento preciso, revisa [`src/omega`](./src/omega), [`src/skynet`](./src/skynet), los tests y `docs/architecture/`.
 
 ```mermaid
 graph TD
-    User[Usuario / Cron / Evento de Canal] --> Gateway[OpenClaw Gateway]
+    User[Usuario / Cron / Evento de Canal] --> Gateway[Gateway]
     Gateway --> Agent[Flujo Estándar del Agente]
     Gateway --> Omega[Spine Runtime Omega]
 
@@ -82,6 +82,38 @@ pnpm install
 pnpm build
 ```
 
+Notas:
+
+- Una instalación limpia funciona con Node `22.22.1+` y `pnpm 10.23.0+`.
+- Algunas integraciones nativas opcionales usan `pnpm approve-builds` en instalaciones nuevas. Si piensas usar TensorFlow con GPU, audio nativo u otros add-ons nativos, ejecuta:
+
+```bash
+pnpm approve-builds
+```
+
+- La CLI base, gateway, UI, sesiones, canales y el flujo estándar del agente instalan y compilan sin parches manuales extra.
+
+## Primer Arranque Útil
+
+Bootstrap mínimo local:
+
+```bash
+pnpm install
+pnpm build
+./openskynet.mjs setup
+./openskynet.mjs configure
+./openskynet.mjs dashboard --no-open
+```
+
+Después puedes entrar por cualquiera de estas rutas normales:
+
+- `pnpm gateway:dev` para desarrollo local
+- `pnpm tui` para la interfaz de terminal
+- `./openskynet.mjs agent ...` para corridas directas del agente
+- `./openskynet.mjs daemon restart` tras un build estilo producción
+
+Si quieres una ruta un poco más guiada, revisa [`docs/start/QUICKSTART.md`](./docs/start/QUICKSTART.md).
+
 ## Ejecución
 
 Desarrollo:
@@ -106,7 +138,7 @@ openskynet daemon restart
 
 ## Proyecto Interno Benchmark
 
-OpenSkyNet puede mantener un proyecto interno configurable como trabajo autónomo en tiempo libre. El archivo por defecto es [INTERNAL_PROJECT.json](/home/daroch/openskynet/INTERNAL_PROJECT.json).
+OpenSkyNet puede mantener un proyecto interno configurable como trabajo autónomo en tiempo libre. El archivo por defecto es [`INTERNAL_PROJECT.json`](./INTERNAL_PROJECT.json).
 
 Ese proyecto puede ser:
 
@@ -121,7 +153,7 @@ En este repositorio el default es `Skynet`, pero la plataforma no debería depen
 
 Referencias operativas importantes:
 
-- [docs/OPERABILIDAD_Y_LOGS.md](/home/daroch/openskynet/docs/OPERABILIDAD_Y_LOGS.md)
+- [`docs/OPERABILIDAD_Y_LOGS.md`](./docs/OPERABILIDAD_Y_LOGS.md)
 - `.openskynet/living-memory/`
 - `~/.openskynet/agents/*/sessions/`
 - `~/.openskynet/cron/`
@@ -138,8 +170,19 @@ El repo ya superó la base de "chatbot con tools", pero todavía no está cerrad
 
 Ver:
 
-- [docs/architecture/LIMITACIONES_CRITICAS_OPENSKYNET_2026-03-26.md](/home/daroch/openskynet/docs/architecture/LIMITACIONES_CRITICAS_OPENSKYNET_2026-03-26.md)
-- [docs/architecture/OPENCLAW_VS_OPENSKYNET_2026-03-26.md](/home/daroch/openskynet/docs/architecture/OPENCLAW_VS_OPENSKYNET_2026-03-26.md)
+- [`docs/architecture/LIMITACIONES_CRITICAS_OPENSKYNET_2026-03-26.md`](./docs/architecture/LIMITACIONES_CRITICAS_OPENSKYNET_2026-03-26.md)
+- [`docs/architecture/OPENCLAW_VS_OPENSKYNET_2026-03-26.md`](./docs/architecture/OPENCLAW_VS_OPENSKYNET_2026-03-26.md)
+
+## Qué Debe Esperar Un Usuario Nuevo
+
+OpenSkyNet ya se puede compartir, pero sigue siendo un proyecto técnico:
+
+- Instalar y compilar es directo para alguien cómodo con Node/pnpm.
+- El runtime es grande y muy configurable; no es un juguete de “un comando y listo”.
+- Parte de la documentación y referencias internas todavía reflejan la herencia del proyecto padre.
+- Los subsistemas experimentales `Omega` y `Skynet` vienen incluidos, pero la plataforma se puede usar sin activar todas las rutas experimentales.
+
+Si tu meta es evaluarlo, empieza por gateway, dashboard, TUI y un solo canal. Agrega GPU, TTS, browser control o cognición experimental solo cuando realmente lo necesites.
 
 ## Agradecimientos
 

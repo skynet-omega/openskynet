@@ -65,6 +65,35 @@ export type AcpSessionRuntimeOptions = {
   backendExtras?: Record<string, string>;
 };
 
+export type SessionUnfinishedTurn = {
+  turnId: string;
+  sessionId: string;
+  startedAt: number;
+  promptPreview?: string;
+  messageChannel?: string;
+  channel?: string;
+  to?: string;
+  accountId?: string;
+  threadId?: string | number;
+  senderIsOwner?: boolean;
+  resumeCount?: number;
+  lastResumeAt?: number;
+};
+
+export type SessionInterruptedTurn = {
+  runId: string;
+  message: string;
+  startedAt: number;
+  messageChannel?: string;
+  channel?: string;
+  to?: string;
+  accountId?: string;
+  threadId?: string | number;
+  senderIsOwner?: boolean;
+  resumeCount?: number;
+  lastResumeAt?: number;
+};
+
 export type SessionEntry = {
   /**
    * Last delivered heartbeat payload (used to suppress duplicate heartbeat notifications).
@@ -88,6 +117,13 @@ export type SessionEntry = {
   subagentRole?: "orchestrator" | "leaf";
   /** Explicit control scope assigned at spawn time for subagent control decisions. */
   subagentControlScope?: "children" | "none";
+  /** Persisted marker for a turn that started but did not finish with a visible reply. */
+  unfinishedTurn?: SessionUnfinishedTurn;
+  /**
+   * Legacy durable resume marker still consumed by the gateway restart-resume path.
+   * Kept for compatibility while newer continuity uses unfinishedTurn.
+   */
+  interruptedTurn?: SessionInterruptedTurn;
   systemSent?: boolean;
   abortedLastRun?: boolean;
   /**

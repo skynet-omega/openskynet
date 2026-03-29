@@ -53,9 +53,9 @@ export const FIELD_HELP: Record<string, string> = {
     "Additional custom redact regex patterns applied to log output before emission/storage. Use this to mask org-specific tokens and identifiers not covered by built-in redaction rules.",
   cli: "CLI presentation controls for local command output behavior such as banner and tagline style. Use this section to keep startup output aligned with operator preference without changing runtime behavior.",
   "cli.banner":
-    "CLI startup banner controls for title/version line and tagline style behavior. Keep banner enabled for fast version/context checks, then tune tagline mode to your preferred noise level.",
+    "CLI startup banner controls for title/version line and optional command-tip suffix behavior. Keep banner enabled for fast version/context checks, then tune tagline mode if you want tips, a stable starter hint, or no suffix at all.",
   "cli.banner.taglineMode":
-    'Controls tagline style in the CLI startup banner: "random" (default) picks from the rotating tagline pool, "default" always shows the neutral default tagline, and "off" hides tagline text while keeping the banner version line.',
+    'Controls the suffix in the CLI startup banner: "random" shows a random curated command tip, "default" shows the starter tip, and "off" hides the suffix and keeps only the banner version line.',
   update:
     "Update-channel and startup-check behavior for keeping OpenClaw runtime versions current. Use conservative channels in production and more experimental channels only in controlled environments.",
   "update.channel": 'Update channel for git + npm installs ("stable", "beta", or "dev").',

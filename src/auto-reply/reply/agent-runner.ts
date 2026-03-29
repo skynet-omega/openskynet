@@ -6,7 +6,9 @@ import { isCliProvider } from "../../agents/model-selection.js";
 import { queueEmbeddedPiMessage } from "../../agents/pi-embedded.js";
 import { hasNonzeroUsage } from "../../agents/usage.js";
 import {
+  canAttemptInterruptedResume,
   markSessionUnfinishedTurn,
+  markSessionInterruptedResumeAttempt,
   resolveAgentIdFromSessionKey,
   resolveSessionFilePath,
   resolveSessionFilePathOptions,
@@ -50,6 +52,9 @@ import { createAudioAsVoiceBuffer, createBlockReplyPipeline } from "./block-repl
 import { resolveEffectiveBlockStreamingConfig } from "./block-streaming.js";
 import { createFollowupRunner } from "./followup-runner.js";
 import {
+  buildBackgroundTaskStillRunningAutoResumePayload,
+  buildBackgroundTaskStillRunningPayload,
+  buildMissingFinalReplyAutoResumePayload,
   buildMissingFinalReplyDegradedPayload,
   resolveInteractiveTurnOutcome,
 } from "./interactive-turn-outcome.js";
@@ -136,7 +141,7 @@ export async function runReplyAgent(params: {
     isHeartbeat,
   });
 
-  await markSessionUnfinishedTurn({
+  const currentUnfinishedTurn = await markSessionUnfinishedTurn({
     sessionId: followupRun.run.sessionId,
     sessionKey,
     sessionStore: activeSessionStore,
@@ -270,6 +275,8 @@ export async function runReplyAgent(params: {
     opts,
     typing,
     typingMode,
+    queueKey,
+    resolvedQueue,
     sessionEntry: activeSessionEntry,
     sessionStore: activeSessionStore,
     sessionKey,
@@ -277,6 +284,38 @@ export async function runReplyAgent(params: {
     defaultModel,
     agentCfgContextTokens,
   });
+
+  const maybeQueueInterruptedRetry = async () => {
+    if (!sessionKey || !storePath || !currentUnfinishedTurn) {
+      return false;
+    }
+    const entryForResume = activeSessionStore?.[sessionKey] ?? activeSessionEntry;
+    if (!canAttemptInterruptedResume(entryForResume)) {
+      return false;
+    }
+    const updatedEntry = await markSessionInterruptedResumeAttempt({
+      sessionKey,
+      sessionStore: activeSessionStore,
+      storePath,
+    });
+    const nextResumeCount = updatedEntry?.interruptedTurn?.resumeCount ?? 1;
+    const enqueued = enqueueFollowupRun(
+      queueKey,
+      {
+        ...followupRun,
+        enqueuedAt: Date.now(),
+        messageId: `auto-resume:${currentUnfinishedTurn.turnId}:${nextResumeCount}`,
+        summaryLine: followupRun.summaryLine
+          ? `Auto-resume: ${followupRun.summaryLine}`
+          : "Auto-resume interrupted turn",
+      },
+      resolvedQueue,
+    );
+    if (enqueued && updatedEntry) {
+      activeSessionEntry = updatedEntry;
+    }
+    return enqueued;
+  };
 
   let responseUsageLine: string | undefined;
   type SessionResetOptions = {
@@ -407,6 +446,7 @@ export async function runReplyAgent(params: {
       directlySentBlockKeys,
       sawToolActivity,
       deliveredVisibleToolReply,
+      hasActiveBackgroundTask,
     } = runOutcome;
     let { didLogHeartbeatStrip, autoCompactionCompleted } = runOutcome;
 
@@ -520,6 +560,7 @@ export async function runReplyAgent(params: {
           runResult.meta?.stopReason === "toolUse" ||
           runResult.meta?.stopReason === "tool_calls",
         hadExecutionError: runResult.meta?.stopReason === "error" || Boolean(runResult.meta?.error),
+        hasActiveBackgroundTask,
       });
 
     // Drain any late tool/block deliveries before deciding there's "nothing to send".
@@ -528,8 +569,15 @@ export async function runReplyAgent(params: {
     if (payloadArray.length === 0) {
       const turnOutcome = resolveTurnOutcome(0);
       if (turnOutcome.shouldSynthesizeDegradedReply) {
+        const autoResumeQueued = await maybeQueueInterruptedRetry();
         return finalizeWithFollowup(
-          buildMissingFinalReplyDegradedPayload(),
+          hasActiveBackgroundTask
+            ? autoResumeQueued
+              ? buildBackgroundTaskStillRunningAutoResumePayload()
+              : buildBackgroundTaskStillRunningPayload()
+            : autoResumeQueued
+              ? buildMissingFinalReplyAutoResumePayload()
+              : buildMissingFinalReplyDegradedPayload(),
           queueKey,
           runFollowupTurn,
         );
@@ -565,8 +613,15 @@ export async function runReplyAgent(params: {
     if (replyPayloads.length === 0) {
       const turnOutcome = resolveTurnOutcome(0);
       if (turnOutcome.shouldSynthesizeDegradedReply) {
+        const autoResumeQueued = await maybeQueueInterruptedRetry();
         return finalizeWithFollowup(
-          buildMissingFinalReplyDegradedPayload(),
+          hasActiveBackgroundTask
+            ? autoResumeQueued
+              ? buildBackgroundTaskStillRunningAutoResumePayload()
+              : buildBackgroundTaskStillRunningPayload()
+            : autoResumeQueued
+              ? buildMissingFinalReplyAutoResumePayload()
+              : buildMissingFinalReplyDegradedPayload(),
           queueKey,
           runFollowupTurn,
         );

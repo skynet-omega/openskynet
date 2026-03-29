@@ -3,6 +3,7 @@ import type { ReplyPayload } from "../types.js";
 export type InteractiveTurnOutcomeKind =
   | "completed_with_final_reply"
   | "completed_with_visible_progress"
+  | "completed_background_active"
   | "completed_degraded"
   | "failed_no_visible_reply";
 
@@ -24,6 +25,7 @@ export type ResolveInteractiveTurnOutcomeParams = {
   sawToolActivity: boolean;
   deliveredViaMessagingTool: boolean;
   hadExecutionError: boolean;
+  hasActiveBackgroundTask?: boolean;
 };
 
 export function buildMissingFinalReplyDegradedPayload(): ReplyPayload {
@@ -31,6 +33,30 @@ export function buildMissingFinalReplyDegradedPayload(): ReplyPayload {
     text:
       "The agent started working but did not finish a final reply. " +
       "I closed the turn visibly to preserve continuity. Please retry.",
+  };
+}
+
+export function buildMissingFinalReplyAutoResumePayload(): ReplyPayload {
+  return {
+    text:
+      "The agent started working but did not finish a final reply. " +
+      "I preserved continuity and queued an automatic retry.",
+  };
+}
+
+export function buildBackgroundTaskStillRunningPayload(): ReplyPayload {
+  return {
+    text:
+      "The agent started a long-running task and it is still active in the background. " +
+      "I preserved continuity, but there is no finished result yet.",
+  };
+}
+
+export function buildBackgroundTaskStillRunningAutoResumePayload(): ReplyPayload {
+  return {
+    text:
+      "The agent started a long-running task and it is still active in the background. " +
+      "I preserved continuity and queued a follow-up check.",
   };
 }
 
@@ -64,6 +90,18 @@ export function resolveInteractiveTurnOutcome(
         : params.deliveredVisibleToolReply
           ? "visible_tool_reply_only"
           : "messaging_tool_only",
+      idleReason: "message_completed",
+    };
+  }
+
+  if (params.hasActiveBackgroundTask) {
+    return {
+      kind: "completed_background_active",
+      completed: true,
+      shouldSynthesizeDegradedReply: true,
+      persistedStatus: "completed",
+      processedOutcome: "completed",
+      processedReason: "background_task_still_running",
       idleReason: "message_completed",
     };
   }

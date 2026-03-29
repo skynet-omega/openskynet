@@ -66,6 +66,9 @@ export type EmbeddedPiRunResult = {
   // True if a messaging tool (telegram, whatsapp, discord, slack, sessions_send)
   // successfully sent a message. Used to suppress agent's confirmation text.
   didSendViaMessagingTool?: boolean;
+  // True if the run already surfaced a deterministic approval prompt via a
+  // transport tool, so callers can suppress redundant degraded followups.
+  didSendDeterministicApprovalPrompt?: boolean;
   // Texts successfully sent via messaging tools during the run.
   messagingToolSentTexts?: string[];
   // Media URLs successfully sent via messaging tools during the run.

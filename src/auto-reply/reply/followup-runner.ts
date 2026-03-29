@@ -25,7 +25,7 @@ import {
   resolveOriginMessageProvider,
   resolveOriginMessageTo,
 } from "./origin-routing.js";
-import type { FollowupRun } from "./queue.js";
+import type { FollowupRun, QueueSettings } from "./queue.js";
 import {
   applyReplyThreading,
   filterMessagingToolDuplicates,
@@ -42,6 +42,8 @@ export function createFollowupRunner(params: {
   opts?: GetReplyOptions;
   typing: TypingController;
   typingMode: TypingMode;
+  queueKey?: string;
+  resolvedQueue?: QueueSettings;
   sessionEntry?: SessionEntry;
   sessionStore?: Record<string, SessionEntry>;
   sessionKey?: string;

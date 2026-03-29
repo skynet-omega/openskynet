@@ -119,9 +119,10 @@ vendor/
 package-lock.json
 packages/dashboard-next/.next/
 packages/dashboard-next/out/
-pnpm-lock.yaml
 skills-lock.json
-src/canvas-host/a2ui/*.bundle.js
+# Keep the prebuilt A2UI bundle tracked so fresh clones can build
+# even when vendor/apps sources are not present.
+!src/canvas-host/a2ui/a2ui.bundle.js
 src/canvas-host/a2ui/*.map
 tmp/
 tsc
