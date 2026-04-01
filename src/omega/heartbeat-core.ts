@@ -268,7 +268,6 @@ async function appendScienceBaseRules(params: {
 
 function appendWakeActionLines(params: {
   lines: string[];
-  effectiveWakeAction: OmegaHeartbeatPromptWakeAction;
   wakeAction: OmegaHeartbeatDecisionContext["wakeAction"];
   degradedComponents: OmegaHeartbeatDecisionContext["degradedComponents"];
   stateAuthority: OmegaHeartbeatDecisionContext["stateAuthority"];
@@ -277,7 +276,6 @@ function appendWakeActionLines(params: {
 }): void {
   const {
     lines,
-    effectiveWakeAction,
     wakeAction,
     degradedComponents,
     stateAuthority,
@@ -502,7 +500,6 @@ export async function buildOmegaHeartbeatPrompt(params: {
   ];
   appendWakeActionLines({
     lines,
-    effectiveWakeAction,
     wakeAction,
     degradedComponents,
     stateAuthority,
