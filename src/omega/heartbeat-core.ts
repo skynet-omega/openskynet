@@ -126,6 +126,7 @@ async function loadOmegaHeartbeatDecisionContext(params: {
     shouldRunAutonomy: decisionContext.policy.shouldRunAutonomy,
     shouldDispatchPrompt,
     degradedComponents: decisionContext.degradedComponents,
+    runtimeObserver: authority.runtimeObserver,
   };
 }
 
@@ -158,6 +159,7 @@ export async function buildOmegaHeartbeatPrompt(params: {
     driveSignal: sharedDriveSignal,
     shouldDispatchPrompt,
     degradedComponents,
+    runtimeObserver,
   } = await loadOmegaHeartbeatDecisionContext(params);
   const engines = getOmegaHeartbeatEngineRegistry();
 
@@ -287,6 +289,16 @@ export async function buildOmegaHeartbeatPrompt(params: {
     lines.push(
       "Operational memory is aging; prefer lightweight revalidation before committing to new branches of work.",
     );
+  }
+  if (runtimeObserver?.freshness === "fresh") {
+    lines.push(
+      `Runtime observer signal: recent runtime trajectories improved next-state prediction by ${runtimeObserver.improvementOverBaseline.toFixed(2)} over baseline (${runtimeObserver.accuracy.toFixed(2)} accuracy across ${runtimeObserver.trajectorySamples} samples).`,
+    );
+    if (runtimeObserver.dominantLabel) {
+      lines.push(
+        `Observed dominant runtime mode: ${runtimeObserver.dominantLabel}. Use this only as a soft causal prior; do not override verified state.`,
+      );
+    }
   }
 
   if (controllerState?.dispatchPlan.shouldDispatchLlmTurn && controllerState.selectedWorkItem) {

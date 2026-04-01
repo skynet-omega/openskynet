@@ -861,6 +861,107 @@ describe("omega heartbeat", () => {
     expect(prompt).toContain("Revalidate active state before expanding scope");
   });
 
+  it("includes a fresh runtime observer signal as a soft causal prior in the wake prompt", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    vi.spyOn(runtimeAuthority, "loadOpenSkynetOmegaRuntimeAuthority").mockResolvedValue({
+      workspaceRoot,
+      sessionKey: "main",
+      project: {
+        key: "skynet",
+        name: "Skynet",
+        role: "lab",
+        mission: "benchmark",
+        benchmarkPurpose: "benchmark",
+        successCriteria: [],
+      },
+      memoryCandidates: [],
+      decisionContext: {
+        timeline: [],
+        sessionState: undefined,
+        kernel: makeKernel(),
+        wsp: undefined,
+        controllerState: {
+          dispatchPlan: {
+            shouldDispatchLlmTurn: true,
+            selectedAction: "probe",
+          },
+          selectedWorkItem: {
+            id: "maintenance:agenda:test",
+            detail: "Inspect runtime trajectory signal.",
+            queueKind: "maintenance",
+          },
+        },
+        operationalSummary: {
+          recentTurnCount: 1,
+          recentResolvedTurns: 1,
+          recentStalledTurns: 0,
+          latestTurnHealth: "resolved",
+          freshness: "fresh",
+          averageCausalImpact: 0.4,
+          latestCausalImpact: 0.4,
+        },
+        stateAuthority: {
+          continuity: {
+            source: "session-context",
+            status: "derived",
+            reason: "ok",
+          },
+          executive: {
+            source: "controller-state",
+            status: "derived",
+            reason: "ok",
+          },
+          operationalHealth: {
+            source: "operational-memory",
+            status: "authoritative",
+            reason: "fresh_turn_health",
+          },
+          worldObservation: {
+            source: "world-model",
+            status: "derived",
+            reason: "ok",
+          },
+          drives: {
+            source: "kernel",
+            status: "derived",
+            reason: "ok",
+          },
+        },
+        policy: {
+          wakeAction: { kind: "maintain", reason: "maintenance_selected" },
+          driveSignal: { kind: "idle" },
+          driveSignalSource: "kernel",
+          shouldRunAutonomy: false,
+          needsRecoveryAttention: false,
+        },
+        shouldDispatchHeartbeatPrompt: true,
+        degradedComponents: [],
+      },
+      runtimeObserver: {
+        updatedAt: Date.now(),
+        freshness: "fresh",
+        accuracy: 0.82,
+        majorityBaseline: 0.71,
+        improvementOverBaseline: 0.12,
+        trajectorySamples: 95,
+        harvestedEpisodes: 97,
+        lookback: 3,
+        dominantLabel: "stall",
+      },
+      worldSnapshot: undefined,
+      livingState: undefined,
+    } as any);
+
+    const prompt = await buildOmegaHeartbeatPrompt({
+      workspaceRoot,
+      sessionKey: "main",
+    });
+
+    expect(prompt).toContain("Runtime observer signal");
+    expect(prompt).toContain("soft causal prior");
+    expect(prompt).toContain("stall");
+  });
+
   it("returns no prompt when the executive dispatch plan defers active work under budget pressure", async () => {
     const workspaceRoot = await createWorkspaceRoot();
     await recordOmegaSessionOutcome({

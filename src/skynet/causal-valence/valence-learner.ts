@@ -22,6 +22,10 @@ function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
 
+function zeroVector(length: number): number[] {
+  return Array.from({ length }, () => 0);
+}
+
 function encodeFreshness(freshness: SkynetCausalContinuityFreshness): number[] {
   return [
     freshness === "fresh" ? 1 : 0,
@@ -76,7 +80,7 @@ export function trainSkynetCausalValenceModel(
   const vectorLength = encodeSkynetCausalEpisodeFeatures(episodes[0]).length;
   const sums = LABELS.reduce(
     (acc, label) => {
-      acc[label] = new Array<number>(vectorLength).fill(0);
+      acc[label] = zeroVector(vectorLength);
       return acc;
     },
     {} as Record<SkynetCausalValenceLabel, number[]>,
@@ -100,10 +104,7 @@ export function trainSkynetCausalValenceModel(
   const centroids = LABELS.reduce(
     (acc, label) => {
       const count = counts[label];
-      acc[label] =
-        count > 0
-          ? sums[label].map((value) => value / count)
-          : new Array<number>(vectorLength).fill(0);
+      acc[label] = count > 0 ? sums[label].map((value) => value / count) : zeroVector(vectorLength);
       return acc;
     },
     {} as Record<SkynetCausalValenceLabel, number[]>,

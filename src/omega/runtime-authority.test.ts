@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { syncOpenSkynetLivingMemory } from "./living-memory.js";
 import { loadOpenSkynetOmegaRuntimeAuthority } from "./runtime-authority.js";
+import { resolveOmegaRuntimeObserverArtifactPath } from "./runtime-observer.js";
 import { loadOmegaWorldModelSnapshot } from "./world-model.js";
 
 describe("omega runtime authority", () => {
@@ -76,5 +77,39 @@ describe("omega runtime authority", () => {
     expect(authority.worldSnapshot).toEqual(
       authority.decisionContext.controllerState?.worldSnapshot,
     );
+  });
+
+  it("loads a fresh runtime observer signal only when the lab artifact passes thresholds", async () => {
+    await fs.mkdir(path.dirname(resolveOmegaRuntimeObserverArtifactPath(workspaceRoot)), {
+      recursive: true,
+    });
+    await fs.writeFile(
+      resolveOmegaRuntimeObserverArtifactPath(workspaceRoot),
+      JSON.stringify(
+        {
+          updatedAt: Date.now(),
+          status: "pass",
+          accuracy: 0.82,
+          majorityBaseline: 0.7,
+          improvementOverBaseline: 0.12,
+          trajectorySamples: 95,
+          harvestedEpisodes: 97,
+          lookback: 3,
+          labelCoverage: { stall: 67, damage: 15, progress: 9, relief: 2, frustration: 2 },
+        },
+        null,
+        2,
+      ),
+      "utf-8",
+    );
+
+    const authority = await loadOpenSkynetOmegaRuntimeAuthority({
+      workspaceRoot,
+      sessionKey,
+    });
+
+    expect(authority.runtimeObserver?.freshness).toBe("fresh");
+    expect(authority.runtimeObserver?.improvementOverBaseline).toBeGreaterThanOrEqual(0.08);
+    expect(authority.runtimeObserver?.dominantLabel).toBe("stall");
   });
 });

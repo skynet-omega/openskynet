@@ -28,8 +28,9 @@ vi.mock("../config/config.js", async (importOriginal) => {
 });
 
 import "./test-helpers/fast-core-tools.js";
-import { createOpenClawTools } from "./openclaw-tools.js";
+import { resolveOmegaRuntimeObserverArtifactPath } from "../omega/runtime-observer.js";
 import { recordOmegaSessionOutcome } from "../omega/session-context.js";
+import { createOpenClawTools } from "./openclaw-tools.js";
 
 describe("omega_work hard tasks", () => {
   let workspaceRoot = "";
@@ -198,6 +199,72 @@ describe("omega_work hard tasks", () => {
           ok: true,
           expectedKeys: ["status", "summary"],
         },
+      },
+    });
+  });
+
+  it("exposes a fresh runtime observer prior in omega_work results when available", async () => {
+    await fs.mkdir(path.dirname(resolveOmegaRuntimeObserverArtifactPath(workspaceRoot)), {
+      recursive: true,
+    });
+    await fs.writeFile(
+      resolveOmegaRuntimeObserverArtifactPath(workspaceRoot),
+      JSON.stringify(
+        {
+          updatedAt: Date.now(),
+          status: "pass",
+          accuracy: 0.82,
+          majorityBaseline: 0.71,
+          improvementOverBaseline: 0.12,
+          trajectorySamples: 95,
+          harvestedEpisodes: 97,
+          lookback: 3,
+          labelCoverage: { stall: 67, damage: 15, progress: 9, relief: 2, frustration: 2 },
+        },
+        null,
+        2,
+      ),
+      "utf-8",
+    );
+
+    callGatewayMock.mockImplementation(async (opts: unknown) => {
+      const request = opts as { method?: string };
+      if (request.method === "agent") {
+        return { runId: "run-runtime-observer", status: "accepted" };
+      }
+      if (request.method === "agent.wait") {
+        await fs.writeFile(fileA, "def clamp(v):\n    return max(0, v)\n", "utf-8");
+        return { status: "ok" };
+      }
+      if (request.method === "chat.history") {
+        return {
+          messages: [
+            {
+              role: "assistant",
+              content: [{ type: "text", text: '{"status":"ok","summary":"patched one file"}' }],
+            },
+          ],
+        };
+      }
+      throw new Error(`unexpected method: ${String(request.method)}`);
+    });
+
+    const result = await getOmegaWorkTool().execute("call-runtime-observer", {
+      task: "arregla solo el modulo",
+      sessionKey: "main",
+      timeoutSeconds: 1,
+      expectsJson: true,
+      expectedKeys: ["status", "summary"],
+      expectedPaths: [relA],
+    });
+
+    expect(result.details).toMatchObject({
+      route: "omega_delegate",
+      runtimeObserver: {
+        freshness: "fresh",
+        improvementOverBaseline: 0.12,
+        trajectorySamples: 95,
+        dominantLabel: "stall",
       },
     });
   });
@@ -843,7 +910,9 @@ describe("omega_work hard tasks", () => {
           messages: [
             {
               role: "assistant",
-              content: [{ type: "text", text: '{"status":"ok","summary":"patched after escalation"}' }],
+              content: [
+                { type: "text", text: '{"status":"ok","summary":"patched after escalation"}' },
+              ],
             },
           ],
         };

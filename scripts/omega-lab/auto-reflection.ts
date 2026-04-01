@@ -70,15 +70,11 @@ function calculateConfidence(successCount: number, failureCount: number): number
  * Genera sugerencia de solución basada en episodes exitosos
  */
 function suggestSolution(episodes: OmegaRecoveryEpisode[]): string {
-  const successful = episodes.filter(
-    (e) => e.status === "completed",
-  );
+  const successful = episodes.filter((e) => e.status === "completed");
   if (successful.length === 0) return "Unknown solution (no successes yet)";
 
   // Tomar la ruta más reciente exitosa
-  const latestSuccess = successful.sort(
-    (a, b) => b.updatedAt - a.updatedAt,
-  )[0];
+  const latestSuccess = successful.sort((a, b) => b.updatedAt - a.updatedAt)[0];
 
   if (latestSuccess?.lastRoute) {
     return `Apply route: ${latestSuccess.lastRoute}`;
@@ -94,13 +90,8 @@ function suggestSolution(episodes: OmegaRecoveryEpisode[]): string {
 /**
  * Sintetiza episodes en una regla aprendida
  */
-function synthesizeRule(
-  errorKind: string,
-  episodes: OmegaRecoveryEpisode[],
-): LearnedRule {
-  const successful = episodes.filter(
-    (e) => e.status === "completed",
-  ).length;
+function synthesizeRule(errorKind: string, episodes: OmegaRecoveryEpisode[]): LearnedRule {
+  const successful = episodes.filter((e) => e.status === "completed").length;
   const failed = episodes.filter((e) => e.status !== "completed").length;
   const confidence = calculateConfidence(successful, failed);
 
@@ -145,15 +136,8 @@ function formatRuleMarkdown(rule: LearnedRule, ruleId: number): string {
  * Escribe reglas aprendidas a memory/omega-learned-rules.md
  * APPEND-ONLY: nunca sobrescribe
  */
-async function writeLearnedRules(
-  workspaceRoot: string,
-  rules: LearnedRule[],
-): Promise<void> {
-  const filePath = path.join(
-    workspaceRoot,
-    "memory",
-    "omega-learned-rules.md",
-  );
+async function writeLearnedRules(workspaceRoot: string, rules: LearnedRule[]): Promise<void> {
+  const filePath = path.join(workspaceRoot, "memory", "omega-learned-rules.md");
 
   // Verificar que el directorio existe
   await fs.mkdir(path.dirname(filePath), { recursive: true });
@@ -230,9 +214,6 @@ export async function executeAutoReflection(params: {
 /**
  * Calcula si es momento de reflexionar basado en turn count
  */
-export function shouldReflect(
-  turnCount: number,
-  reflectionIntervalTurns: number = 100,
-): boolean {
+export function shouldReflect(turnCount: number, reflectionIntervalTurns: number = 100): boolean {
   return turnCount % reflectionIntervalTurns === 0 && turnCount > 0;
 }

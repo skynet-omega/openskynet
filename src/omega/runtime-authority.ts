@@ -8,6 +8,10 @@ import {
   loadOpenSkynetLivingState,
   type OpenSkynetLivingState,
 } from "./living-memory.js";
+import {
+  loadOmegaRuntimeObserverSignal,
+  type OmegaRuntimeObserverSignal,
+} from "./runtime-observer.js";
 import type { OmegaWorldModelSnapshot } from "./world-model.js";
 
 export type OpenSkynetOmegaRuntimeAuthority = {
@@ -18,6 +22,7 @@ export type OpenSkynetOmegaRuntimeAuthority = {
   decisionContext: OmegaDecisionContext;
   worldSnapshot?: OmegaWorldModelSnapshot;
   livingState?: OpenSkynetLivingState;
+  runtimeObserver?: OmegaRuntimeObserverSignal;
 };
 
 export async function loadOpenSkynetOmegaRuntimeAuthority(params: {
@@ -29,7 +34,7 @@ export async function loadOpenSkynetOmegaRuntimeAuthority(params: {
   watchedPaths?: string[];
 }): Promise<OpenSkynetOmegaRuntimeAuthority> {
   const memoryCandidates = await collectOpenSkynetMemoryCandidates(params.workspaceRoot);
-  const [project, decisionContext, livingState] = await Promise.all([
+  const [project, decisionContext, livingState, runtimeObserver] = await Promise.all([
     loadOpenSkynetInternalProjectProfile(params.workspaceRoot),
     loadOmegaDecisionContext({
       workspaceRoot: params.workspaceRoot,
@@ -44,6 +49,7 @@ export async function loadOpenSkynetOmegaRuntimeAuthority(params: {
       workspaceRoot: params.workspaceRoot,
       sessionKey: params.sessionKey,
     }),
+    loadOmegaRuntimeObserverSignal(params.workspaceRoot),
   ]);
 
   return {
@@ -54,5 +60,6 @@ export async function loadOpenSkynetOmegaRuntimeAuthority(params: {
     decisionContext,
     worldSnapshot: decisionContext.controllerState?.worldSnapshot,
     livingState,
+    runtimeObserver,
   };
 }
