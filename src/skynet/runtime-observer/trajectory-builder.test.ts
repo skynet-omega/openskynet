@@ -26,6 +26,8 @@ function buildEpisode(
     },
     outcome: {
       status: bootstrapLabel === "damage" ? "error" : "ok",
+      failureDomain: bootstrapLabel === "damage" ? "cognitive" : "none",
+      failureClass: bootstrapLabel === "damage" ? "validation_error" : "none",
       targetSatisfied: bootstrapLabel !== "stall" && bootstrapLabel !== "damage",
       validationPassed: bootstrapLabel !== "damage",
       continuityDelta: bootstrapLabel === "progress" ? 0.7 : bootstrapLabel === "stall" ? 0.05 : 0,
@@ -65,5 +67,9 @@ describe("skynet runtime trajectory builder", () => {
     expect(summary.historyStallRatio).toBe(1);
     expect(summary.currentEditRatio).toBe(1);
     expect(summary.currentValidationIntensity).toBeGreaterThan(0.5);
+    expect(summary.currentFreshRatio).toBe(1);
+    expect(summary.currentOkRatio).toBe(1);
+    expect(summary.currentEnvironmentalFailure).toBe(0);
+    expect(summary.currentTargetSatisfied).toBe(1);
   });
 });

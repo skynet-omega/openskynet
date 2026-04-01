@@ -129,6 +129,12 @@ describe("buildMissingFinalReplyDegradedPayload", () => {
       text:
         "The agent started working but did not finish a final reply. " +
         "I closed the turn visibly to preserve continuity. Please retry.",
+      channelData: {
+        openclaw: {
+          suppressAutoTts: true,
+          continuityNotice: true,
+        },
+      },
     });
   });
 });

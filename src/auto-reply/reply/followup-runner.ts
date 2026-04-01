@@ -10,6 +10,7 @@ import type { TypingMode } from "../../config/types.js";
 import { logVerbose } from "../../globals.js";
 import { registerAgentRunContext } from "../../infra/agent-events.js";
 import { defaultRuntime } from "../../runtime.js";
+import { maybeApplyTtsToPayload } from "../../tts/tts.js";
 import { isInternalMessageChannel } from "../../utils/message-channel.js";
 import { stripHeartbeatToken } from "../heartbeat.js";
 import type { OriginatingChannelType } from "../templating.js";
@@ -87,6 +88,7 @@ export function createFollowupRunner(params: {
     }
 
     let deliveredCount = 0;
+    const sessionTtsAuto = sessionEntry?.ttsAuto;
     for (const payload of payloads) {
       if (!payload?.text && !payload?.mediaUrl && !payload?.mediaUrls?.length) {
         continue;
@@ -99,11 +101,19 @@ export function createFollowupRunner(params: {
         continue;
       }
       await typingSignals.signalTextDelta(payload.text);
+      const ttsPayload = await maybeApplyTtsToPayload({
+        payload,
+        cfg: queued.run.config,
+        channel: originatingChannel ?? queued.run.messageProvider,
+        kind: "final",
+        inboundAudio: false,
+        ttsAuto: sessionTtsAuto,
+      });
 
       // Route to originating channel if set, otherwise fall back to dispatcher.
       if (shouldRouteToOriginating) {
         const result = await routeReply({
-          payload,
+          payload: ttsPayload,
           channel: originatingChannel,
           to: originatingTo,
           sessionKey: queued.run.sessionKey,
@@ -127,14 +137,14 @@ export function createFollowupRunner(params: {
             originatingChannel,
           });
           if (opts?.onBlockReply && origin && origin === provider) {
-            await opts.onBlockReply(payload);
+            await opts.onBlockReply(ttsPayload);
             deliveredCount += 1;
           }
         } else {
           deliveredCount += 1;
         }
       } else if (opts?.onBlockReply) {
-        await opts.onBlockReply(payload);
+        await opts.onBlockReply(ttsPayload);
         deliveredCount += 1;
       }
     }

@@ -26,6 +26,8 @@ function buildEpisode(
     },
     outcome: {
       status: success ? "ok" : "error",
+      failureDomain: success ? "none" : "cognitive",
+      failureClass: success ? "none" : "validation_error",
       targetSatisfied: bootstrapLabel === "progress" || bootstrapLabel === "relief",
       validationPassed: success,
       continuityDelta: bootstrapLabel === "progress" || bootstrapLabel === "relief" ? 0.7 : 0.05,

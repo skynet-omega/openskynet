@@ -81,5 +81,112 @@ describe("skynet observed causal harvester", () => {
     expect(result.episodes[0]?.outcome.status).toBe("ok");
     expect(result.episodes[1]?.transition.operations[0]?.kind).toBe("edit");
     expect(result.episodes[1]?.outcome.status).toBe("error");
+    expect(result.episodes[1]?.outcome.failureClass).toBe("validation_error");
+    expect(result.episodes[1]?.outcome.failureDomain).toBe("cognitive");
+  });
+
+  it("treats successful diagnostic exec with no explicit path as target-satisfying relief after failures", async () => {
+    const lines = [
+      {
+        type: "message",
+        timestamp: "2026-04-01T00:00:00.000Z",
+        message: {
+          role: "assistant",
+          content: [
+            {
+              type: "toolCall",
+              id: "edit-1",
+              name: "edit",
+              arguments: { file_path: "/tmp/a.ts" },
+            },
+          ],
+        },
+      },
+      {
+        type: "message",
+        message: {
+          role: "toolResult",
+          toolCallId: "edit-1",
+          toolName: "edit",
+          details: { status: "error", error: "syntax error" },
+        },
+      },
+      {
+        type: "message",
+        timestamp: "2026-04-01T00:01:00.000Z",
+        message: {
+          role: "assistant",
+          content: [
+            {
+              type: "toolCall",
+              id: "exec-2",
+              name: "exec",
+              arguments: { command: "openclaw status" },
+            },
+          ],
+        },
+      },
+      {
+        type: "message",
+        message: {
+          role: "toolResult",
+          toolCallId: "exec-2",
+          toolName: "exec",
+          details: { status: "completed", exitCode: 0 },
+        },
+      },
+    ];
+    await fs.writeFile(
+      sessionFile,
+      lines.map((line) => JSON.stringify(line)).join("\n") + "\n",
+      "utf-8",
+    );
+
+    const result = await harvestSkynetObservedCausalEpisodes({ sessionFiles: [sessionFile] });
+
+    expect(result.episodes).toHaveLength(2);
+    expect(result.episodes[1]?.outcome.targetSatisfied).toBe(true);
+    expect(result.episodes[1]?.bootstrapLabel).toBe("relief");
+  });
+
+  it("classifies rate limits as environmental instead of cognitive damage", async () => {
+    const lines = [
+      {
+        type: "message",
+        timestamp: "2026-04-01T00:00:00.000Z",
+        message: {
+          role: "assistant",
+          content: [
+            {
+              type: "toolCall",
+              id: "exec-rl",
+              name: "exec",
+              arguments: { command: "openclaw status" },
+            },
+          ],
+        },
+      },
+      {
+        type: "message",
+        message: {
+          role: "toolResult",
+          toolCallId: "exec-rl",
+          toolName: "exec",
+          details: { status: "error", error: "429 No capacity available for model gemini" },
+        },
+      },
+    ];
+    await fs.writeFile(
+      sessionFile,
+      lines.map((line) => JSON.stringify(line)).join("\n") + "\n",
+      "utf-8",
+    );
+
+    const result = await harvestSkynetObservedCausalEpisodes({ sessionFiles: [sessionFile] });
+
+    expect(result.episodes).toHaveLength(1);
+    expect(result.episodes[0]?.outcome.failureDomain).toBe("environmental");
+    expect(result.episodes[0]?.outcome.failureClass).toBe("provider_rate_limit");
+    expect(result.episodes[0]?.bootstrapLabel).toBe("stall");
   });
 });

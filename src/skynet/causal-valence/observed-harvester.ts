@@ -3,6 +3,8 @@ import type {
   SkynetCausalContinuityFreshness,
   SkynetCausalEpisode,
   SkynetCausalEpisodeContext,
+  SkynetCausalFailureClass,
+  SkynetCausalFailureDomain,
   SkynetCausalEpisodeOutcome,
 } from "./episode-ledger.js";
 import { deriveSkynetBootstrapValenceLabel } from "./episode-ledger.js";
@@ -36,6 +38,15 @@ type DerivedAction =
       transition: SkynetWorldTransitionObservation;
       validationIntensity: number;
       mutative: boolean;
+      semanticKind:
+        | "discover"
+        | "read"
+        | "validate"
+        | "create"
+        | "delete"
+        | "rename"
+        | "edit"
+        | "gateway";
     }
   | undefined;
 
@@ -96,10 +107,17 @@ function deriveToolTransition(
     const kindMap: Record<string, SkynetTransitionOperationKind> = {
       discover: "noop",
       read: "noop",
+      validate: "noop",
       create: "create",
       delete: "delete",
       rename: "rename",
     };
+    const validationIntensity =
+      extraction.kind === "validate"
+        ? 0.95
+        : extraction.kind === "discover" || extraction.kind === "read"
+          ? 0.2
+          : 0.7;
     return {
       transition: {
         targetPaths: extraction.referencedPaths,
@@ -109,11 +127,20 @@ function deriveToolTransition(
           isTarget: true,
         })),
       },
-      validationIntensity: extraction.kind === "discover" || extraction.kind === "read" ? 0.2 : 0.7,
+      validationIntensity,
       mutative:
         extraction.kind === "create" ||
         extraction.kind === "delete" ||
         extraction.kind === "rename",
+      semanticKind:
+        extraction.kind === "discover" ||
+        extraction.kind === "read" ||
+        extraction.kind === "validate" ||
+        extraction.kind === "create" ||
+        extraction.kind === "delete" ||
+        extraction.kind === "rename"
+          ? extraction.kind
+          : "discover",
     };
   }
 
@@ -134,6 +161,7 @@ function deriveToolTransition(
       },
       validationIntensity: 0.2,
       mutative: false,
+      semanticKind: "read",
     };
   }
 
@@ -154,6 +182,7 @@ function deriveToolTransition(
       },
       validationIntensity: 0.85,
       mutative: true,
+      semanticKind: "edit",
     };
   }
 
@@ -172,6 +201,7 @@ function deriveToolTransition(
       },
       validationIntensity: 0.8,
       mutative: true,
+      semanticKind: "edit",
     };
   }
 
@@ -190,6 +220,7 @@ function deriveToolTransition(
       },
       validationIntensity: 0.3,
       mutative: false,
+      semanticKind: "gateway",
     };
   }
 
@@ -197,11 +228,20 @@ function deriveToolTransition(
 }
 
 function deriveOutcome(params: {
-  toolName: string;
   details: Record<string, unknown> | undefined;
   toolResult: TranscriptLine["message"];
   mutative: boolean;
+  semanticKind:
+    | "discover"
+    | "read"
+    | "validate"
+    | "create"
+    | "delete"
+    | "rename"
+    | "edit"
+    | "gateway";
   targetCount: number;
+  validationIntensity: number;
 }): SkynetCausalEpisodeOutcome | undefined {
   const details = params.details ?? {};
   const detailStatus = typeof details.status === "string" ? details.status : undefined;
@@ -209,18 +249,93 @@ function deriveOutcome(params: {
     return undefined;
   }
   const exitCode = typeof details.exitCode === "number" ? details.exitCode : undefined;
-  const hasErrorText =
-    typeof details.error === "string" ||
-    params.toolResult?.content?.some(
+  const textBlocks = (params.toolResult?.content ?? [])
+    .filter(
       (part) =>
         part &&
         typeof part === "object" &&
         (part as { type?: string }).type === "text" &&
-        typeof (part as { text?: string }).text === "string" &&
-        (part as { text: string }).text.includes('"status": "error"'),
-    ) === true;
+        typeof (part as { text?: string }).text === "string",
+    )
+    .map((part) => String((part as { text: string }).text));
+  const combinedText = [typeof details.error === "string" ? details.error : "", ...textBlocks]
+    .join("\n")
+    .toLowerCase();
+  const hasErrorText =
+    typeof details.error === "string" ||
+    textBlocks.some((text) => text.includes('"status": "error"'));
   const isOk =
     !hasErrorText && detailStatus !== "error" && (exitCode === undefined || exitCode === 0);
+  const classifyFailure = (): {
+    failureDomain: SkynetCausalFailureDomain;
+    failureClass: SkynetCausalFailureClass;
+  } => {
+    if (isOk) {
+      return { failureDomain: "none", failureClass: "none" };
+    }
+    if (
+      combinedText.includes("rate limit") ||
+      combinedText.includes("no capacity available") ||
+      combinedText.includes("resource exhausted") ||
+      combinedText.includes("429")
+    ) {
+      return { failureDomain: "environmental", failureClass: "provider_rate_limit" };
+    }
+    if (
+      detailStatus === "timeout" ||
+      combinedText.includes("timed out") ||
+      combinedText.includes("timeout")
+    ) {
+      return { failureDomain: "environmental", failureClass: "provider_timeout" };
+    }
+    if (
+      combinedText.includes("service restart") ||
+      combinedText.includes("config change detected") ||
+      combinedText.includes("restarting") ||
+      combinedText.includes("wait for active embedded runs timed out")
+    ) {
+      return { failureDomain: "environmental", failureClass: "gateway_restart" };
+    }
+    if (
+      combinedText.includes("gateway closed") ||
+      combinedText.includes("connection reset") ||
+      combinedText.includes("connection refused") ||
+      combinedText.includes("token mismatch")
+    ) {
+      return { failureDomain: "environmental", failureClass: "gateway_connection" };
+    }
+    if (
+      combinedText.includes("permission denied") ||
+      combinedText.includes("eacces") ||
+      combinedText.includes("operation not permitted")
+    ) {
+      return { failureDomain: "environmental", failureClass: "permission_denied" };
+    }
+    if (
+      combinedText.includes("enoent") ||
+      combinedText.includes("no such file") ||
+      combinedText.includes("cannot find")
+    ) {
+      return { failureDomain: "cognitive", failureClass: "missing_path" };
+    }
+    if (
+      combinedText.includes("syntax error") ||
+      combinedText.includes("type error") ||
+      combinedText.includes("validation failed") ||
+      combinedText.includes("test failed")
+    ) {
+      return { failureDomain: "cognitive", failureClass: "validation_error" };
+    }
+    return { failureDomain: "mixed", failureClass: "unknown_error" };
+  };
+  const failure = classifyFailure();
+  const targetSatisfied =
+    isOk &&
+    (params.targetCount > 0 ||
+      params.semanticKind === "discover" ||
+      params.semanticKind === "read" ||
+      params.semanticKind === "validate" ||
+      params.semanticKind === "gateway");
   const status: SkynetCausalEpisodeOutcome["status"] = isOk
     ? "ok"
     : detailStatus === "timeout"
@@ -228,14 +343,33 @@ function deriveOutcome(params: {
       : "error";
   return {
     status,
-    targetSatisfied: isOk && params.targetCount > 0,
+    failureDomain: failure.failureDomain,
+    failureClass: failure.failureClass,
+    targetSatisfied,
     validationPassed: isOk,
-    continuityDelta: isOk ? (params.mutative ? 0.65 : 0.2) : 0,
-    recoveryBurden: isOk ? 0.1 : params.mutative ? 0.75 : 0.45,
+    continuityDelta: isOk
+      ? params.mutative
+        ? 0.65
+        : params.validationIntensity >= 0.75
+          ? 0.4
+          : 0.2
+      : 0,
+    recoveryBurden: isOk
+      ? 0.1
+      : failure.failureDomain === "environmental"
+        ? params.mutative
+          ? 0.45
+          : 0.25
+        : params.mutative
+          ? 0.75
+          : 0.45,
     collateralDamage:
-      !isOk && params.mutative && params.targetCount > 1
+      !isOk &&
+      failure.failureDomain !== "environmental" &&
+      params.mutative &&
+      params.targetCount > 1
         ? 0.45
-        : !isOk && params.mutative
+        : !isOk && failure.failureDomain !== "environmental" && params.mutative
           ? 0.25
           : 0,
   };
@@ -333,11 +467,12 @@ export async function harvestSkynetObservedCausalEpisodes(params: {
           continue;
         }
         const outcome = deriveOutcome({
-          toolName: toolCall.toolName,
           details: message.details,
           toolResult: message,
           mutative: derived.mutative,
+          semanticKind: derived.semanticKind,
           targetCount: derived.transition.targetPaths?.length ?? 0,
+          validationIntensity: derived.validationIntensity,
         });
         if (!outcome) {
           skippedToolResults += 1;

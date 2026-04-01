@@ -26,6 +26,8 @@ function makeEpisode(
     },
     outcome: params.outcome ?? {
       status: "ok",
+      failureDomain: "none",
+      failureClass: "none",
       targetSatisfied: true,
       validationPassed: true,
       continuityDelta: 0.7,

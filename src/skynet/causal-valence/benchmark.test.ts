@@ -32,6 +32,13 @@ function buildEpisode(
     },
     outcome: {
       status: progressLike ? "ok" : label === "stall" ? "ok" : "error",
+      failureDomain: failureLike ? "cognitive" : "none",
+      failureClass:
+        label === "damage"
+          ? "validation_error"
+          : label === "frustration"
+            ? "unknown_error"
+            : "none",
       targetSatisfied: progressLike,
       validationPassed: progressLike,
       continuityDelta: progressLike ? 0.75 : label === "stall" ? 0.05 : 0,

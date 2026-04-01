@@ -32,6 +32,8 @@ describe("skynet causal episode ledger", () => {
         },
         outcome: {
           status: "ok",
+          failureDomain: "none",
+          failureClass: "none",
           targetSatisfied: true,
           validationPassed: true,
           continuityDelta: 0.8,
@@ -52,6 +54,8 @@ describe("skynet causal episode ledger", () => {
         },
         outcome: {
           status: "error",
+          failureDomain: "cognitive",
+          failureClass: "validation_error",
           targetSatisfied: false,
           validationPassed: false,
           continuityDelta: 0,
@@ -60,6 +64,28 @@ describe("skynet causal episode ledger", () => {
         },
       }),
     ).toBe("damage");
+
+    expect(
+      deriveSkynetBootstrapValenceLabel({
+        context: {
+          taskText: "look at logs",
+          continuityFreshness: "fresh",
+          failureStreak: 2,
+          targetCount: 0,
+          validationIntensity: 0.2,
+        },
+        outcome: {
+          status: "ok",
+          failureDomain: "none",
+          failureClass: "none",
+          targetSatisfied: true,
+          validationPassed: true,
+          continuityDelta: 0.2,
+          recoveryBurden: 0.1,
+          collateralDamage: 0,
+        },
+      }),
+    ).toBe("relief");
   });
 
   it("appends and reloads episodes with persisted label counts", async () => {
@@ -79,6 +105,8 @@ describe("skynet causal episode ledger", () => {
       },
       outcome: {
         status: "ok",
+        failureDomain: "none",
+        failureClass: "none",
         targetSatisfied: true,
         validationPassed: true,
         continuityDelta: 0.7,

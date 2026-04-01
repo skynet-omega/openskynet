@@ -32,6 +32,23 @@ describe("skynet shell action extractor", () => {
       extractable: true,
       referencedPaths: ["/tmp/a.ts", "/tmp/b.ts"],
     });
+    expect(extractSkynetShellAction("bash script.sh input --out /tmp/x.jpg")).toMatchObject({
+      kind: "create",
+      extractable: true,
+      referencedPaths: ["/tmp/x.jpg"],
+    });
+    expect(extractSkynetShellAction("cat << 'EOF' > test-nle-complex.ts")).toMatchObject({
+      kind: "create",
+      extractable: true,
+      referencedPaths: ["test-nle-complex.ts"],
+    });
+    expect(
+      extractSkynetShellAction("npx vitest ./src/omega/neural-logic-engine.test.ts --run"),
+    ).toMatchObject({
+      kind: "validate",
+      extractable: true,
+      referencedPaths: ["./src/omega/neural-logic-engine.test.ts"],
+    });
   });
 
   it("leaves opaque commands opaque", () => {
@@ -39,7 +56,7 @@ describe("skynet shell action extractor", () => {
       kind: "opaque",
       extractable: false,
     });
-    expect(extractSkynetShellAction("bash script.sh input --out /tmp/x")).toMatchObject({
+    expect(extractSkynetShellAction("node custom-script.js --mode weird")).toMatchObject({
       kind: "opaque",
       extractable: false,
     });

@@ -6,6 +6,17 @@ import type { SkynetWorldTransitionObservation } from "./world-transition.js";
 
 export type SkynetCausalContinuityFreshness = "fresh" | "aging" | "stale" | "missing";
 export type SkynetCausalValenceLabel = "progress" | "relief" | "stall" | "frustration" | "damage";
+export type SkynetCausalFailureDomain = "none" | "environmental" | "cognitive" | "mixed";
+export type SkynetCausalFailureClass =
+  | "none"
+  | "provider_rate_limit"
+  | "provider_timeout"
+  | "gateway_restart"
+  | "gateway_connection"
+  | "permission_denied"
+  | "missing_path"
+  | "validation_error"
+  | "unknown_error";
 
 export type SkynetCausalEpisodeContext = {
   taskText?: string;
@@ -17,6 +28,8 @@ export type SkynetCausalEpisodeContext = {
 
 export type SkynetCausalEpisodeOutcome = {
   status: "ok" | "error" | "timeout";
+  failureDomain: SkynetCausalFailureDomain;
+  failureClass: SkynetCausalFailureClass;
   targetSatisfied: boolean;
   validationPassed: boolean;
   continuityDelta: number;
@@ -63,6 +76,8 @@ function normalizeContext(context: SkynetCausalEpisodeContext): SkynetCausalEpis
 function normalizeOutcome(outcome: SkynetCausalEpisodeOutcome): SkynetCausalEpisodeOutcome {
   return {
     status: outcome.status,
+    failureDomain: outcome.failureDomain,
+    failureClass: outcome.failureClass,
     targetSatisfied: Boolean(outcome.targetSatisfied),
     validationPassed: Boolean(outcome.validationPassed),
     continuityDelta: clamp01(outcome.continuityDelta),
@@ -89,12 +104,37 @@ export function deriveSkynetBootstrapValenceLabel(params: {
 }): SkynetCausalValenceLabel {
   const context = normalizeContext(params.context);
   const outcome = normalizeOutcome(params.outcome);
+  const isEnvironmentalFailure =
+    outcome.status !== "ok" &&
+    (outcome.failureDomain === "environmental" || outcome.failureClass === "provider_rate_limit");
+  const isCognitiveFailure =
+    outcome.status !== "ok" &&
+    (outcome.failureDomain === "cognitive" ||
+      outcome.failureClass === "validation_error" ||
+      outcome.failureClass === "missing_path");
 
   if (
     outcome.status !== "ok" &&
+    !isEnvironmentalFailure &&
     (outcome.collateralDamage >= 0.35 || outcome.recoveryBurden >= 0.6 || !outcome.validationPassed)
   ) {
     return "damage";
+  }
+  if (
+    isEnvironmentalFailure &&
+    context.failureStreak >= 2 &&
+    outcome.recoveryBurden >= 0.35 &&
+    outcome.collateralDamage <= 0.15
+  ) {
+    return "frustration";
+  }
+  if (
+    isCognitiveFailure &&
+    context.failureStreak >= 1 &&
+    outcome.recoveryBurden >= 0.25 &&
+    outcome.collateralDamage <= 0.2
+  ) {
+    return "frustration";
   }
   if (outcome.status !== "ok" && context.failureStreak >= 2 && outcome.recoveryBurden >= 0.35) {
     return "frustration";
@@ -104,7 +144,8 @@ export function deriveSkynetBootstrapValenceLabel(params: {
     outcome.targetSatisfied &&
     outcome.validationPassed &&
     context.failureStreak >= 1 &&
-    outcome.continuityDelta >= 0.45
+    outcome.continuityDelta >= 0.15 &&
+    outcome.collateralDamage <= 0.1
   ) {
     return "relief";
   }
@@ -118,6 +159,9 @@ export function deriveSkynetBootstrapValenceLabel(params: {
     return "progress";
   }
   if (outcome.status === "ok" && (!outcome.targetSatisfied || outcome.continuityDelta <= 0.15)) {
+    return "stall";
+  }
+  if (isEnvironmentalFailure && outcome.collateralDamage <= 0.1) {
     return "stall";
   }
   if (outcome.collateralDamage >= 0.3 || outcome.recoveryBurden >= 0.55) {

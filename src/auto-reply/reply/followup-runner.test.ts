@@ -9,6 +9,46 @@ import { createMockFollowupRun, createMockTypingController } from "./test-helper
 const runEmbeddedPiAgentMock = vi.fn();
 const routeReplyMock = vi.fn();
 const isRoutableChannelMock = vi.fn();
+const ttsMocks = vi.hoisted(() => ({
+  state: {
+    synthesizeWhenAllowed: false,
+  },
+  maybeApplyTtsToPayload: vi.fn(async (paramsUnknown: unknown) => {
+    const params = paramsUnknown as {
+      payload: {
+        text?: string;
+        mediaUrl?: string;
+        mediaUrls?: string[];
+        audioAsVoice?: boolean;
+        channelData?: Record<string, unknown>;
+      };
+    };
+    const openclawData =
+      params.payload.channelData &&
+      typeof params.payload.channelData === "object" &&
+      !Array.isArray(params.payload.channelData)
+        ? params.payload.channelData.openclaw
+        : undefined;
+    const suppressAutoTts =
+      openclawData &&
+      typeof openclawData === "object" &&
+      !Array.isArray(openclawData) &&
+      (openclawData as { suppressAutoTts?: unknown }).suppressAutoTts === true;
+    if (
+      ttsMocks.state.synthesizeWhenAllowed &&
+      suppressAutoTts !== true &&
+      typeof params.payload?.text === "string" &&
+      params.payload.text.trim()
+    ) {
+      return {
+        ...params.payload,
+        mediaUrl: "https://example.com/followup-tts.opus",
+        audioAsVoice: true,
+      };
+    }
+    return params.payload;
+  }),
+}));
 
 vi.mock(
   "../../agents/model-fallback.js",
@@ -27,6 +67,10 @@ vi.mock("./route-reply.js", async (importOriginal) => {
     routeReply: (...args: unknown[]) => routeReplyMock(...args),
   };
 });
+
+vi.mock("../../tts/tts.js", () => ({
+  maybeApplyTtsToPayload: (params: unknown) => ttsMocks.maybeApplyTtsToPayload(params),
+}));
 
 import { createFollowupRunner } from "./followup-runner.js";
 
@@ -47,6 +91,8 @@ beforeEach(() => {
   isRoutableChannelMock.mockImplementation((ch: string | undefined) =>
     Boolean(ch?.trim() && ROUTABLE_TEST_CHANNELS.has(ch.trim().toLowerCase())),
   );
+  ttsMocks.state.synthesizeWhenAllowed = false;
+  ttsMocks.maybeApplyTtsToPayload.mockClear();
 });
 
 const baseQueuedRun = (messageProvider = "whatsapp"): FollowupRun =>
@@ -212,6 +258,12 @@ describe("createFollowupRunner non-silent outcome guard", () => {
     expect(onBlockReply).toHaveBeenCalledWith(
       expect.objectContaining({
         text: expect.stringContaining("did not finish a final reply"),
+        channelData: expect.objectContaining({
+          openclaw: expect.objectContaining({
+            suppressAutoTts: true,
+            continuityNotice: true,
+          }),
+        }),
       }),
     );
   });
@@ -254,6 +306,43 @@ describe("createFollowupRunner non-silent outcome guard", () => {
     expect(onBlockReply).toHaveBeenCalledWith(
       expect.objectContaining({
         text: expect.stringContaining("did not finish a final reply"),
+        channelData: expect.objectContaining({
+          openclaw: expect.objectContaining({
+            suppressAutoTts: true,
+            continuityNotice: true,
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("applies TTS to real followup payloads when auto-TTS is enabled", async () => {
+    ttsMocks.state.synthesizeWhenAllowed = true;
+    const onBlockReply = createAsyncReplySpy();
+    runEmbeddedPiAgentMock.mockResolvedValueOnce({
+      payloads: [{ text: "Hola, esta es la respuesta real del followup." }],
+      meta: {},
+    });
+
+    const runner = createFollowupRunner({
+      opts: { onBlockReply },
+      typing: createMockTypingController(),
+      typingMode: "instant",
+      defaultModel: "anthropic/claude-opus-4-5",
+      sessionEntry: {
+        sessionId: "session",
+        updatedAt: Date.now(),
+        ttsAuto: "always",
+      },
+    });
+
+    await runner(baseQueuedRun("telegram"));
+
+    expect(onBlockReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: "Hola, esta es la respuesta real del followup.",
+        mediaUrl: "https://example.com/followup-tts.opus",
+        audioAsVoice: true,
       }),
     );
   });

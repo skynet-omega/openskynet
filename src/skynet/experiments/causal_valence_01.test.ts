@@ -80,6 +80,8 @@ describe("skynet causal valence 01", () => {
           },
           outcome: {
             status: seed.status,
+            failureDomain: seed.status === "ok" ? "none" : "cognitive",
+            failureClass: seed.status === "ok" ? "none" : "validation_error",
             targetSatisfied: seed.targetSatisfied,
             validationPassed: seed.valid,
             continuityDelta: seed.delta,

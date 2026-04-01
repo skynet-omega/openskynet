@@ -23,6 +23,9 @@ export type SkynetRuntimeTrajectoryFeatures = {
   historyDamageRatio: number;
   historyOkRatio: number;
   historyErrorRatio: number;
+  historyEnvironmentalFailureRatio: number;
+  historyCognitiveFailureRatio: number;
+  historyMixedFailureRatio: number;
   historyMutationRatio: number;
   historyAverageRecoveryBurden: number;
   historyAverageCollateralDamage: number;
@@ -37,6 +40,20 @@ export type SkynetRuntimeTrajectoryFeatures = {
   currentCollateralRatio: number;
   currentFailureStreak: number;
   currentValidationIntensity: number;
+  currentFreshRatio: number;
+  currentAgingRatio: number;
+  currentStaleRatio: number;
+  currentMissingRatio: number;
+  currentOkRatio: number;
+  currentErrorRatio: number;
+  currentTimeoutRatio: number;
+  currentEnvironmentalFailure: number;
+  currentCognitiveFailure: number;
+  currentMixedFailure: number;
+  currentTargetSatisfied: number;
+  currentValidationPassed: number;
+  currentContinuityDelta: number;
+  currentRecoveryBurden: number;
 };
 
 function clamp01(value: number): number {
@@ -94,6 +111,15 @@ export function deriveSkynetRuntimeTrajectoryFeatureSummary(
     historyEpisodes.filter((episode) => episode.bootstrapLabel === label).length;
   const okCount = historyEpisodes.filter((episode) => episode.outcome.status === "ok").length;
   const errorCount = historyEpisodes.filter((episode) => episode.outcome.status !== "ok").length;
+  const environmentalFailureCount = historyEpisodes.filter(
+    (episode) => episode.outcome.failureDomain === "environmental",
+  ).length;
+  const cognitiveFailureCount = historyEpisodes.filter(
+    (episode) => episode.outcome.failureDomain === "cognitive",
+  ).length;
+  const mixedFailureCount = historyEpisodes.filter(
+    (episode) => episode.outcome.failureDomain === "mixed",
+  ).length;
   const mutationCount = historyEpisodes.filter((episode) =>
     episode.transition.operations.some((operation) => operation.kind !== "noop"),
   ).length;
@@ -118,6 +144,9 @@ export function deriveSkynetRuntimeTrajectoryFeatureSummary(
     historyDamageRatio: ratio(labelCount("damage"), historyCount),
     historyOkRatio: ratio(okCount, historyCount),
     historyErrorRatio: ratio(errorCount, historyCount),
+    historyEnvironmentalFailureRatio: ratio(environmentalFailureCount, historyCount),
+    historyCognitiveFailureRatio: ratio(cognitiveFailureCount, historyCount),
+    historyMixedFailureRatio: ratio(mixedFailureCount, historyCount),
     historyMutationRatio: ratio(mutationCount, historyCount),
     historyAverageRecoveryBurden: clamp01(averageRecoveryBurden),
     historyAverageCollateralDamage: clamp01(averageCollateralDamage),
@@ -132,6 +161,21 @@ export function deriveSkynetRuntimeTrajectoryFeatureSummary(
     currentCollateralRatio: currentTransition.collateralRatio,
     currentFailureStreak: sample.currentEpisode.context.failureStreak,
     currentValidationIntensity: sample.currentEpisode.context.validationIntensity,
+    currentFreshRatio: sample.currentEpisode.context.continuityFreshness === "fresh" ? 1 : 0,
+    currentAgingRatio: sample.currentEpisode.context.continuityFreshness === "aging" ? 1 : 0,
+    currentStaleRatio: sample.currentEpisode.context.continuityFreshness === "stale" ? 1 : 0,
+    currentMissingRatio: sample.currentEpisode.context.continuityFreshness === "missing" ? 1 : 0,
+    currentOkRatio: sample.currentEpisode.outcome.status === "ok" ? 1 : 0,
+    currentErrorRatio: sample.currentEpisode.outcome.status === "error" ? 1 : 0,
+    currentTimeoutRatio: sample.currentEpisode.outcome.status === "timeout" ? 1 : 0,
+    currentEnvironmentalFailure:
+      sample.currentEpisode.outcome.failureDomain === "environmental" ? 1 : 0,
+    currentCognitiveFailure: sample.currentEpisode.outcome.failureDomain === "cognitive" ? 1 : 0,
+    currentMixedFailure: sample.currentEpisode.outcome.failureDomain === "mixed" ? 1 : 0,
+    currentTargetSatisfied: sample.currentEpisode.outcome.targetSatisfied ? 1 : 0,
+    currentValidationPassed: sample.currentEpisode.outcome.validationPassed ? 1 : 0,
+    currentContinuityDelta: clamp01(sample.currentEpisode.outcome.continuityDelta),
+    currentRecoveryBurden: clamp01(sample.currentEpisode.outcome.recoveryBurden),
   };
 }
 
@@ -148,6 +192,9 @@ export function encodeSkynetRuntimeTrajectoryFeatures(
     summary.historyDamageRatio,
     summary.historyOkRatio,
     summary.historyErrorRatio,
+    summary.historyEnvironmentalFailureRatio,
+    summary.historyCognitiveFailureRatio,
+    summary.historyMixedFailureRatio,
     summary.historyMutationRatio,
     summary.historyAverageRecoveryBurden,
     summary.historyAverageCollateralDamage,
@@ -162,5 +209,19 @@ export function encodeSkynetRuntimeTrajectoryFeatures(
     summary.currentCollateralRatio,
     clamp01(Math.min(summary.currentFailureStreak, 4) / 4),
     clamp01(summary.currentValidationIntensity),
+    summary.currentFreshRatio,
+    summary.currentAgingRatio,
+    summary.currentStaleRatio,
+    summary.currentMissingRatio,
+    summary.currentOkRatio,
+    summary.currentErrorRatio,
+    summary.currentTimeoutRatio,
+    summary.currentEnvironmentalFailure,
+    summary.currentCognitiveFailure,
+    summary.currentMixedFailure,
+    summary.currentTargetSatisfied,
+    summary.currentValidationPassed,
+    summary.currentContinuityDelta,
+    summary.currentRecoveryBurden,
   ];
 }
