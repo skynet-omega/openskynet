@@ -9,8 +9,8 @@ vi.mock("../gateway/call.js", () => ({
   callGateway: (opts: unknown) => callGatewayMock(opts),
 }));
 
-import { runValidatedOmegaSessionTask } from "./session-task.js";
 import { loadOmegaSessionSelfState, loadOmegaSessionTimeline } from "./session-context.js";
+import { runValidatedOmegaSessionTask } from "./session-task.js";
 
 async function createWorkspaceFixture(): Promise<{
   root: string;
@@ -72,6 +72,59 @@ describe("runValidatedOmegaSessionTask", () => {
       status: "timeout",
       error: "timed out",
       runId: "run-timeout",
+    });
+  });
+
+  it("reconciles timeout into success when reply and target writes both landed", async () => {
+    callGatewayMock.mockImplementation(async (opts: unknown) => {
+      const request = opts as { method?: string };
+      if (request.method === "agent") {
+        return { runId: "run-timeout-reconciled", status: "accepted" };
+      }
+      if (request.method === "agent.wait") {
+        await fs.writeFile(targetPath, "def clamp(v):\n    return max(0, v)\n", "utf-8");
+        return { status: "timeout", error: "timed out" };
+      }
+      if (request.method === "chat.history") {
+        return {
+          messages: [
+            {
+              role: "assistant",
+              content: [{ type: "text", text: '{"status":"ok","summary":"patched"}' }],
+            },
+          ],
+        };
+      }
+      throw new Error(`unexpected method: ${String(request.method)}`);
+    });
+
+    const result = await runValidatedOmegaSessionTask({
+      sendParams: { message: "patch file", sessionKey: "main" },
+      sessionKey: "main",
+      timeoutMs: 1_000,
+      workspaceRoot,
+      validation: {
+        expectsJson: true,
+        expectedKeys: ["status", "summary"],
+        expectedPaths: [relativeTargetPath],
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      runId: "run-timeout-reconciled",
+      observedChangedFiles: [relativeTargetPath],
+      validation: {
+        structured: {
+          ok: true,
+          expectedKeys: ["status", "summary"],
+        },
+        write: {
+          ok: true,
+          expectedPaths: [relativeTargetPath],
+          observedChangedFiles: [relativeTargetPath],
+        },
+      },
     });
   });
 

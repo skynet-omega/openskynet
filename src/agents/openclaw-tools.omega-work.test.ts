@@ -3,10 +3,30 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const hoisted = vi.hoisted(() => {
+  const spawnSubagentDirectMock = vi.fn();
+  const spawnAcpDirectMock = vi.fn();
+  return {
+    spawnSubagentDirectMock,
+    spawnAcpDirectMock,
+  };
+});
+
 const callGatewayMock = vi.fn();
 
 vi.mock("../gateway/call.js", () => ({
   callGateway: (opts: unknown) => callGatewayMock(opts),
+}));
+
+vi.mock("./subagent-spawn.js", () => ({
+  SUBAGENT_SPAWN_MODES: ["run", "session"],
+  spawnSubagentDirect: (...args: unknown[]) => hoisted.spawnSubagentDirectMock(...args),
+}));
+
+vi.mock("./acp-spawn.js", () => ({
+  ACP_SPAWN_MODES: ["run", "session"],
+  ACP_SPAWN_STREAM_TARGETS: ["parent"],
+  spawnAcpDirect: (...args: unknown[]) => hoisted.spawnAcpDirectMock(...args),
 }));
 
 vi.mock("../config/config.js", async (importOriginal) => {
@@ -42,6 +62,26 @@ describe("omega_work hard tasks", () => {
 
   beforeEach(async () => {
     callGatewayMock.mockReset();
+    hoisted.spawnSubagentDirectMock
+      .mockReset()
+      .mockImplementation(async (params?: { task?: string }) => {
+        const response = (await callGatewayMock({
+          method: "agent",
+          params: {
+            message: params?.task,
+          },
+        })) as { runId?: string } | undefined;
+        return {
+          status: "accepted",
+          childSessionKey: "agent:main:subagent:1",
+          runId: response?.runId ?? "run-subagent",
+        };
+      });
+    hoisted.spawnAcpDirectMock.mockReset().mockResolvedValue({
+      status: "accepted",
+      childSessionKey: "agent:codex:acp:1",
+      runId: "run-acp",
+    });
     workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "openskynet-omega-work-"));
     relA = path.join("workspace", "hard_probe", "range_tools.py").split(path.sep).join("/");
     relB = path.join("workspace", "hard_probe", "test_range_tools.py").split(path.sep).join("/");
@@ -202,6 +242,52 @@ describe("omega_work hard tasks", () => {
         },
       },
     });
+  });
+
+  it("reroutes validated work to sessions_spawn when the requested session does not exist", async () => {
+    callGatewayMock.mockImplementation(async (opts: unknown) => {
+      const request = opts as { method?: string };
+      if (request.method === "sessions.resolve") {
+        throw new Error("No session found");
+      }
+      if (request.method === "agent") {
+        return { runId: "run-missing-session", status: "accepted" };
+      }
+      if (request.method === "agent.wait") {
+        await fs.writeFile(fileA, "def clamp(v):\n    return max(0, v)\n", "utf-8");
+        return { status: "ok" };
+      }
+      if (request.method === "chat.history") {
+        return {
+          messages: [
+            {
+              role: "assistant",
+              content: [{ type: "text", text: '{"status":"ok","summary":"spawned fallback"}' }],
+            },
+          ],
+        };
+      }
+      throw new Error(`unexpected method: ${String(request.method)}`);
+    });
+
+    const result = await getOmegaWorkTool().execute("call-missing-session", {
+      task: "arregla solo el modulo",
+      sessionKey: "skynet-omega-ladder-test",
+      timeoutSeconds: 1,
+      expectsJson: true,
+      expectedKeys: ["status", "summary"],
+      expectedPaths: [relA],
+    });
+
+    expect(result.details).toMatchObject({
+      route: "sessions_spawn",
+      status: "ok",
+      reroutedMissingSession: true,
+      originalRoute: "omega_delegate",
+      missingSessionKey: "skynet-omega-ladder-test",
+      observedChangedFiles: [relA],
+    });
+    expect(hoisted.spawnSubagentDirectMock).toHaveBeenCalledTimes(1);
   });
 
   it("exposes a fresh runtime observer prior in omega_work results when available", async () => {

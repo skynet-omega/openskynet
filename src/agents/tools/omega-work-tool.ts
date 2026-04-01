@@ -23,6 +23,7 @@ import {
   OMEGA_VALIDATION_SCHEMA_FIELDS,
   readOmegaValidationToolParams,
 } from "./omega-validation.js";
+import { resolveSessionReference, resolveSessionToolContext } from "./sessions-helpers.js";
 import { createSessionsSendTool } from "./sessions-send-tool.js";
 import { createSessionsSpawnTool } from "./sessions-spawn-tool.js";
 
@@ -447,6 +448,23 @@ export function createOmegaWorkTool(
       ) {
         effectiveRoute = "omega_delegate";
       }
+      const routeBeforeMissingSessionFallback = effectiveRoute;
+      let reroutedMissingSession = false;
+      if (sessionKey && effectiveRoute !== "sessions_spawn") {
+        const { mainKey, alias, effectiveRequesterKey, restrictToSpawned } =
+          resolveSessionToolContext(opts);
+        const resolvedTarget = await resolveSessionReference({
+          sessionKey: resolvedSessionKey,
+          alias,
+          mainKey,
+          requesterInternalKey: effectiveRequesterKey,
+          restrictToSpawned,
+        });
+        if (!resolvedTarget.ok) {
+          effectiveRoute = "sessions_spawn";
+          reroutedMissingSession = true;
+        }
+      }
 
       if (effectiveRoute === "sessions_spawn") {
         const result = await sessionsSpawn.execute(toolCallId, {
@@ -511,6 +529,13 @@ export function createOmegaWorkTool(
                 resumedFromKernel: true,
                 recoveryReason: matchedRecovery.reason,
                 recoverySuggestedRoute: matchedRecovery.suggestedRoute,
+              }
+            : {}),
+          ...(reroutedMissingSession
+            ? {
+                reroutedMissingSession: true,
+                originalRoute: routeBeforeMissingSessionFallback,
+                missingSessionKey: resolvedSessionKey,
               }
             : {}),
           ...(result.details as Record<string, unknown>),
