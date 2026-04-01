@@ -145,6 +145,13 @@ For `~/openskynet`, keep this distinction explicit:
 By default that internal project is `Skynet`, but it is a configurable benchmark workload, not the identity of the whole system.
 Do not confuse platform maintenance with progress of the internal project.
 Treat `src/skynet` as an optional experimental lab: useful discoveries should be transferred into the `OpenSkyNet`/`Omega` kernel and validated there, but the platform must remain able to compile and function without `src/skynet`.
+For broad ideas like causal valence, “sentir”, generalized importance, or non-LLM cognition:
+
+- Do not hardwire large behavioral theories into `Omega` first.
+- Prototype them as isolated, falsifiable experiments in `src/skynet` or another lab surface.
+- Promote them into `Omega` only after empirical evidence and explicit cost/benefit review.
+- Prefer mechanisms learned from episodes over large taxonomies of hardcoded feelings, meanings, or language-specific rules.
+- Keep complexity proportional to demonstrated gain. Avoid castle-of-cards architecture.
 
 ### Heartbeat vs Cron: When to Use Each
 

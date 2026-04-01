@@ -34,4 +34,7 @@ OpenSkyNet está en proceso de transición de un conjunto de módulos heterogén
 - `OpenSkyNet` es el agente principal; `Omega` sigue siendo su línea experimental interna principal.
 - El proyecto definido en `INTERNAL_PROJECT.json` es una carga de trabajo autónoma configurable. Hoy es `Skynet`, pero puede reemplazarse por otro dominio sin reescribir el spine del runtime.
 - `Skynet` debe tratarse como laboratorio de auto-mejora de `OpenSkyNet`, no como parte obligatoria del kernel. Los hallazgos útiles se transfieren al kernel de `OpenSkyNet` y se validan en la práctica; `src/skynet` puede desaparecer sin que la plataforma deje de compilar o funcionar.
+- Para ideas de cognición, causalidad, “sentir”, valencia o aprendizaje general, no integrar primero en `Omega` por intuición narrativa. Primero deben probarse como experimento falsable en `src/skynet` u otra capa aislada.
+- Regla permanente de ingeniería: evaluar empíricamente y por costo/beneficio. Evitar alta complejidad de código y piezas cuando el beneficio sea poco claro, nulo o todavía no medido.
+- Las heurísticas rígidas, taxonomías cerradas o if/else sobre “emociones” sólo se aceptan como bootstrap experimental y deben retirarse si no muestran mejora real.
 - El siguiente frente serio ya no es más saneamiento lateral, sino cerrar limitaciones críticas: soberanía de decisión, metabolismo cognitivo y ciencia autónoma medible. Ver `docs/architecture/LIMITACIONES_CRITICAS_OPENSKYNET_2026-03-26.md`.
