@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { withEnvAsync } from "../test-utils/env.js";
 import { admitOmegaDurableMemory } from "./durable-memory.js";
 import { recordOmegaRecoveryStrategyMetrics } from "./empirical-metrics.js";
-import { buildIdleOmegaHeartbeatPrompt } from "./heartbeat-idle.js";
+import { buildIdleOmegaHeartbeatPrompt } from "./experimental/heartbeat-idle.js";
 import { recordOmegaOperationalTurnMemory } from "./operational-memory.js";
 import { recordOmegaSessionOutcome } from "./session-context.js";
 import { loadOmegaWorldModelSnapshot } from "./world-model.js";

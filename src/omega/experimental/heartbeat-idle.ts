@@ -1,32 +1,32 @@
-import { CognitiveRuleEngine } from "./cognitive-rules.js";
-import { type ContinuousThought } from "./continuous-thinking-engine.js";
-import { getOmegaHeartbeatEngineRegistry } from "./engines/registry.js";
+import { type ContinuousThought } from "../continuous-thinking-engine.js";
+import { getOmegaHeartbeatEngineRegistry } from "../engines/registry.js";
 import {
   mergeOmegaDriveSignalWithEngineScore,
   scoreOmegaEngineSignals,
-} from "./engines/score-engine-signal.js";
-import type { Contradiction, OmegaKernelSignalCollection } from "./engines/types.js";
-import type { FrontalLobeState } from "./frontal/frontal-lobe.js";
-import { RicciGraphAnalytics } from "./graph-analytics.js";
-import { HolographicMemoryManager } from "./holographic-memory.js";
-import { isOmegaSpeculativeIdleEnabled } from "./idle-mode.js";
-import { buildAutonomousDirectivePrompt, type InnerDriveSignal } from "./inner-life/index.js";
-import { shouldApplyOmegaJepaControlSignal } from "./jepa-control.js";
+} from "../engines/score-engine-signal.js";
+import type { Contradiction, OmegaKernelSignalCollection } from "../engines/types.js";
+import type { FrontalLobeState } from "../frontal/frontal-lobe.js";
+import { RicciGraphAnalytics } from "../graph-analytics.js";
+import { HolographicMemoryManager } from "../holographic-memory.js";
+import { isOmegaSpeculativeIdleEnabled } from "../idle-mode.js";
+import { buildAutonomousDirectivePrompt, type InnerDriveSignal } from "../inner-life/index.js";
+import { shouldApplyOmegaJepaControlSignal } from "../jepa-control.js";
 import {
   enhanceDriveWithJepaTension,
   parseJepaTensionFromKernelTimeline,
-} from "./jepa-drive-enhancement.js";
-import { collectOpenSkynetMemoryCandidates } from "./living-memory.js";
-import { createMemoryEmbedding } from "./memory-vectors.js";
-import { loadOmegaWSP } from "./omega-wsp.js";
-import { deriveOmegaPolicySnapshot } from "./policy-engine.js";
+} from "../jepa-drive-enhancement.js";
+import { collectOpenSkynetMemoryCandidates } from "../living-memory.js";
+import { createMemoryEmbedding } from "../memory-vectors.js";
+import { loadOmegaWSP } from "../omega-wsp.js";
+import { deriveOmegaPolicySnapshot } from "../policy-engine.js";
 import {
   OMEGA_MAX_THOUGHT_CONFIDENCE_FOR_HYPOTHESIS,
   OMEGA_MIN_THOUGHT_ENTROPY_REDUCTION,
-} from "./policy.js";
-import type { OmegaSelfTimeKernelState } from "./self-time-kernel.js";
-import { loadOmegaSessionTimeline } from "./session-context.js";
-import { formatOmegaWorldModelSnapshot, loadOmegaWorldModelSnapshot } from "./world-model.js";
+} from "../policy.js";
+import type { OmegaSelfTimeKernelState } from "../self-time-kernel.js";
+import { loadOmegaSessionTimeline } from "../session-context.js";
+import { formatOmegaWorldModelSnapshot, loadOmegaWorldModelSnapshot } from "../world-model.js";
+import { CognitiveRuleEngine } from "./cognitive-rules.js";
 
 async function fossilizeIdleExperience(params: {
   workspaceRoot: string;
