@@ -6,14 +6,8 @@ import {
 import { loadOmegaEmpiricalMetrics } from "./empirical-metrics.js";
 import type { OmegaSessionSelfState } from "./event-model.js";
 import {
-  formatSkynetContinuityBlock,
-  syncOptionalSkynetContinuityState,
   type SkynetContinuityState,
-  formatSkynetNucleusBlock,
-  syncOptionalSkynetNucleus,
   type SkynetNucleusState,
-  formatSkynetStudyProgramBlock,
-  syncOptionalSkynetStudyProgram,
   type SkynetBifurcationState,
   type SkynetStudyProgram,
 } from "./internal-project-lab.js";
@@ -35,6 +29,11 @@ import {
   syncOmegaStudySupervisor,
   type OmegaStudySupervisorState,
 } from "./study-supervisor.js";
+import {
+  formatOmegaWorldModelInternalProjectBlocks,
+  loadOmegaWorldModelInternalProjectState,
+  type OmegaWorldModelInternalProjectState,
+} from "./world-model-internal-project.js";
 
 type OmegaRecoveryPreference = {
   preferredRoute: "omega_delegate" | "sessions_spawn";
@@ -114,12 +113,6 @@ type OmegaWorldModelDerivedState = {
   selfState?: OmegaSessionSelfState;
   localityExecutionGuard?: OmegaLocalityExecutionGuard;
   studySupervisor?: OmegaStudySupervisorState;
-};
-
-type OmegaWorldModelInternalProjectState = {
-  internalProjectNucleus?: SkynetNucleusState;
-  internalProjectStudyProgram?: SkynetStudyProgram;
-  internalProjectContinuity?: SkynetContinuityState;
 };
 
 type OmegaWorldModelPreferenceState = {
@@ -549,73 +542,6 @@ async function loadOmegaWorldModelDerivedState(params: {
   };
 }
 
-async function loadOmegaWorldModelInternalProjectState(params: {
-  input: LoadOmegaWorldModelSnapshotParams;
-  base: OmegaWorldModelBaseState;
-  derived: OmegaWorldModelDerivedState;
-  degradedComponents: OmegaWorldModelSnapshot["degradedComponents"];
-}): Promise<OmegaWorldModelInternalProjectState> {
-  const { input, base, derived, degradedComponents } = params;
-  const studySupervisor = derived.studySupervisor;
-  if (!studySupervisor) {
-    return {
-      internalProjectNucleus: undefined,
-      internalProjectStudyProgram: undefined,
-      internalProjectContinuity: undefined,
-    };
-  }
-
-  const internalProjectNucleus = await captureWorldModelComponent(
-    "skynet_nucleus",
-    degradedComponents,
-    () =>
-      syncOptionalSkynetNucleus({
-        workspaceRoot: input.workspaceRoot,
-        sessionKey: input.sessionKey,
-        projectName: base.project.name,
-        studyFocus: studySupervisor.focus,
-        operationalSignals: base.operationalSignals,
-        learnedConstraints: derived.selfState?.learnedConstraints ?? [],
-      }),
-    () => undefined,
-  );
-  const internalProjectStudyProgram = internalProjectNucleus
-    ? await captureWorldModelComponent(
-        "skynet_study_program",
-        degradedComponents,
-        () =>
-          syncOptionalSkynetStudyProgram({
-            workspaceRoot: input.workspaceRoot,
-            sessionKey: input.sessionKey,
-            supervisor: studySupervisor,
-            nucleus: internalProjectNucleus,
-          }),
-        () => undefined,
-      )
-    : undefined;
-  const internalProjectContinuity =
-    internalProjectNucleus && internalProjectStudyProgram
-      ? await captureWorldModelComponent(
-          "skynet_continuity",
-          degradedComponents,
-          () =>
-            syncOptionalSkynetContinuityState({
-              workspaceRoot: input.workspaceRoot,
-              sessionKey: input.sessionKey,
-              nucleus: internalProjectNucleus,
-              program: internalProjectStudyProgram,
-            }),
-          () => undefined,
-        )
-      : undefined;
-
-  return {
-    internalProjectNucleus,
-    internalProjectStudyProgram,
-    internalProjectContinuity,
-  };
-}
-
 function buildOmegaWorldModelSnapshot(params: {
   input: LoadOmegaWorldModelSnapshotParams;
   base: OmegaWorldModelBaseState;
@@ -661,9 +587,12 @@ export async function loadOmegaWorldModelSnapshot(
     degradedComponents,
   });
   const internalProject = await loadOmegaWorldModelInternalProjectState({
-    input: params,
-    base,
-    derived,
+    workspaceRoot: params.workspaceRoot,
+    sessionKey: params.sessionKey,
+    projectName: base.project.name,
+    studySupervisor: derived.studySupervisor,
+    operationalSignals: base.operationalSignals,
+    learnedConstraints: derived.selfState?.learnedConstraints ?? [],
     degradedComponents,
   });
   const preferences = deriveOmegaWorldModelPreferenceState({ base });
@@ -766,16 +695,7 @@ function formatOmegaWorldModelMemoryBlocks(snapshot: OmegaWorldModelSnapshot): s
 export function formatOmegaWorldModelSnapshot(snapshot: OmegaWorldModelSnapshot): string[] {
   const lines = formatOmegaWorldModelOverview(snapshot);
   lines.push(...formatOmegaStudySupervisorBlock(snapshot.studySupervisor));
-  if (snapshot.internalProjectNucleus) {
-    lines.push("");
-    lines.push(...formatSkynetNucleusBlock(snapshot.internalProjectNucleus));
-  }
-  if (snapshot.internalProjectStudyProgram) {
-    lines.push(...formatSkynetStudyProgramBlock(snapshot.internalProjectStudyProgram));
-  }
-  if (snapshot.internalProjectContinuity) {
-    lines.push(...formatSkynetContinuityBlock(snapshot.internalProjectContinuity));
-  }
+  lines.push(...formatOmegaWorldModelInternalProjectBlocks(snapshot));
   lines.push(...formatOmegaWorldModelMemoryBlocks(snapshot));
   return lines;
 }
