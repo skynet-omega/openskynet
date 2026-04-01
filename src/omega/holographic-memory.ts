@@ -32,7 +32,7 @@ function resolveFossilEmbedding(fossil: SemanticFossil): number[] {
   if (fossil.quantizedEmbedding) {
     return dequantizeEmbedding(fossil.quantizedEmbedding);
   }
-  return new Array(OMEGA_MEMORY_EMBEDDING_DIMENSIONS).fill(0);
+  return Array.from({ length: OMEGA_MEMORY_EMBEDDING_DIMENSIONS }, () => 0);
 }
 
 function normalizeFossilContent(content: string): string {
