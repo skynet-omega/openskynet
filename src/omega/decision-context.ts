@@ -18,6 +18,11 @@ import {
   type OmegaStateAuthoritySnapshot,
 } from "./state-authority.js";
 
+export type OmegaDecisionDegradedComponent = {
+  component: string;
+  reason: string;
+};
+
 export type OmegaDecisionContext = {
   timeline: OmegaSessionTimelineEntry[];
   sessionState?: OmegaSessionSelfState;
@@ -28,7 +33,25 @@ export type OmegaDecisionContext = {
   stateAuthority: OmegaStateAuthoritySnapshot;
   policy: OmegaPolicySnapshot;
   shouldDispatchHeartbeatPrompt: boolean;
+  degradedComponents: OmegaDecisionDegradedComponent[];
 };
+
+async function captureDecisionContextComponent<T>(
+  component: string,
+  degradedComponents: OmegaDecisionDegradedComponent[],
+  operation: () => Promise<T>,
+  fallback: () => Promise<T> | T,
+): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    degradedComponents.push({
+      component,
+      reason: error instanceof Error ? error.message : String(error),
+    });
+    return await fallback();
+  }
+}
 
 export async function loadOmegaDecisionContext(params: {
   workspaceRoot: string;
@@ -39,18 +62,35 @@ export async function loadOmegaDecisionContext(params: {
   expectedPaths?: string[];
   watchedPaths?: string[];
 }): Promise<OmegaDecisionContext> {
+  const degradedComponents: OmegaDecisionDegradedComponent[] = [];
   const [controllerState, fallbackOperationalTail, wsp] = await Promise.all([
-    syncOmegaExecutionControllerState({
-      workspaceRoot: params.workspaceRoot,
-      sessionKey: params.sessionKey,
-      includeOperationalSummary: true,
-      includeWorldSnapshot: params.includeWorldSnapshot,
-      task: params.task,
-      expectedPaths: params.expectedPaths,
-      watchedPaths: params.watchedPaths,
-    }).catch(() => undefined),
-    loadOmegaOperationalMemoryTail(params).catch(() => []),
-    loadOmegaWSP(params.workspaceRoot, params.sessionKey).catch(() => undefined),
+    captureDecisionContextComponent(
+      "controller_state",
+      degradedComponents,
+      () =>
+        syncOmegaExecutionControllerState({
+          workspaceRoot: params.workspaceRoot,
+          sessionKey: params.sessionKey,
+          includeOperationalSummary: true,
+          includeWorldSnapshot: params.includeWorldSnapshot,
+          task: params.task,
+          expectedPaths: params.expectedPaths,
+          watchedPaths: params.watchedPaths,
+        }),
+      () => undefined,
+    ),
+    captureDecisionContextComponent(
+      "operational_memory_tail",
+      degradedComponents,
+      () => loadOmegaOperationalMemoryTail(params),
+      () => [],
+    ),
+    captureDecisionContextComponent(
+      "omega_wsp",
+      degradedComponents,
+      () => loadOmegaWSP(params.workspaceRoot, params.sessionKey),
+      () => undefined,
+    ),
   ]);
   const sessionSnapshot = controllerState?.executiveState.sourceSessionAuthority ?? {
     timeline: [],
@@ -93,5 +133,6 @@ export async function loadOmegaDecisionContext(params: {
           shouldRunAutonomy: policy.shouldRunAutonomy,
         })
       : policy.wakeAction.kind !== "heartbeat_ok" || policy.shouldRunAutonomy,
+    degradedComponents,
   };
 }

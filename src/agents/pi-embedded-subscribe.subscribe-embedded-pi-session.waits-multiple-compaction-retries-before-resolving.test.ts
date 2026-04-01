@@ -221,4 +221,28 @@ describe("subscribeEmbeddedPiSession", () => {
     const readOutput = onToolResult.mock.calls[2][0];
     expect(readOutput.text).toContain("file data");
   });
+
+  it("swallows async tool result delivery failures for tool summaries", async () => {
+    const onToolResult = vi.fn(async () => {
+      throw new Error("delivery failed");
+    });
+
+    const toolHarness = createSubscribedSessionHarness({
+      runId: "run-tool-summary-reject",
+      verboseLevel: "on",
+      onToolResult,
+    });
+
+    toolHarness.emit({
+      type: "tool_execution_start",
+      toolName: "read",
+      toolCallId: "tool-reject-1",
+      args: { path: "/tmp/reject.txt" },
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(onToolResult).toHaveBeenCalledTimes(1);
+  });
 });

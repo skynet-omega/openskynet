@@ -15,6 +15,7 @@ import {
   type OmegaHeartbeatRuntimeSnapshot,
 } from "./heartbeat.js";
 import { recordOmegaOperationalTurnMemory } from "./operational-memory.js";
+import * as runtimeAuthority from "./runtime-authority.js";
 import type { OmegaSelfTimeKernelState } from "./self-time-kernel.js";
 import { recordOmegaSessionOutcome } from "./session-context.js";
 
@@ -695,6 +696,68 @@ describe("omega heartbeat", () => {
     });
 
     expect(prompt).toBeUndefined();
+  });
+
+  it("emits a conservative degraded prompt instead of silence when Omega state authority is degraded", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    vi.spyOn(runtimeAuthority, "loadOpenSkynetOmegaRuntimeAuthority").mockResolvedValue({
+      workspaceRoot,
+      sessionKey: "main",
+      project: {
+        key: "skynet",
+        name: "Skynet",
+        role: "lab",
+        mission: "benchmark",
+        benchmarkPurpose: "benchmark",
+        successCriteria: [],
+      },
+      memoryCandidates: [],
+      decisionContext: {
+        timeline: [],
+        sessionState: undefined,
+        kernel: undefined,
+        wsp: undefined,
+        controllerState: undefined,
+        operationalSummary: {
+          recentIterations: 0,
+          recentResolvedTurns: 0,
+          recentStalledTurns: 0,
+          recentErrors: 0,
+          meanLatencyMs: 0,
+          lastTurnHealth: undefined,
+          lastTerminationReason: undefined,
+        },
+        stateAuthority: {
+          authoritativeSources: [],
+          fallbackSources: [],
+          warnings: [],
+          driveAuthority: "kernel",
+        },
+        policy: {
+          wakeAction: { kind: "heartbeat_ok", reason: "none" },
+          driveSignal: { kind: "idle" },
+          driveSignalSource: "kernel",
+          shouldRunAutonomy: false,
+          needsRecoveryAttention: false,
+        },
+        shouldDispatchHeartbeatPrompt: false,
+        degradedComponents: [
+          { component: "controller_state", reason: "controller exploded" },
+          { component: "omega_wsp", reason: "wsp unavailable" },
+        ],
+      },
+      worldSnapshot: undefined,
+      livingState: undefined,
+    } as any);
+
+    const prompt = await buildOmegaHeartbeatPrompt({
+      workspaceRoot,
+      sessionKey: "main",
+    });
+
+    expect(prompt).toContain("[OMEGA Degraded]");
+    expect(prompt).toContain("controller_state, omega_wsp");
+    expect(prompt).toContain("conservative inspection or maintenance");
   });
 
   it("returns no prompt when the executive dispatch plan defers active work under budget pressure", async () => {

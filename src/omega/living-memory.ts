@@ -45,6 +45,11 @@ export type OpenSkynetLivingState = {
     lastOutcomeStatus: string | null;
     failureStreak: number;
   };
+  authority: {
+    worldModelStatus: "healthy" | "degraded";
+    kernelStatus: "available" | "missing";
+    degradedComponents: string[];
+  };
   omega: {
     timelineLength: number;
     learnedConstraints: string[];
@@ -271,14 +276,17 @@ function deriveLivingState(params: {
   const hasRunnableExperiment = Boolean(params.experiment);
   const hasExplicitCommitment = Boolean(params.commitment?.executableTask);
   const hasRecommendedAction = Boolean(params.recommendedAction);
+  const degradedComponents = params.snapshot.degradedComponents.map((entry) => entry.component);
+  const authorityPenalty = degradedComponents.length > 0 ? 0.75 : 1;
   const benchmarkScore = Math.max(
     0,
     Math.min(
       1,
-      (typeof continuityScore === "number" ? continuityScore * 0.45 : 0) +
+      ((typeof continuityScore === "number" ? continuityScore * 0.45 : 0) +
         (hasRunnableExperiment ? 0.2 : 0) +
         (hasExplicitCommitment ? 0.2 : 0) +
-        (hasRecommendedAction ? 0.15 : 0),
+        (hasRecommendedAction ? 0.15 : 0)) *
+        authorityPenalty,
     ),
   );
 
@@ -320,6 +328,11 @@ function deriveLivingState(params: {
       activeGoalTask: params.snapshot.activeGoalTask ?? null,
       lastOutcomeStatus: params.snapshot.kernel?.world.lastOutcomeStatus ?? null,
       failureStreak: params.snapshot.kernel?.tension.failureStreak ?? 0,
+    },
+    authority: {
+      worldModelStatus: degradedComponents.length > 0 ? "degraded" : "healthy",
+      kernelStatus: params.snapshot.kernel ? "available" : "missing",
+      degradedComponents,
     },
     omega: {
       timelineLength: params.snapshot.timelineLength,

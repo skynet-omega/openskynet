@@ -125,6 +125,7 @@ async function loadOmegaHeartbeatDecisionContext(params: {
     driveSignalSource: decisionContext.policy.driveSignalSource,
     shouldRunAutonomy: decisionContext.policy.shouldRunAutonomy,
     shouldDispatchPrompt,
+    degradedComponents: decisionContext.degradedComponents,
   };
 }
 
@@ -155,8 +156,25 @@ export async function buildOmegaHeartbeatPrompt(params: {
     controllerState,
     driveSignal: sharedDriveSignal,
     shouldDispatchPrompt,
+    degradedComponents,
   } = await loadOmegaHeartbeatDecisionContext(params);
   const engines = getOmegaHeartbeatEngineRegistry();
+
+  if (
+    degradedComponents.length > 0 &&
+    wakeAction.kind === "heartbeat_ok" &&
+    !shouldDispatchPrompt
+  ) {
+    const degradedNames = degradedComponents.map((entry) => entry.component).join(", ");
+    return [
+      "[OMEGA Degraded]",
+      `Detected degraded components: ${degradedNames}`,
+      "Treat missing subsystems as degraded state, not as evidence of calm or completion.",
+      "Run only conservative inspection or maintenance. Do not invent new goals from partial state.",
+      "",
+      "If no user-facing update is needed after inspection, reply HEARTBEAT_OK.",
+    ].join("\n");
+  }
 
   if (kernel) {
     void engines.jepaEmpirical.logSample({
@@ -236,6 +254,15 @@ export async function buildOmegaHeartbeatPrompt(params: {
     `Wake action: ${effectiveWakeAction.kind}`,
     `Reason: ${effectiveWakeAction.reason}`,
   ];
+
+  if (degradedComponents.length > 0) {
+    lines.push(
+      `Degraded Omega components: ${degradedComponents.map((entry) => entry.component).join(", ")}`,
+    );
+    lines.push(
+      "Treat missing subsystems as degraded state, not as evidence of calm or completion.",
+    );
+  }
 
   if (controllerState?.dispatchPlan.shouldDispatchLlmTurn && controllerState.selectedWorkItem) {
     lines.push(`Executive action: ${controllerState.dispatchPlan.selectedAction}`);

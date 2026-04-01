@@ -208,9 +208,93 @@
       "types": "./dist/plugin-sdk/account-id.d.ts",
       "default": "./dist/plugin-sdk/account-id.js"
     },
+    "./plugin-sdk/account-resolution": {
+      "types": "./dist/plugin-sdk/account-resolution.d.ts",
+      "default": "./dist/plugin-sdk/account-resolution.js"
+    },
+    "./plugin-sdk/allow-from": {
+      "types": "./dist/plugin-sdk/allow-from.d.ts",
+      "default": "./dist/plugin-sdk/allow-from.js"
+    },
+    "./plugin-sdk/boolean-param": {
+      "types": "./dist/plugin-sdk/boolean-param.d.ts",
+      "default": "./dist/plugin-sdk/boolean-param.js"
+    },
+    "./plugin-sdk/channel-config-helpers": {
+      "types": "./dist/plugin-sdk/channel-config-helpers.d.ts",
+      "default": "./dist/plugin-sdk/channel-config-helpers.js"
+    },
+    "./plugin-sdk/channel-lifecycle": {
+      "types": "./dist/plugin-sdk/channel-lifecycle.d.ts",
+      "default": "./dist/plugin-sdk/channel-lifecycle.js"
+    },
+    "./plugin-sdk/channel-send-result": {
+      "types": "./dist/plugin-sdk/channel-send-result.d.ts",
+      "default": "./dist/plugin-sdk/channel-send-result.js"
+    },
+    "./plugin-sdk/command-auth": {
+      "types": "./dist/plugin-sdk/command-auth.d.ts",
+      "default": "./dist/plugin-sdk/command-auth.js"
+    },
+    "./plugin-sdk/file-lock": {
+      "types": "./dist/plugin-sdk/file-lock.d.ts",
+      "default": "./dist/plugin-sdk/file-lock.js"
+    },
+    "./plugin-sdk/group-access": {
+      "types": "./dist/plugin-sdk/group-access.d.ts",
+      "default": "./dist/plugin-sdk/group-access.js"
+    },
+    "./plugin-sdk/json-store": {
+      "types": "./dist/plugin-sdk/json-store.d.ts",
+      "default": "./dist/plugin-sdk/json-store.js"
+    },
     "./plugin-sdk/keyed-async-queue": {
       "types": "./dist/plugin-sdk/keyed-async-queue.d.ts",
       "default": "./dist/plugin-sdk/keyed-async-queue.js"
+    },
+    "./plugin-sdk/provider-auth-result": {
+      "types": "./dist/plugin-sdk/provider-auth-result.d.ts",
+      "default": "./dist/plugin-sdk/provider-auth-result.js"
+    },
+    "./plugin-sdk/reply-payload": {
+      "types": "./dist/plugin-sdk/reply-payload.d.ts",
+      "default": "./dist/plugin-sdk/reply-payload.js"
+    },
+    "./plugin-sdk/request-url": {
+      "types": "./dist/plugin-sdk/request-url.d.ts",
+      "default": "./dist/plugin-sdk/request-url.js"
+    },
+    "./plugin-sdk/runtime": {
+      "types": "./dist/plugin-sdk/runtime.d.ts",
+      "default": "./dist/plugin-sdk/runtime.js"
+    },
+    "./plugin-sdk/runtime-store": {
+      "types": "./dist/plugin-sdk/runtime-store.d.ts",
+      "default": "./dist/plugin-sdk/runtime-store.js"
+    },
+    "./plugin-sdk/status-helpers": {
+      "types": "./dist/plugin-sdk/status-helpers.d.ts",
+      "default": "./dist/plugin-sdk/status-helpers.js"
+    },
+    "./plugin-sdk/temp-path": {
+      "types": "./dist/plugin-sdk/temp-path.d.ts",
+      "default": "./dist/plugin-sdk/temp-path.js"
+    },
+    "./plugin-sdk/tool-send": {
+      "types": "./dist/plugin-sdk/tool-send.d.ts",
+      "default": "./dist/plugin-sdk/tool-send.js"
+    },
+    "./plugin-sdk/webhook-path": {
+      "types": "./dist/plugin-sdk/webhook-path.d.ts",
+      "default": "./dist/plugin-sdk/webhook-path.js"
+    },
+    "./plugin-sdk/webhook-request-guards": {
+      "types": "./dist/plugin-sdk/webhook-request-guards.d.ts",
+      "default": "./dist/plugin-sdk/webhook-request-guards.js"
+    },
+    "./plugin-sdk/windows-spawn": {
+      "types": "./dist/plugin-sdk/windows-spawn.d.ts",
+      "default": "./dist/plugin-sdk/windows-spawn.js"
     },
     "./cli-entry": "./openskynet.mjs"
   },

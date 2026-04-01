@@ -288,11 +288,11 @@ async function emitToolResultOutput(params: {
   if (mediaPaths.length === 0) {
     return;
   }
-  try {
-    void ctx.params.onToolResult({ mediaUrls: mediaPaths });
-  } catch {
-    // ignore delivery failures
-  }
+  void Promise.resolve()
+    .then(() => ctx.params.onToolResult?.({ mediaUrls: mediaPaths }))
+    .catch(() => {
+      // ignore delivery failures
+    });
 }
 
 export async function handleToolExecutionStart(

@@ -152,4 +152,38 @@ describe("omega living memory", () => {
     expect(state.agenticBenchmark.projectName).toBe("Protein Lab");
     expect(state.skynet.name).toBe("Protein Lab");
   });
+
+  it("marks living memory as degraded when the world model snapshot has degraded components", async () => {
+    const healthySnapshot = await loadOmegaWorldModelSnapshot({
+      workspaceRoot,
+      sessionKey,
+    });
+    const degradedSnapshot = {
+      ...healthySnapshot,
+      degradedComponents: [{ component: "study_supervisor", reason: "boom" }],
+    };
+
+    const healthyState = await syncOpenSkynetLivingMemory({
+      workspaceRoot,
+      sessionKey,
+      snapshot: healthySnapshot,
+      recommendedAction: "Execute the top item",
+    });
+
+    const degradedState = await syncOpenSkynetLivingMemory({
+      workspaceRoot,
+      sessionKey,
+      snapshot: degradedSnapshot,
+      recommendedAction: "Execute the top item",
+    });
+
+    expect(degradedState.authority).toMatchObject({
+      worldModelStatus: "degraded",
+      degradedComponents: ["study_supervisor"],
+    });
+    expect(healthyState.authority.worldModelStatus).toBe("healthy");
+    expect(degradedState.agenticBenchmark.benchmarkScore).toBeLessThan(
+      healthyState.agenticBenchmark.benchmarkScore,
+    );
+  });
 });

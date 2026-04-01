@@ -110,7 +110,7 @@ describe("omega policy engine", () => {
   it("prefers WSP drive authority when persistent drive state is calibrated", () => {
     const snapshot = deriveOmegaPolicySnapshot({
       kernel: makeKernel(),
-      wsp: makeWsp(),
+      wsp: makeWsp({ updatedAt: 60_000 }),
       nowMs: 61_000,
       memoryCandidates: ["MEMORY.md"],
     });
@@ -133,6 +133,21 @@ describe("omega policy engine", () => {
         })),
       }),
       nowMs: 61_000,
+      memoryCandidates: ["MEMORY.md"],
+    });
+
+    expect(snapshot.driveSignal.kind).toBe("entropy_alert");
+    expect(snapshot.driveSignalSource).toBe("kernel");
+  });
+
+  it("keeps the kernel fallback when WSP calibration is stale", () => {
+    const snapshot = deriveOmegaPolicySnapshot({
+      kernel: makeKernel(),
+      wsp: makeWsp({
+        updatedAt: 0,
+        updateCount: 2,
+      }),
+      nowMs: 10 * 60 * 60 * 1000,
       memoryCandidates: ["MEMORY.md"],
     });
 

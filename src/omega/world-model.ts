@@ -91,6 +91,37 @@ export type OmegaWorldModelSnapshot = {
   }>;
 };
 
+type LoadOmegaWorldModelSnapshotParams = {
+  workspaceRoot: string;
+  sessionKey: string;
+  task?: string;
+  expectedPaths?: string[];
+  watchedPaths?: string[];
+};
+
+type OmegaWorldModelBaseState = {
+  sessionAuthority: OmegaSessionAuthority;
+  empiricalMetrics: Awaited<ReturnType<typeof loadOmegaEmpiricalMetrics>>;
+  project: Awaited<ReturnType<typeof loadOpenSkynetInternalProjectProfile>>;
+  allDurableMemory: OmegaDurableMemoryEntry[];
+  relevantMemories: OmegaDurableMemoryEntry[];
+  operationalSignals: OmegaOperationalTurnMemoryEntry[];
+  activeGoalTask?: string;
+};
+
+type OmegaWorldModelDerivedState = {
+  problemAgenda: OmegaProblemAgendaItem[];
+  selfState?: OmegaSessionSelfState;
+  localityExecutionGuard?: OmegaLocalityExecutionGuard;
+  studySupervisor?: OmegaStudySupervisorState;
+};
+
+type OmegaWorldModelInternalProjectState = {
+  internalProjectNucleus?: SkynetNucleusState;
+  internalProjectStudyProgram?: SkynetStudyProgram;
+  internalProjectContinuity?: SkynetContinuityState;
+};
+
 async function captureWorldModelComponent<T>(
   component: string,
   degradedComponents: OmegaWorldModelSnapshot["degradedComponents"],
@@ -366,14 +397,46 @@ function deriveActiveRecoveryPreference(params: {
   return buildRecoveryPreference({ delegateSuccesses, isolatedSuccesses });
 }
 
-export async function loadOmegaWorldModelSnapshot(params: {
-  workspaceRoot: string;
-  sessionKey: string;
+function deriveEnrichedSelfState(params: {
+  sessionAuthority: OmegaSessionAuthority;
+  allDurableMemory: OmegaDurableMemoryEntry[];
+  relevantMemories: OmegaDurableMemoryEntry[];
   task?: string;
   expectedPaths?: string[];
-  watchedPaths?: string[];
-}): Promise<OmegaWorldModelSnapshot> {
-  const degradedComponents: OmegaWorldModelSnapshot["degradedComponents"] = [];
+}): OmegaSessionSelfState | undefined {
+  const constraintBridgeMemories = deriveConstraintBridgeMemories({
+    durableMemory: params.allDurableMemory,
+    task: params.task,
+    expectedPaths: params.expectedPaths,
+  });
+  const inheritedConstraints = [...params.relevantMemories, ...constraintBridgeMemories].flatMap(
+    (memory) => memory.learnedConstraints ?? [],
+  );
+  const mergedLearnedConstraints = Array.from(
+    new Set([
+      ...(params.sessionAuthority.state?.learnedConstraints ?? []),
+      ...inheritedConstraints,
+    ]),
+  ).slice(-6); // OMEGA_STATE_CONSTRAINT_LIMIT equivalent
+
+  return params.sessionAuthority.state
+    ? {
+        ...params.sessionAuthority.state,
+        learnedConstraints: mergedLearnedConstraints,
+      }
+    : inheritedConstraints.length > 0
+      ? {
+          activeTargets: params.expectedPaths ?? [],
+          requiredKeys: [],
+          learnedConstraints: mergedLearnedConstraints,
+          updatedAt: Date.now(),
+        }
+      : undefined;
+}
+
+async function loadOmegaWorldModelBaseState(
+  params: LoadOmegaWorldModelSnapshotParams,
+): Promise<OmegaWorldModelBaseState> {
   const [sessionAuthority, empiricalMetrics, project] = await Promise.all([
     loadOmegaSessionAuthority(params),
     loadOmegaEmpiricalMetrics({ workspaceRoot: params.workspaceRoot }),
@@ -391,105 +454,121 @@ export async function loadOmegaWorldModelSnapshot(params: {
         })
       : allDurableMemory.slice(0, 4);
   const operationalSignals = (await loadOmegaOperationalMemory(params)).slice(-3).reverse();
+  const activeGoalTask = sessionAuthority.kernel?.goals.find(
+    (goal) => goal.id === sessionAuthority.kernel?.activeGoalId,
+  )?.task;
+
+  return {
+    sessionAuthority,
+    empiricalMetrics,
+    project,
+    allDurableMemory,
+    relevantMemories,
+    operationalSignals,
+    activeGoalTask,
+  };
+}
+
+async function loadOmegaWorldModelDerivedState(params: {
+  input: LoadOmegaWorldModelSnapshotParams;
+  base: OmegaWorldModelBaseState;
+  degradedComponents: OmegaWorldModelSnapshot["degradedComponents"];
+}): Promise<OmegaWorldModelDerivedState> {
+  const { input, base, degradedComponents } = params;
   const problemAgenda = await captureWorldModelComponent(
     "problem_agenda",
     degradedComponents,
     () =>
       syncOmegaProblemAgenda({
-        workspaceRoot: params.workspaceRoot,
-        sessionKey: params.sessionKey,
-        kernel: sessionAuthority.kernel,
-        durableMemory: allDurableMemory,
-        operationalSignals,
+        workspaceRoot: input.workspaceRoot,
+        sessionKey: input.sessionKey,
+        kernel: base.sessionAuthority.kernel,
+        durableMemory: base.allDurableMemory,
+        operationalSignals: base.operationalSignals,
       }),
-    () => loadOmegaProblemAgenda(params),
+    () => loadOmegaProblemAgenda(input),
   );
-  const activeGoalTask = sessionAuthority.kernel?.goals.find(
-    (goal) => goal.id === sessionAuthority.kernel?.activeGoalId,
-  )?.task;
-
-  // Inherit constraints from Durable Memory (The Bridge)
-  const constraintBridgeMemories = deriveConstraintBridgeMemories({
-    durableMemory: allDurableMemory,
-    task: params.task,
-    expectedPaths: params.expectedPaths,
+  const selfState = deriveEnrichedSelfState({
+    sessionAuthority: base.sessionAuthority,
+    allDurableMemory: base.allDurableMemory,
+    relevantMemories: base.relevantMemories,
+    task: input.task,
+    expectedPaths: input.expectedPaths,
   });
-  const inheritedConstraints = [...relevantMemories, ...constraintBridgeMemories].flatMap(
-    (m) => m.learnedConstraints ?? [],
-  );
-  const mergedLearnedConstraints = Array.from(
-    new Set([...(sessionAuthority.state?.learnedConstraints ?? []), ...inheritedConstraints]),
-  ).slice(-6); // OMEGA_STATE_CONSTRAINT_LIMIT equivalent
-
-  const enrichedSelfState: OmegaSessionSelfState | undefined = sessionAuthority.state
-    ? {
-        ...sessionAuthority.state,
-        learnedConstraints: mergedLearnedConstraints,
-      }
-    : inheritedConstraints.length > 0
-      ? {
-          activeTargets: params.expectedPaths ?? [],
-          requiredKeys: [],
-          learnedConstraints: mergedLearnedConstraints,
-          updatedAt: Date.now(),
-        }
-      : undefined;
+  const localityExecutionGuard = deriveLocalityExecutionGuard({
+    relevantMemories: base.relevantMemories,
+    expectedPaths: input.expectedPaths,
+    watchedPaths: input.watchedPaths,
+  });
   const studySupervisor = await captureWorldModelComponent(
     "study_supervisor",
     degradedComponents,
     () =>
       syncOmegaStudySupervisor({
-        workspaceRoot: params.workspaceRoot,
-        sessionKey: params.sessionKey,
+        workspaceRoot: input.workspaceRoot,
+        sessionKey: input.sessionKey,
         problemAgenda,
-        relevantMemories,
-        operationalSignals,
-        learnedConstraints: enrichedSelfState?.learnedConstraints ?? [],
-        activeGoalTask,
-        localityExecutionGuard: deriveLocalityExecutionGuard({
-          relevantMemories,
-          expectedPaths: params.expectedPaths,
-          watchedPaths: params.watchedPaths,
-        }),
+        relevantMemories: base.relevantMemories,
+        operationalSignals: base.operationalSignals,
+        learnedConstraints: selfState?.learnedConstraints ?? [],
+        activeGoalTask: base.activeGoalTask,
+        localityExecutionGuard,
       }),
     () => undefined,
   );
-  const localityExecutionGuard = deriveLocalityExecutionGuard({
-    relevantMemories,
-    expectedPaths: params.expectedPaths,
-    watchedPaths: params.watchedPaths,
-  });
-  const internalProjectNucleus = studySupervisor
+
+  return {
+    problemAgenda,
+    selfState,
+    localityExecutionGuard,
+    studySupervisor,
+  };
+}
+
+async function loadOmegaWorldModelInternalProjectState(params: {
+  input: LoadOmegaWorldModelSnapshotParams;
+  base: OmegaWorldModelBaseState;
+  derived: OmegaWorldModelDerivedState;
+  degradedComponents: OmegaWorldModelSnapshot["degradedComponents"];
+}): Promise<OmegaWorldModelInternalProjectState> {
+  const { input, base, derived, degradedComponents } = params;
+  const studySupervisor = derived.studySupervisor;
+  if (!studySupervisor) {
+    return {
+      internalProjectNucleus: undefined,
+      internalProjectStudyProgram: undefined,
+      internalProjectContinuity: undefined,
+    };
+  }
+
+  const internalProjectNucleus = await captureWorldModelComponent(
+    "skynet_nucleus",
+    degradedComponents,
+    () =>
+      syncOptionalSkynetNucleus({
+        workspaceRoot: input.workspaceRoot,
+        sessionKey: input.sessionKey,
+        projectName: base.project.name,
+        studyFocus: studySupervisor.focus,
+        operationalSignals: base.operationalSignals,
+        learnedConstraints: derived.selfState?.learnedConstraints ?? [],
+      }),
+    () => undefined,
+  );
+  const internalProjectStudyProgram = internalProjectNucleus
     ? await captureWorldModelComponent(
-        "skynet_nucleus",
+        "skynet_study_program",
         degradedComponents,
         () =>
-          syncOptionalSkynetNucleus({
-            workspaceRoot: params.workspaceRoot,
-            sessionKey: params.sessionKey,
-            projectName: project.name,
-            studyFocus: studySupervisor.focus,
-            operationalSignals,
-            learnedConstraints: enrichedSelfState?.learnedConstraints ?? [],
+          syncOptionalSkynetStudyProgram({
+            workspaceRoot: input.workspaceRoot,
+            sessionKey: input.sessionKey,
+            supervisor: studySupervisor,
+            nucleus: internalProjectNucleus,
           }),
         () => undefined,
       )
     : undefined;
-  const internalProjectStudyProgram =
-    studySupervisor && internalProjectNucleus
-      ? await captureWorldModelComponent(
-          "skynet_study_program",
-          degradedComponents,
-          () =>
-            syncOptionalSkynetStudyProgram({
-              workspaceRoot: params.workspaceRoot,
-              sessionKey: params.sessionKey,
-              supervisor: studySupervisor,
-              nucleus: internalProjectNucleus,
-            }),
-          () => undefined,
-        )
-      : undefined;
   const internalProjectContinuity =
     internalProjectNucleus && internalProjectStudyProgram
       ? await captureWorldModelComponent(
@@ -497,8 +576,8 @@ export async function loadOmegaWorldModelSnapshot(params: {
           degradedComponents,
           () =>
             syncOptionalSkynetContinuityState({
-              workspaceRoot: params.workspaceRoot,
-              sessionKey: params.sessionKey,
+              workspaceRoot: input.workspaceRoot,
+              sessionKey: input.sessionKey,
               nucleus: internalProjectNucleus,
               program: internalProjectStudyProgram,
             }),
@@ -507,32 +586,56 @@ export async function loadOmegaWorldModelSnapshot(params: {
       : undefined;
 
   return {
-    sessionKey: params.sessionKey,
-    sessionAuthority,
-    kernel: sessionAuthority.kernel,
-    selfState: enrichedSelfState,
-    activeRecoveryPreference: deriveActiveRecoveryPreference({
-      kernel: sessionAuthority.kernel,
-      metrics: empiricalMetrics,
-    }),
-    generalizedRecoveryPreference: deriveGeneralizedRecoveryPreference({
-      kernel: sessionAuthority.kernel,
-      metrics: empiricalMetrics,
-    }),
-    localityRoutingPreference: deriveLocalityRoutingPreference(relevantMemories),
-    localityExecutionGuard,
-    problemAgenda,
-    timelineLength: sessionAuthority.timeline.length,
-    activeGoalTask,
-    relevantMemories,
-    operationalSignals,
-    studySupervisor,
     internalProjectNucleus,
     internalProjectStudyProgram,
     internalProjectContinuity,
-    skynetNucleus: internalProjectNucleus,
-    skynetStudyProgram: internalProjectStudyProgram,
-    skynetContinuity: internalProjectContinuity,
+  };
+}
+
+export async function loadOmegaWorldModelSnapshot(
+  params: LoadOmegaWorldModelSnapshotParams,
+): Promise<OmegaWorldModelSnapshot> {
+  const degradedComponents: OmegaWorldModelSnapshot["degradedComponents"] = [];
+  const base = await loadOmegaWorldModelBaseState(params);
+  const derived = await loadOmegaWorldModelDerivedState({
+    input: params,
+    base,
+    degradedComponents,
+  });
+  const internalProject = await loadOmegaWorldModelInternalProjectState({
+    input: params,
+    base,
+    derived,
+    degradedComponents,
+  });
+
+  return {
+    sessionKey: params.sessionKey,
+    sessionAuthority: base.sessionAuthority,
+    kernel: base.sessionAuthority.kernel,
+    selfState: derived.selfState,
+    activeRecoveryPreference: deriveActiveRecoveryPreference({
+      kernel: base.sessionAuthority.kernel,
+      metrics: base.empiricalMetrics,
+    }),
+    generalizedRecoveryPreference: deriveGeneralizedRecoveryPreference({
+      kernel: base.sessionAuthority.kernel,
+      metrics: base.empiricalMetrics,
+    }),
+    localityRoutingPreference: deriveLocalityRoutingPreference(base.relevantMemories),
+    localityExecutionGuard: derived.localityExecutionGuard,
+    problemAgenda: derived.problemAgenda,
+    timelineLength: base.sessionAuthority.timeline.length,
+    activeGoalTask: base.activeGoalTask,
+    relevantMemories: base.relevantMemories,
+    operationalSignals: base.operationalSignals,
+    studySupervisor: derived.studySupervisor,
+    internalProjectNucleus: internalProject.internalProjectNucleus,
+    internalProjectStudyProgram: internalProject.internalProjectStudyProgram,
+    internalProjectContinuity: internalProject.internalProjectContinuity,
+    skynetNucleus: internalProject.internalProjectNucleus,
+    skynetStudyProgram: internalProject.internalProjectStudyProgram,
+    skynetContinuity: internalProject.internalProjectContinuity,
     degradedComponents,
   };
 }

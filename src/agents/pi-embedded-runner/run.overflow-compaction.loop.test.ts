@@ -321,6 +321,25 @@ describe("overflow compaction in run loop", () => {
     expect(result.payloads?.[0]?.text).toContain("timed out");
   });
 
+  it("does not emit a synthetic timeout payload after a messaging tool already delivered the reply", async () => {
+    mockedRunEmbeddedAttempt.mockResolvedValue(
+      makeAttemptResult({
+        aborted: true,
+        timedOut: true,
+        timedOutDuringCompaction: false,
+        assistantTexts: [],
+        didSendViaMessagingTool: true,
+        messagingToolSentTexts: ["already delivered"],
+      }),
+    );
+
+    const result = await runEmbeddedPiAgent(baseParams);
+
+    expect(result.payloads ?? []).toHaveLength(0);
+    expect(result.didSendViaMessagingTool).toBe(true);
+    expect(result.messagingToolSentTexts).toEqual(["already delivered"]);
+  });
+
   it("sets promptTokens from the latest model call usage, not accumulated attempt usage", async () => {
     mockedRunEmbeddedAttempt.mockResolvedValue(
       makeAttemptResult({

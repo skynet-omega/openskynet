@@ -106,7 +106,7 @@ describe("gateway tool", () => {
           };
           expect(parsed.payload?.kind).toBe("restart");
           expect(parsed.payload?.doctorHint).toBe(
-            "Run: openclaw --profile isolated doctor --non-interactive",
+            "Run: openskynet --profile isolated doctor --non-interactive",
           );
 
           expect(kill).not.toHaveBeenCalled();
@@ -218,5 +218,31 @@ describe("gateway tool", () => {
     const schema = (result.details as { result?: { schema?: { properties?: unknown } } }).result
       ?.schema;
     expect(schema?.properties).toBeUndefined();
+  });
+
+  it("treats missing config.schema.lookup paths as a soft miss", async () => {
+    const { callGatewayTool } = await import("./tools/gateway.js");
+    vi.mocked(callGatewayTool).mockImplementationOnce(async (method: string) => {
+      if (method === "config.schema.lookup") {
+        throw new Error("config schema path not found");
+      }
+      return { ok: true } as never;
+    });
+    const tool = requireGatewayTool();
+
+    const result = await tool.execute("call6", {
+      action: "config.schema.lookup",
+      path: "plugins.tts",
+    });
+
+    expect(callGatewayTool).toHaveBeenCalledWith("config.schema.lookup", expect.any(Object), {
+      path: "plugins.tts",
+    });
+    expect(result.details).toMatchObject({
+      ok: false,
+      error: "config schema path not found",
+      missing: true,
+      path: "plugins.tts",
+    });
   });
 });

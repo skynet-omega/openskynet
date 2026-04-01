@@ -2670,6 +2670,12 @@ export async function runEmbeddedAttempt(
         });
         anthropicPayloadLogger?.recordUsage(messagesSnapshot, promptError);
 
+        const lastAssistantForHooks = messagesSnapshot
+          .slice()
+          .toReversed()
+          .find((m) => m.role === "assistant");
+        const assistantEndedWithError = lastAssistantForHooks?.stopReason === "error";
+
         // Run agent_end hooks to allow plugins to analyze the conversation
         // This is fire-and-forget, so we don't await
         // Run even on compaction timeout so plugins can log/cleanup
@@ -2678,8 +2684,12 @@ export async function runEmbeddedAttempt(
             .runAgentEnd(
               {
                 messages: messagesSnapshot,
-                success: !aborted && !promptError,
-                error: promptError ? describeUnknownError(promptError) : undefined,
+                success: !aborted && !promptError && !assistantEndedWithError,
+                error: promptError
+                  ? describeUnknownError(promptError)
+                  : assistantEndedWithError
+                    ? lastAssistantForHooks.errorMessage?.trim() || "assistant stopReason=error"
+                    : undefined,
                 durationMs: Date.now() - promptStartedAt,
               },
               {
@@ -2720,7 +2730,7 @@ export async function runEmbeddedAttempt(
         params.abortSignal?.removeEventListener?.("abort", onAbort);
       }
 
-      const lastAssistant = messagesSnapshot
+      const lastAssistantMessage = messagesSnapshot
         .slice()
         .toReversed()
         .find((m) => m.role === "assistant");
@@ -2741,7 +2751,7 @@ export async function runEmbeddedAttempt(
               provider: params.provider,
               model: params.modelId,
               assistantTexts,
-              lastAssistant,
+              lastAssistant: lastAssistantMessage,
               usage: getUsageTotals(),
             },
             {
@@ -2771,7 +2781,7 @@ export async function runEmbeddedAttempt(
         messagesSnapshot,
         assistantTexts,
         toolMetas: toolMetasNormalized,
-        lastAssistant,
+        lastAssistant: lastAssistantMessage,
         lastToolError: getLastToolError?.(),
         didSendViaMessagingTool: didSendViaMessagingTool(),
         messagingToolSentTexts: getMessagingToolSentTexts(),
@@ -2779,7 +2789,8 @@ export async function runEmbeddedAttempt(
         messagingToolSentTargets: getMessagingToolSentTargets(),
         successfulCronAdds: getSuccessfulCronAdds(),
         cloudCodeAssistFormatError: Boolean(
-          lastAssistant?.errorMessage && isCloudCodeAssistFormatError(lastAssistant.errorMessage),
+          lastAssistantMessage?.errorMessage &&
+          isCloudCodeAssistFormatError(lastAssistantMessage.errorMessage),
         ),
         attemptUsage: getUsageTotals(),
         compactionCount: getCompactionCount(),

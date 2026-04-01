@@ -63,6 +63,7 @@ export type { SubagentRunRecord } from "./subagent-registry.types.js";
 const log = createSubsystemLogger("agents/subagent-registry");
 
 const subagentRuns = new Map<string, SubagentRunRecord>();
+const pendingWaitRetryCounts = new Map<string, number>();
 let sweeper: NodeJS.Timeout | null = null;
 let listenerStarted = false;
 let listenerStop: (() => void) | null = null;
@@ -134,6 +135,24 @@ function logAnnounceGiveUp(entry: SubagentRunRecord, reason: "retry-limit" | "ex
 
 function persistSubagentRuns() {
   persistSubagentRunsToDisk(subagentRuns);
+}
+
+function clearPendingWaitRetry(runId: string) {
+  pendingWaitRetryCounts.delete(runId);
+}
+
+function scheduleSubagentWaitRetry(runId: string, waitTimeoutMs: number) {
+  const entry = subagentRuns.get(runId);
+  if (!entry || typeof entry.endedAt === "number" || entry.cleanupCompletedAt) {
+    clearPendingWaitRetry(runId);
+    return;
+  }
+  const nextRetryCount = (pendingWaitRetryCounts.get(runId) ?? 0) + 1;
+  pendingWaitRetryCounts.set(runId, nextRetryCount);
+  const delayMs = resolveAnnounceRetryDelayMs(nextRetryCount);
+  setTimeout(() => {
+    void waitForSubagentCompletion(runId, waitTimeoutMs);
+  }, delayMs).unref?.();
 }
 
 function findSessionEntryByKey(store: Record<string, SessionEntry>, sessionKey: string) {
@@ -1290,6 +1309,7 @@ async function waitForSubagentCompletion(runId: string, waitTimeoutMs: number) {
       entry.outcome = outcome;
       mutated = true;
     }
+    clearPendingWaitRetry(runId);
     if (mutated) {
       persistSubagentRuns();
     }
@@ -1303,13 +1323,23 @@ async function waitForSubagentCompletion(runId: string, waitTimeoutMs: number) {
       accountId: entry.requesterOrigin?.accountId,
       triggerCleanup: true,
     });
-  } catch {
-    // ignore
+  } catch (err) {
+    const entry = subagentRuns.get(runId);
+    if (!entry || typeof entry.endedAt === "number" || entry.cleanupCompletedAt) {
+      clearPendingWaitRetry(runId);
+      return;
+    }
+    log.warn("agent.wait failed for subagent; scheduling retry", {
+      runId,
+      err,
+    });
+    scheduleSubagentWaitRetry(runId, waitTimeoutMs);
   }
 }
 
 export function resetSubagentRegistryForTests(opts?: { persist?: boolean }) {
   subagentRuns.clear();
+  pendingWaitRetryCounts.clear();
   resumedRuns.clear();
   endedHookInFlightRunIds.clear();
   clearAllPendingLifecycleErrors();

@@ -1,56 +1,56 @@
 /**
  * omega-integrated-reasoning.ts
- * 
+ *
  * Orquestador de las 5 joyas de SKYNET_OMEGA
  * Coordina: NLE + HM + Lyapunov + Causal + Metabolism
- * 
+ *
  * Interfaz unificada para heartbeat.ts
  */
 
-import { getNeuralLogicEngine } from './neural-logic-engine.js';
-import { getHierarchicalMemory } from './hierarchical-memory.js';
-import { getLyapunovController } from './lyapunov-controller.js';
-import { getCausalReasoner } from './causal-reasoner.js';
-import { getSparseMetabolism } from './sparse-metabolism.js';
+import { getCausalReasoner } from "./causal-reasoner.js";
+import { getHierarchicalMemory } from "./hierarchical-memory.js";
+import { getLyapunovController } from "./lyapunov-controller.js";
+import { getNeuralLogicEngine } from "./neural-logic-engine.js";
+import { getSparseMetabolism } from "./sparse-metabolism.js";
 
 export interface IntegratedReasoningState {
   timestamp: number;
   cycleNumber: number;
   frustration: number;
-  
+
   // Componentes activos según metabolism
   metabolism: {
     totalMetabolicRate: number;
     activeComponents: string[];
   };
-  
+
   // Neural Logic Engine
   nle?: {
     activeRules: number;
     confidence: number;
   };
-  
+
   // Hierarchical Memory
   hm?: {
     workingMemorySize: number;
     episodicMatches: number;
     semanticConcepts: number;
   };
-  
+
   // Lyapunov Control
   lyapunov?: {
     divergence: number;
     damping: number;
     isStable: boolean;
   };
-  
+
   // Causal Reasoner
   causal?: {
     nodesInGraph: number;
     confoundersDetected: number;
     predictedBackfires: string[];
   };
-  
+
   // Final decision
   finalDrive: {
     kind: string;
@@ -65,12 +65,12 @@ export class OmegaIntegratedReasoner {
 
   /**
    * CORE: Ejecutar razonamiento integrado sobre una decisión
-   * 
-   * Input: 
+   *
+   * Input:
    *   - driveSignal: la decisión propuesta (from evaluateInnerDrives + JEPA)
    *   - kernelState: estado actual del kernel
    *   - frustration: nivel de frustración (0-1)
-   * 
+   *
    * Output:
    *   - driveSignal mejorado con razonamiento de todas las joyas
    *   - estados internos para logging
@@ -78,7 +78,7 @@ export class OmegaIntegratedReasoner {
   async integratedReason(
     driveSignal: any,
     kernelState: any,
-    jepaTension: number
+    jepaTension: number,
   ): Promise<{ enhancedDrive: any; state: IntegratedReasoningState }> {
     this.cycleCount++;
     const timestamp = Date.now();
@@ -112,7 +112,7 @@ export class OmegaIntegratedReasoner {
     // ───────────────────────────────────────────────────────────────
     // FASE 1: NEURAL LOGIC ENGINE
     // ───────────────────────────────────────────────────────────────
-    if (metabolism.shouldActivate('neural_logic_engine')) {
+    if (metabolism.shouldActivate("neural_logic_engine")) {
       const nle = getNeuralLogicEngine();
       const currentState = [
         frustration,
@@ -138,7 +138,7 @@ export class OmegaIntegratedReasoner {
     // ───────────────────────────────────────────────────────────────
     // FASE 2: HIERARCHICAL MEMORY
     // ───────────────────────────────────────────────────────────────
-    if (metabolism.shouldActivate('hierarchical_memory')) {
+    if (metabolism.shouldActivate("hierarchical_memory")) {
       const hm = getHierarchicalMemory();
 
       // Agregar a working memory
@@ -161,9 +161,9 @@ export class OmegaIntegratedReasoner {
         ],
         frustration,
         driveSignal.kind,
-        kernelState.successRate ?? 0.5 > 0.6 ? 'success' : 'neutral',
+        (kernelState.successRate ?? 0.5 > 0.6) ? "success" : "neutral",
         this.cycleCount,
-        { reward: driveSignal.urgency ?? 0.5 }
+        { reward: driveSignal.urgency ?? 0.5 },
       );
 
       const memStats = hm.getStats();
@@ -178,23 +178,20 @@ export class OmegaIntegratedReasoner {
     // FASE 3: LYAPUNOV CONTROL
     // ───────────────────────────────────────────────────────────────
     let originalUrgency = enhancedDrive.urgency ?? 1.0;
-    if (metabolism.shouldActivate('lyapunov_controller')) {
+    if (metabolism.shouldActivate("lyapunov_controller")) {
       const lyapunov = getLyapunovController();
 
       // Calcular divergencia
       const stateChange = Math.sqrt(
         Math.pow(frustration - (kernelState.lastFrustration ?? 0), 2) +
-        Math.pow(
-          (kernelState.successRate ?? 0) - (kernelState.lastSuccessRate ?? 0),
-          2
-        )
+          Math.pow((kernelState.successRate ?? 0) - (kernelState.lastSuccessRate ?? 0), 2),
       );
 
       const divergence = lyapunov.computeDivergence(
         [frustration, kernelState.successRate ?? 0.5],
         [kernelState.lastFrustration ?? 0, kernelState.lastSuccessRate ?? 0.5],
         kernelState.predictionError ?? 0.1,
-        0.1 * frustration
+        0.1 * frustration,
       );
 
       const damping = lyapunov.computeDamping(divergence);
@@ -213,14 +210,14 @@ export class OmegaIntegratedReasoner {
     // ───────────────────────────────────────────────────────────────
     // FASE 4: CAUSAL REASONER
     // ───────────────────────────────────────────────────────────────
-    if (metabolism.shouldActivate('causal_reasoner') && driveSignal.kind !== 'idle') {
+    if (metabolism.shouldActivate("causal_reasoner") && driveSignal.kind !== "idle") {
       const reasoner = getCausalReasoner();
 
       // Observar correlación
       reasoner.observeCorrelation(
         `action_${driveSignal.kind}`,
-        kernelState.successRate ?? 0.5 > 0.6 ? 'success' : 'failure',
-        'A→B'
+        (kernelState.successRate ?? 0.5 > 0.6) ? "success" : "failure",
+        "A→B",
       );
 
       // Razonar sobre la acción
@@ -258,7 +255,7 @@ export class OmegaIntegratedReasoner {
     let report = `\n[INTEGRATED REASONING - Cycle ${state.cycleNumber}]\n`;
     report += `  Frustration: ${(state.frustration * 100).toFixed(1)}%\n`;
     report += `  Metabolic Rate: ${(state.metabolism.totalMetabolicRate * 100).toFixed(1)}%\n`;
-    report += `  Active Components: ${state.metabolism.activeComponents.join(', ') || 'NONE'}\n`;
+    report += `  Active Components: ${state.metabolism.activeComponents.join(", ") || "NONE"}\n`;
 
     if (state.nle) {
       report += `\n  [NLE] ${state.nle.activeRules} rules active, confidence ${(state.nle.confidence * 100).toFixed(0)}%\n`;
@@ -269,13 +266,13 @@ export class OmegaIntegratedReasoner {
     }
 
     if (state.lyapunov) {
-      report += `  [Lyapunov] Divergence=${state.lyapunov.divergence.toFixed(3)}, Damping=${(state.lyapunov.damping * 100).toFixed(1)}%, ${state.lyapunov.isStable ? '🟢 STABLE' : '🔴 AT RISK'}\n`;
+      report += `  [Lyapunov] Divergence=${state.lyapunov.divergence.toFixed(3)}, Damping=${(state.lyapunov.damping * 100).toFixed(1)}%, ${state.lyapunov.isStable ? "🟢 STABLE" : "🔴 AT RISK"}\n`;
     }
 
     if (state.causal) {
       report += `  [Causal] DAG nodes=${state.causal.nodesInGraph}, confounders=${state.causal.confoundersDetected}\n`;
       if (state.causal.predictedBackfires.length > 0) {
-        report += `    ⚠ Predicted backfires: ${state.causal.predictedBackfires.join(', ')}\n`;
+        report += `    ⚠ Predicted backfires: ${state.causal.predictedBackfires.join(", ")}\n`;
       }
     }
 
@@ -310,6 +307,6 @@ export function getOmegaIntegratedReasoner(): OmegaIntegratedReasoner {
 
 export function initializeOmegaIntegratedReasoner(): OmegaIntegratedReasoner {
   reasonerInstance = new OmegaIntegratedReasoner();
-  console.log('[OmegaIntegratedReasoner] All 5 jewels initialized and ready');
+  console.log("[OmegaIntegratedReasoner] All 5 jewels initialized and ready");
   return reasonerInstance;
 }

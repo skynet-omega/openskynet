@@ -179,8 +179,24 @@ export function createGatewayTool(opts?: {
           required: true,
           label: "path",
         });
-        const result = await callGatewayTool("config.schema.lookup", gatewayOpts, { path });
-        return jsonResult({ ok: true, result });
+        try {
+          const result = await callGatewayTool("config.schema.lookup", gatewayOpts, { path });
+          return jsonResult({ ok: true, result });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          // Missing schema paths are recoverable during agent exploration.
+          // Return a soft result so the model can try a nearby path instead of
+          // surfacing a raw tool failure to the chat surface.
+          if (message === "config schema path not found") {
+            return jsonResult({
+              ok: false,
+              error: message,
+              missing: true,
+              path,
+            });
+          }
+          throw err;
+        }
       }
       if (action === "config.apply") {
         const { raw, baseHash, sessionKey, note, restartDelayMs } =

@@ -1,6 +1,6 @@
+import { exec } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import {
   resolveAgentConfig,
@@ -38,6 +38,12 @@ import {
 } from "../config/sessions.js";
 import type { AgentDefaultsConfig } from "../config/types.agent-defaults.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
+import { recordOmegaBackgroundActionMetrics } from "../omega/empirical-metrics.js";
+import {
+  applyOmegaHeartbeatExecutiveAction,
+  buildOmegaHeartbeatPrompt,
+} from "../omega/heartbeat.js";
+import { runHomeostasisDaemon } from "../omega/homeostasis-daemon.js";
 import { getQueueSize } from "../process/command-queue.js";
 import { CommandLane } from "../process/lanes.js";
 import {
@@ -74,12 +80,6 @@ import {
   resolveHeartbeatSenderContext,
 } from "./outbound/targets.js";
 import { peekSystemEventEntries } from "./system-events.js";
-import {
-  applyOmegaHeartbeatExecutiveAction,
-  buildOmegaHeartbeatPrompt,
-} from "../omega/heartbeat.js";
-import { recordOmegaBackgroundActionMetrics } from "../omega/empirical-metrics.js";
-import { runHomeostasisDaemon } from "../omega/homeostasis-daemon.js";
 
 const execAsync = promisify(exec);
 
@@ -718,7 +718,7 @@ export async function runHeartbeatOnce(opts: {
   const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
 
   // Trigger intrinsic "Self" evaluation asynchronously so it never blocks the Heartbeat event loop
-  runHomeostasisDaemon(workspaceDir).catch((err) => {
+  runHomeostasisDaemon(workspaceDir).catch((err: unknown) => {
     log.error("Failed to run homeostasis daemon background cycle", { error: err });
   });
 
@@ -746,11 +746,11 @@ export async function runHeartbeatOnce(opts: {
           ? "Pruned superseded goals"
           : omegaExecutive.kind === "pruned_shadowed_goals"
             ? "Pruned shadowed goals"
-          : omegaExecutive.kind === "focused_active_goal_targets"
-            ? "Focused active goal targets"
-            : omegaExecutive.kind === "aborted_interrupted_goal"
-              ? "Aborted interrupted goal"
-            : "Resumed interrupted goal";
+            : omegaExecutive.kind === "focused_active_goal_targets"
+              ? "Focused active goal targets"
+              : omegaExecutive.kind === "aborted_interrupted_goal"
+                ? "Aborted interrupted goal"
+                : "Resumed interrupted goal";
     const previewBody =
       omegaExecutive.kind === "focused_active_goal_targets"
         ? omegaExecutive.focusedTargets.join(" | ")
@@ -762,15 +762,15 @@ export async function runHeartbeatOnce(opts: {
             ]
               .filter((value) => typeof value === "string" && value.length > 0)
               .join(" | ")
-        : omegaExecutive.kind === "resumed_interrupted_goal"
-          ? [
-              omegaExecutive.route,
-              omegaExecutive.status,
-              ...(omegaExecutive.observedChangedFiles ?? []),
-            ]
-              .filter((value) => typeof value === "string" && value.length > 0)
-              .join(" | ")
-          : omegaExecutive.prunedGoalTasks.join(" | ");
+          : omegaExecutive.kind === "resumed_interrupted_goal"
+            ? [
+                omegaExecutive.route,
+                omegaExecutive.status,
+                ...(omegaExecutive.observedChangedFiles ?? []),
+              ]
+                .filter((value) => typeof value === "string" && value.length > 0)
+                .join(" | ")
+            : omegaExecutive.prunedGoalTasks.join(" | ");
     emitHeartbeatEvent({
       status: "ok-empty",
       reason: omegaExecutive.wakeAction.reason,
@@ -1341,5 +1341,3 @@ export function startHeartbeatRunner(opts: {
 
   return { stop: cleanup, updateConfig };
 }
-
-

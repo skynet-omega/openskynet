@@ -187,6 +187,16 @@ describe("buildEmbeddedRunPayloads", () => {
     expect(payloads).toHaveLength(0);
   });
 
+  it("suppresses non-mutating tool warnings when messaging tool already delivered the reply", () => {
+    const payloads = buildPayloads({
+      toolMetas: [{ toolName: "message_send", meta: "sent to #ops" }],
+      didSendViaMessagingTool: true,
+      lastToolError: { toolName: "browser", error: "connection timeout" },
+    });
+
+    expect(payloads).toHaveLength(0);
+  });
+
   it("does not add synthetic completion text when the run still has a tool error", () => {
     const payloads = buildPayloads({
       toolMetas: [{ toolName: "browser", meta: "open https://example.com" }],
