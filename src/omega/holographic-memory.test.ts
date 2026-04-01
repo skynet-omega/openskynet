@@ -87,4 +87,43 @@ describe("HolographicMemoryManager", () => {
     expect(resonances).toHaveLength(1);
     expect(resonances[0]?.metadata).toMatchObject({ compression: "turboquant-lite" });
   });
+
+  it("finds redundant clusters conservatively within the same domain", async () => {
+    const manager = new HolographicMemoryManager(workspaceRoot);
+    await manager.initialize();
+
+    await manager.fossilize(
+      "Telegram TTS in Spanish with Catalina voice",
+      { domain: "telegram", importance: 1 },
+      createMemoryEmbedding({
+        content: "Telegram TTS in Spanish with Catalina voice",
+        metadata: { domain: "telegram" },
+      }),
+    );
+    await manager.fossilize(
+      " telegram   tts in spanish with catalina voice ",
+      { domain: "telegram", importance: 2 },
+      createMemoryEmbedding({
+        content: " telegram   tts in spanish with catalina voice ",
+        metadata: { domain: "telegram" },
+      }),
+    );
+    await manager.fossilize(
+      "omega authority degraded components surfaced",
+      { domain: "omega", importance: 5 },
+      createMemoryEmbedding({
+        content: "omega authority degraded components surfaced",
+        metadata: { domain: "omega" },
+      }),
+    );
+
+    const clusters = manager.findRedundantClusters({
+      similarityThreshold: 0.95,
+      minClusterSize: 2,
+    });
+
+    expect(clusters).toHaveLength(1);
+    expect(clusters[0]?.domain).toBe("telegram");
+    expect(clusters[0]?.fossils).toHaveLength(2);
+  });
 });

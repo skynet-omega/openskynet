@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import { getResolvedLoggerSettings } from "../logging.js";
 import { HolographicMemoryManager } from "./holographic-memory.js";
 import { getNeuralLogicEngine } from "./neural-logic-engine.js";
+import { OmegaDreamer } from "./omega-dream.js";
 
 const execAsync = promisify(exec);
 
@@ -200,9 +201,39 @@ async function executeIntrinsicAction(
       return await executeHomeostasisAction(workspaceRoot);
     case "curiosity":
       return await executeCuriosityAction(workspaceRoot, memory);
+    case "entropy_alert":
+      return await executeEntropyPruningAction(workspaceRoot, memory);
     default:
       return { kind: "none", reason: "unknown_drive" };
   }
+}
+
+async function executeEntropyPruningAction(
+  workspaceRoot: string,
+  memory: HolographicMemoryManager,
+): Promise<AutonomousActionResult> {
+  const dreamer = new OmegaDreamer(workspaceRoot);
+  const dreamResult = await dreamer.dream();
+  if (dreamResult.status === "success") {
+    return {
+      kind: "memory_explored",
+      target: "omega-dream",
+      findings: [
+        `Consolidados ${dreamResult.consolidated} fósiles en ${dreamResult.clusters ?? 0} clusters.`,
+        ...dreamResult.wisdomGained.slice(0, 2),
+      ],
+    };
+  }
+
+  const result = await memory.entropyPruning(0.985);
+  return {
+    kind: "memory_explored",
+    target: "holographic-memory",
+    findings: [
+      `Omega dream omitido: ${dreamResult.reason ?? "sin consolidación aplicable"}.`,
+      `Podados ${result.pruned} fósiles redundantes por deduplicación conservadora.`,
+    ],
+  };
 }
 
 async function executeHomeostasisAction(workspaceRoot: string): Promise<AutonomousActionResult> {
@@ -228,14 +259,15 @@ async function executeCuriosityAction(
   memory: HolographicMemoryManager,
 ): Promise<AutonomousActionResult> {
   try {
-    const dummyEmbedding = Array(768)
-      .fill(0)
-      .map(() => Math.random() - 0.5);
-    const res = await memory.resonance(dummyEmbedding, 2);
+    const res = await memory.resonanceByText(
+      "Recent continuity, unresolved work, and active operational memory",
+      { domain: "homeostasis", workspaceRoot, mode: "curiosity" },
+      2,
+    );
     return {
       kind: "memory_explored",
       target: "holographic-memory",
-      findings: res.map((r: any) => r.content.substring(0, 50)),
+      findings: res.map((r: any) => r.content.substring(0, 80)),
     };
   } catch {
     return { kind: "memory_explored", target: "holographic-memory", findings: [] };
