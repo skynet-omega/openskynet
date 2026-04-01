@@ -122,6 +122,14 @@ type OmegaWorldModelInternalProjectState = {
   internalProjectContinuity?: SkynetContinuityState;
 };
 
+type OmegaWorldModelPreferenceState = {
+  activeRecoveryPreference?: OmegaRecoveryPreference;
+  generalizedRecoveryPreference?: OmegaRecoveryPreference & {
+    mechanismKey: string;
+  };
+  localityRoutingPreference?: OmegaLocalityRoutingPreference;
+};
+
 async function captureWorldModelComponent<T>(
   component: string,
   degradedComponents: OmegaWorldModelSnapshot["degradedComponents"],
@@ -397,6 +405,22 @@ function deriveActiveRecoveryPreference(params: {
   return buildRecoveryPreference({ delegateSuccesses, isolatedSuccesses });
 }
 
+function deriveOmegaWorldModelPreferenceState(params: {
+  base: OmegaWorldModelBaseState;
+}): OmegaWorldModelPreferenceState {
+  return {
+    activeRecoveryPreference: deriveActiveRecoveryPreference({
+      kernel: params.base.sessionAuthority.kernel,
+      metrics: params.base.empiricalMetrics,
+    }),
+    generalizedRecoveryPreference: deriveGeneralizedRecoveryPreference({
+      kernel: params.base.sessionAuthority.kernel,
+      metrics: params.base.empiricalMetrics,
+    }),
+    localityRoutingPreference: deriveLocalityRoutingPreference(params.base.relevantMemories),
+  };
+}
+
 function deriveEnrichedSelfState(params: {
   sessionAuthority: OmegaSessionAuthority;
   allDurableMemory: OmegaDurableMemoryEntry[];
@@ -592,37 +616,23 @@ async function loadOmegaWorldModelInternalProjectState(params: {
   };
 }
 
-export async function loadOmegaWorldModelSnapshot(
-  params: LoadOmegaWorldModelSnapshotParams,
-): Promise<OmegaWorldModelSnapshot> {
-  const degradedComponents: OmegaWorldModelSnapshot["degradedComponents"] = [];
-  const base = await loadOmegaWorldModelBaseState(params);
-  const derived = await loadOmegaWorldModelDerivedState({
-    input: params,
-    base,
-    degradedComponents,
-  });
-  const internalProject = await loadOmegaWorldModelInternalProjectState({
-    input: params,
-    base,
-    derived,
-    degradedComponents,
-  });
-
+function buildOmegaWorldModelSnapshot(params: {
+  input: LoadOmegaWorldModelSnapshotParams;
+  base: OmegaWorldModelBaseState;
+  derived: OmegaWorldModelDerivedState;
+  internalProject: OmegaWorldModelInternalProjectState;
+  preferences: OmegaWorldModelPreferenceState;
+  degradedComponents: OmegaWorldModelSnapshot["degradedComponents"];
+}): OmegaWorldModelSnapshot {
+  const { input, base, derived, internalProject, preferences, degradedComponents } = params;
   return {
-    sessionKey: params.sessionKey,
+    sessionKey: input.sessionKey,
     sessionAuthority: base.sessionAuthority,
     kernel: base.sessionAuthority.kernel,
     selfState: derived.selfState,
-    activeRecoveryPreference: deriveActiveRecoveryPreference({
-      kernel: base.sessionAuthority.kernel,
-      metrics: base.empiricalMetrics,
-    }),
-    generalizedRecoveryPreference: deriveGeneralizedRecoveryPreference({
-      kernel: base.sessionAuthority.kernel,
-      metrics: base.empiricalMetrics,
-    }),
-    localityRoutingPreference: deriveLocalityRoutingPreference(base.relevantMemories),
+    activeRecoveryPreference: preferences.activeRecoveryPreference,
+    generalizedRecoveryPreference: preferences.generalizedRecoveryPreference,
+    localityRoutingPreference: preferences.localityRoutingPreference,
     localityExecutionGuard: derived.localityExecutionGuard,
     problemAgenda: derived.problemAgenda,
     timelineLength: base.sessionAuthority.timeline.length,
@@ -640,7 +650,35 @@ export async function loadOmegaWorldModelSnapshot(
   };
 }
 
-export function formatOmegaWorldModelSnapshot(snapshot: OmegaWorldModelSnapshot): string[] {
+export async function loadOmegaWorldModelSnapshot(
+  params: LoadOmegaWorldModelSnapshotParams,
+): Promise<OmegaWorldModelSnapshot> {
+  const degradedComponents: OmegaWorldModelSnapshot["degradedComponents"] = [];
+  const base = await loadOmegaWorldModelBaseState(params);
+  const derived = await loadOmegaWorldModelDerivedState({
+    input: params,
+    base,
+    degradedComponents,
+  });
+  const internalProject = await loadOmegaWorldModelInternalProjectState({
+    input: params,
+    base,
+    derived,
+    degradedComponents,
+  });
+  const preferences = deriveOmegaWorldModelPreferenceState({ base });
+
+  return buildOmegaWorldModelSnapshot({
+    input: params,
+    base,
+    derived,
+    internalProject,
+    preferences,
+    degradedComponents,
+  });
+}
+
+function formatOmegaWorldModelOverview(snapshot: OmegaWorldModelSnapshot): string[] {
   const lines = ["[OMEGA World Model]"];
   if (!snapshot.kernel) {
     lines.push("Kernel state: unavailable");
@@ -696,17 +734,11 @@ export function formatOmegaWorldModelSnapshot(snapshot: OmegaWorldModelSnapshot)
         .join(", ")}`,
     );
   }
-  lines.push(...formatOmegaStudySupervisorBlock(snapshot.studySupervisor));
-  if (snapshot.internalProjectNucleus) {
-    lines.push("");
-    lines.push(...formatSkynetNucleusBlock(snapshot.internalProjectNucleus));
-  }
-  if (snapshot.internalProjectStudyProgram) {
-    lines.push(...formatSkynetStudyProgramBlock(snapshot.internalProjectStudyProgram));
-  }
-  if (snapshot.internalProjectContinuity) {
-    lines.push(...formatSkynetContinuityBlock(snapshot.internalProjectContinuity));
-  }
+  return lines;
+}
+
+function formatOmegaWorldModelMemoryBlocks(snapshot: OmegaWorldModelSnapshot): string[] {
+  const lines: string[] = [];
   if (snapshot.relevantMemories.length > 0) {
     lines.push("");
     lines.push("[OMEGA Durable Memory]");
@@ -728,5 +760,22 @@ export function formatOmegaWorldModelSnapshot(snapshot: OmegaWorldModelSnapshot)
       );
     });
   }
+  return lines;
+}
+
+export function formatOmegaWorldModelSnapshot(snapshot: OmegaWorldModelSnapshot): string[] {
+  const lines = formatOmegaWorldModelOverview(snapshot);
+  lines.push(...formatOmegaStudySupervisorBlock(snapshot.studySupervisor));
+  if (snapshot.internalProjectNucleus) {
+    lines.push("");
+    lines.push(...formatSkynetNucleusBlock(snapshot.internalProjectNucleus));
+  }
+  if (snapshot.internalProjectStudyProgram) {
+    lines.push(...formatSkynetStudyProgramBlock(snapshot.internalProjectStudyProgram));
+  }
+  if (snapshot.internalProjectContinuity) {
+    lines.push(...formatSkynetContinuityBlock(snapshot.internalProjectContinuity));
+  }
+  lines.push(...formatOmegaWorldModelMemoryBlocks(snapshot));
   return lines;
 }
