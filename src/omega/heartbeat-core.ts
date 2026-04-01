@@ -127,6 +127,7 @@ async function loadOmegaHeartbeatDecisionContext(params: {
     shouldDispatchPrompt,
     degradedComponents: decisionContext.degradedComponents,
     runtimeObserver: authority.runtimeObserver,
+    cognitiveKernel: authority.cognitiveKernel,
   };
 }
 
@@ -272,6 +273,7 @@ function appendWakeActionLines(params: {
   degradedComponents: OmegaHeartbeatDecisionContext["degradedComponents"];
   stateAuthority: OmegaHeartbeatDecisionContext["stateAuthority"];
   runtimeObserver: OmegaHeartbeatDecisionContext["runtimeObserver"];
+  cognitiveKernel: OmegaHeartbeatDecisionContext["cognitiveKernel"];
   controllerState: OmegaHeartbeatDecisionContext["controllerState"];
 }): void {
   const {
@@ -280,6 +282,7 @@ function appendWakeActionLines(params: {
     degradedComponents,
     stateAuthority,
     runtimeObserver,
+    cognitiveKernel,
     controllerState,
   } = params;
   if (degradedComponents.length > 0) {
@@ -306,6 +309,25 @@ function appendWakeActionLines(params: {
     if (runtimeObserver.dominantLabel) {
       lines.push(
         `Observed dominant runtime mode: ${runtimeObserver.dominantLabel}. Use this only as a soft causal prior; do not override verified state.`,
+      );
+    }
+  }
+  if (cognitiveKernel?.freshness === "fresh") {
+    lines.push(
+      `Cognitive kernel signal: live trajectory learning is ${cognitiveKernel.active ? "active" : "inactive"} (${cognitiveKernel.accuracy.toFixed(2)} accuracy vs ${cognitiveKernel.majorityBaseline.toFixed(2)} baseline across ${cognitiveKernel.trajectorySamples} samples).`,
+    );
+    if (cognitiveKernel.active) {
+      lines.push(
+        `Activation policy: enabled by default while accuracy stays >= ${cognitiveKernel.deactivationThreshold.toFixed(2)}; target band is ${cognitiveKernel.targetAccuracy.toFixed(2)}.`,
+      );
+      if (cognitiveKernel.dominantLabel) {
+        lines.push(
+          `Observed cognitive mode: ${cognitiveKernel.dominantLabel}. Use this as a soft causal prior only; do not override verified state.`,
+        );
+      }
+    } else {
+      lines.push(
+        `Cognitive kernel is auto-disabled (${cognitiveKernel.activationReason}); review src/skynet/cognitive-kernel before trusting it again.`,
       );
     }
   }
@@ -434,6 +456,7 @@ export async function buildOmegaHeartbeatPrompt(params: {
     shouldDispatchPrompt,
     degradedComponents,
     runtimeObserver,
+    cognitiveKernel,
   } = await loadOmegaHeartbeatDecisionContext(params);
   const engines = getOmegaHeartbeatEngineRegistry();
   const staleOperationalMemory = hasStaleOperationalMemory(stateAuthority);
@@ -504,6 +527,7 @@ export async function buildOmegaHeartbeatPrompt(params: {
     degradedComponents,
     stateAuthority,
     runtimeObserver,
+    cognitiveKernel,
     controllerState,
   });
   await appendScienceBaseRules({

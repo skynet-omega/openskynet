@@ -28,6 +28,7 @@ vi.mock("../config/config.js", async (importOriginal) => {
 });
 
 import "./test-helpers/fast-core-tools.js";
+import { resolveOmegaCognitiveKernelArtifactPath } from "../omega/cognitive-kernel.js";
 import { resolveOmegaRuntimeObserverArtifactPath } from "../omega/runtime-observer.js";
 import { recordOmegaSessionOutcome } from "../omega/session-context.js";
 import { createOpenClawTools } from "./openclaw-tools.js";
@@ -265,6 +266,75 @@ describe("omega_work hard tasks", () => {
         improvementOverBaseline: 0.12,
         trajectorySamples: 95,
         dominantLabel: "stall",
+      },
+    });
+  });
+
+  it("exposes an active cognitive kernel prior in omega_work results when available", async () => {
+    await fs.mkdir(path.dirname(resolveOmegaCognitiveKernelArtifactPath(workspaceRoot)), {
+      recursive: true,
+    });
+    await fs.writeFile(
+      resolveOmegaCognitiveKernelArtifactPath(workspaceRoot),
+      JSON.stringify(
+        {
+          updatedAt: Date.now(),
+          status: "pass",
+          accuracy: 0.86,
+          majorityBaseline: 0.56,
+          improvementOverBaseline: 0.3,
+          trajectorySamples: 87,
+          harvestedEpisodes: 91,
+          evaluatedSamples: 79,
+          warmupSamples: 8,
+          labelCoverage: { stall: 48, damage: 15, relief: 15, progress: 9 },
+        },
+        null,
+        2,
+      ),
+      "utf-8",
+    );
+
+    callGatewayMock.mockImplementation(async (opts: unknown) => {
+      const request = opts as { method?: string };
+      if (request.method === "agent") {
+        return { runId: "run-cognitive-kernel", status: "accepted" };
+      }
+      if (request.method === "agent.wait") {
+        await fs.writeFile(fileA, "def clamp(v):\n    return max(0, v)\n", "utf-8");
+        return { status: "ok" };
+      }
+      if (request.method === "chat.history") {
+        return {
+          messages: [
+            {
+              role: "assistant",
+              content: [{ type: "text", text: '{"status":"ok","summary":"patched one file"}' }],
+            },
+          ],
+        };
+      }
+      throw new Error(`unexpected method: ${String(request.method)}`);
+    });
+
+    const result = await getOmegaWorkTool().execute("call-cognitive-kernel", {
+      task: "arregla solo el modulo",
+      sessionKey: "main",
+      timeoutSeconds: 1,
+      expectsJson: true,
+      expectedKeys: ["status", "summary"],
+      expectedPaths: [relA],
+    });
+
+    expect(result.details).toMatchObject({
+      route: "omega_delegate",
+      cognitiveKernel: {
+        freshness: "fresh",
+        active: true,
+        accuracy: 0.86,
+        trajectorySamples: 87,
+        dominantLabel: "stall",
+        deactivationThreshold: 0.8,
       },
     });
   });

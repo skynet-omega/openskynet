@@ -1,5 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import type { OpenClawConfig } from "../../config/config.js";
+import type { OmegaCognitiveKernelSignal } from "../../omega/cognitive-kernel.js";
 import { resolveOmegaValidatedWorkRouting } from "../../omega/execution-controller.js";
 import {
   decideOmegaFrontalAction,
@@ -70,6 +71,7 @@ function buildOmegaCorrectiveRetryTask(params: {
   expectedPaths: string[];
   details: Record<string, unknown>;
   runtimeObserver?: OmegaRuntimeObserverSignal;
+  cognitiveKernel?: OmegaCognitiveKernelSignal;
 }): string {
   const errorKind =
     typeof params.details.errorKind === "string" ? params.details.errorKind : "validated_failure";
@@ -97,6 +99,16 @@ function buildOmegaCorrectiveRetryTask(params: {
       );
     }
   }
+  if (params.cognitiveKernel?.freshness === "fresh") {
+    lines.push(
+      `Cognitive kernel prior: live trajectory learning is ${params.cognitiveKernel.active ? "active" : "inactive"} (${params.cognitiveKernel.accuracy.toFixed(2)} accuracy vs ${params.cognitiveKernel.majorityBaseline.toFixed(2)} baseline across ${params.cognitiveKernel.trajectorySamples} samples).`,
+    );
+    if (params.cognitiveKernel.active && params.cognitiveKernel.dominantLabel) {
+      lines.push(
+        `Observed cognitive mode: ${params.cognitiveKernel.dominantLabel}. Use this only as a soft causal prior; never override verified disk evidence.`,
+      );
+    }
+  }
   return lines.join("\n");
 }
 
@@ -116,6 +128,29 @@ function buildOmegaRuntimeObserverDetails(
       harvestedEpisodes: runtimeObserver.harvestedEpisodes,
       lookback: runtimeObserver.lookback,
       dominantLabel: runtimeObserver.dominantLabel,
+    },
+  };
+}
+
+function buildOmegaCognitiveKernelDetails(
+  cognitiveKernel: OmegaCognitiveKernelSignal | undefined,
+): Record<string, unknown> {
+  if (!cognitiveKernel) {
+    return {};
+  }
+  return {
+    cognitiveKernel: {
+      freshness: cognitiveKernel.freshness,
+      active: cognitiveKernel.active,
+      activationReason: cognitiveKernel.activationReason,
+      accuracy: cognitiveKernel.accuracy,
+      majorityBaseline: cognitiveKernel.majorityBaseline,
+      improvementOverBaseline: cognitiveKernel.improvementOverBaseline,
+      trajectorySamples: cognitiveKernel.trajectorySamples,
+      harvestedEpisodes: cognitiveKernel.harvestedEpisodes,
+      dominantLabel: cognitiveKernel.dominantLabel,
+      targetAccuracy: cognitiveKernel.targetAccuracy,
+      deactivationThreshold: cognitiveKernel.deactivationThreshold,
     },
   };
 }
@@ -334,6 +369,7 @@ export function createOmegaWorkTool(
       });
       const interaction = frontal.interaction;
       const runtimeObserverDetails = buildOmegaRuntimeObserverDetails(authority.runtimeObserver);
+      const cognitiveKernelDetails = buildOmegaCognitiveKernelDetails(authority.cognitiveKernel);
 
       if (frontal.kind === "reuse_verified_result") {
         await recordOmegaRouteMetrics({
@@ -357,6 +393,7 @@ export function createOmegaWorkTool(
           tension: frontal.tension,
           wakeAction,
           ...runtimeObserverDetails,
+          ...cognitiveKernelDetails,
         });
       }
 
@@ -462,6 +499,7 @@ export function createOmegaWorkTool(
           tension: frontal.tension,
           wakeAction,
           ...runtimeObserverDetails,
+          ...cognitiveKernelDetails,
           ...(frontal.kind === "escalate_isolated_repair"
             ? {
                 escalatedByOmega: true,
@@ -517,6 +555,7 @@ export function createOmegaWorkTool(
             expectedPaths: effectiveValidation.expectedPaths,
             details: delegateDetails,
             runtimeObserver: authority.runtimeObserver,
+            cognitiveKernel: authority.cognitiveKernel,
           });
           const retryResult = await sessionsSpawn.execute(toolCallId, {
             task: retryTask,
@@ -567,6 +606,7 @@ export function createOmegaWorkTool(
             tension: frontal.tension,
             wakeAction: retryWakeAction,
             ...runtimeObserverDetails,
+            ...cognitiveKernelDetails,
             retriedByOmega: true,
             retryReason: delegateDetails.errorKind,
             ...(matchedRecovery
@@ -585,6 +625,7 @@ export function createOmegaWorkTool(
           tension: frontal.tension,
           wakeAction,
           ...runtimeObserverDetails,
+          ...cognitiveKernelDetails,
           ...(matchedRecovery
             ? {
                 resumedFromKernel: true,
@@ -618,6 +659,7 @@ export function createOmegaWorkTool(
         tension: frontal.tension,
         wakeAction,
         ...runtimeObserverDetails,
+        ...cognitiveKernelDetails,
         ...(matchedRecovery
           ? {
               resumedFromKernel: true,

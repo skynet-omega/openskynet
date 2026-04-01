@@ -962,6 +962,113 @@ describe("omega heartbeat", () => {
     expect(prompt).toContain("stall");
   });
 
+  it("includes an active cognitive kernel signal in the wake prompt and documents its auto-disable threshold", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    vi.spyOn(runtimeAuthority, "loadOpenSkynetOmegaRuntimeAuthority").mockResolvedValue({
+      workspaceRoot,
+      sessionKey: "main",
+      project: {
+        key: "skynet",
+        name: "Skynet",
+        role: "lab",
+        mission: "benchmark",
+        benchmarkPurpose: "benchmark",
+        successCriteria: [],
+      },
+      memoryCandidates: [],
+      decisionContext: {
+        timeline: [],
+        sessionState: undefined,
+        kernel: makeKernel(),
+        wsp: undefined,
+        controllerState: {
+          dispatchPlan: {
+            shouldDispatchLlmTurn: true,
+            selectedAction: "probe",
+          },
+          selectedWorkItem: {
+            id: "maintenance:agenda:test",
+            detail: "Inspect cognitive kernel signal.",
+            queueKind: "maintenance",
+          },
+        },
+        operationalSummary: {
+          recentTurnCount: 1,
+          recentResolvedTurns: 1,
+          recentStalledTurns: 0,
+          latestTurnHealth: "resolved",
+          freshness: "fresh",
+          averageCausalImpact: 0.4,
+          latestCausalImpact: 0.4,
+        },
+        stateAuthority: {
+          continuity: {
+            source: "session-context",
+            status: "derived",
+            reason: "ok",
+          },
+          executive: {
+            source: "controller-state",
+            status: "derived",
+            reason: "ok",
+          },
+          operationalHealth: {
+            source: "operational-memory",
+            status: "authoritative",
+            reason: "fresh_turn_health",
+          },
+          worldObservation: {
+            source: "world-model",
+            status: "derived",
+            reason: "ok",
+          },
+          drives: {
+            source: "kernel",
+            status: "derived",
+            reason: "ok",
+          },
+        },
+        policy: {
+          wakeAction: { kind: "maintain", reason: "maintenance_selected" },
+          driveSignal: { kind: "idle" },
+          driveSignalSource: "kernel",
+          shouldRunAutonomy: false,
+          needsRecoveryAttention: false,
+        },
+        shouldDispatchHeartbeatPrompt: true,
+        degradedComponents: [],
+      },
+      cognitiveKernel: {
+        updatedAt: Date.now(),
+        freshness: "fresh",
+        accuracy: 0.86,
+        majorityBaseline: 0.56,
+        improvementOverBaseline: 0.3,
+        trajectorySamples: 87,
+        harvestedEpisodes: 91,
+        evaluatedSamples: 79,
+        warmupSamples: 8,
+        dominantLabel: "stall",
+        active: true,
+        activationReason: "enabled_by_default",
+        targetAccuracy: 0.9,
+        deactivationThreshold: 0.8,
+      },
+      worldSnapshot: undefined,
+      livingState: undefined,
+    } as any);
+
+    const prompt = await buildOmegaHeartbeatPrompt({
+      workspaceRoot,
+      sessionKey: "main",
+    });
+
+    expect(prompt).toContain("Cognitive kernel signal");
+    expect(prompt).toContain("enabled by default");
+    expect(prompt).toContain("0.80");
+    expect(prompt).toContain("0.90");
+  });
+
   it("returns no prompt when the executive dispatch plan defers active work under budget pressure", async () => {
     const workspaceRoot = await createWorkspaceRoot();
     await recordOmegaSessionOutcome({
