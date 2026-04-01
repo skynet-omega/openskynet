@@ -1,4 +1,3 @@
-import type { OmegaSessionSelfState } from "./event-model.js";
 import {
   formatSkynetContinuityBlock,
   formatSkynetNucleusBlock,
