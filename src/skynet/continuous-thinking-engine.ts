@@ -569,7 +569,7 @@ export function initializeContinuousThinkingEngine(
 ): ContinuousThinkingEngine {
   const engine = getInstance();
   if (kernel) {
-    engine.initialize(kernel);
+    void engine.initialize(kernel);
   }
   return engine;
 }

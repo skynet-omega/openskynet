@@ -34,7 +34,7 @@ export async function initializeAllJewels(): Promise<JewelInitStatus[]> {
     // 1. Neural Logic Engine
     try {
       initializeNeuralLogicEngine();
-      const nle = getNeuralLogicEngine();
+      getNeuralLogicEngine();
       status.push({
         name: "Neural Logic Engine",
         initialized: true,
@@ -51,7 +51,7 @@ export async function initializeAllJewels(): Promise<JewelInitStatus[]> {
     // 2. Hierarchical Memory
     try {
       initializeHierarchicalMemory();
-      const hm = getHierarchicalMemory();
+      getHierarchicalMemory();
       status.push({
         name: "Hierarchical Memory",
         initialized: true,
@@ -68,7 +68,7 @@ export async function initializeAllJewels(): Promise<JewelInitStatus[]> {
     // 3. Lyapunov Controller
     try {
       initializeLyapunovController();
-      const lyapunov = getLyapunovController();
+      getLyapunovController();
       status.push({
         name: "Lyapunov Controller",
         initialized: true,
@@ -85,7 +85,7 @@ export async function initializeAllJewels(): Promise<JewelInitStatus[]> {
     // 4. Causal Reasoner
     try {
       initializeCausalReasoner();
-      const causal = getCausalReasoner();
+      getCausalReasoner();
       status.push({
         name: "Causal Reasoner",
         initialized: true,
@@ -102,7 +102,7 @@ export async function initializeAllJewels(): Promise<JewelInitStatus[]> {
     // 5. Sparse Metabolism
     try {
       initializeSparseMetabolism();
-      const metabolism = getSparseMetabolism();
+      getSparseMetabolism();
       status.push({
         name: "Sparse Metabolism",
         initialized: true,
@@ -119,7 +119,7 @@ export async function initializeAllJewels(): Promise<JewelInitStatus[]> {
     // 6. Integrated Reasoner (orchestrator)
     try {
       initializeOmegaIntegratedReasoner();
-      const integratedReasoner = getOmegaIntegratedReasoner();
+      getOmegaIntegratedReasoner();
       status.push({
         name: "Omega Integrated Reasoner",
         initialized: true,

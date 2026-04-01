@@ -92,12 +92,12 @@ export async function runHomeostasisDaemon(workspaceRoot: string): Promise<void>
     await execAsync(`openclaw cron wake --mode next-heartbeat "${wakeMessage}"`, {
       cwd: workspaceRoot,
     });
-  } catch (err) {
+  } catch {
     // Ignore wake emission errors
   }
 }
 
-async function scanForCriticalFailures(workspaceRoot: string): Promise<string | null> {
+async function scanForCriticalFailures(_workspaceRoot: string): Promise<string | null> {
   try {
     // Usa el rolling log canónico del sistema en lugar de asumir un path local inexistente.
     const logPath = getResolvedLoggerSettings().file;
@@ -137,7 +137,7 @@ async function deriveStateFromMemory(workspaceRoot: string, now: number) {
         }
       }
     }
-  } catch (e) {}
+  } catch {}
 
   return { lastActivity, failureStreak, lastInferenceState };
 }

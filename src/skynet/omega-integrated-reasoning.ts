@@ -107,8 +107,6 @@ export class OmegaIntegratedReasoner {
     };
 
     let enhancedDrive = { ...driveSignal };
-    let logicConfidence = 0.5;
-
     // ───────────────────────────────────────────────────────────────
     // FASE 1: NEURAL LOGIC ENGINE
     // ───────────────────────────────────────────────────────────────
@@ -131,8 +129,6 @@ export class OmegaIntegratedReasoner {
         activeRules: logicInference.activeRules.length,
         confidence: logicInference.inferenceConfidence,
       };
-
-      logicConfidence = logicInference.inferenceConfidence;
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -182,11 +178,6 @@ export class OmegaIntegratedReasoner {
       const lyapunov = getLyapunovController();
 
       // Calcular divergencia
-      const stateChange = Math.sqrt(
-        Math.pow(frustration - (kernelState.lastFrustration ?? 0), 2) +
-          Math.pow((kernelState.successRate ?? 0) - (kernelState.lastSuccessRate ?? 0), 2),
-      );
-
       const divergence = lyapunov.computeDivergence(
         [frustration, kernelState.successRate ?? 0.5],
         [kernelState.lastFrustration ?? 0, kernelState.lastSuccessRate ?? 0.5],

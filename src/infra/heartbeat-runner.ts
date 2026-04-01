@@ -1,7 +1,5 @@
-import { exec } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
 import {
   resolveAgentConfig,
   resolveAgentWorkspaceDir,
@@ -80,8 +78,6 @@ import {
   resolveHeartbeatSenderContext,
 } from "./outbound/targets.js";
 import { peekSystemEventEntries } from "./system-events.js";
-
-const execAsync = promisify(exec);
 
 export type HeartbeatDeps = OutboundSendDeps &
   ChannelHeartbeatDeps & {
