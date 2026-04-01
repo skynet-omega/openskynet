@@ -366,6 +366,73 @@ describe("acp session UX bridge behavior", () => {
     sessionStore.clearAllSessionsForTest();
   });
 
+  it("replays assistant thinking blocks on loadSession when transcript contains them", async () => {
+    const sessionStore = createInMemorySessionStore();
+    const connection = createAcpConnection();
+    const sessionUpdate = connection.__sessionUpdateMock;
+    const request = vi.fn(async (method: string) => {
+      if (method === "sessions.list") {
+        return {
+          ts: Date.now(),
+          path: "/tmp/sessions.json",
+          count: 1,
+          defaults: {
+            modelProvider: null,
+            model: null,
+            contextTokens: null,
+          },
+          sessions: [
+            {
+              key: "agent:main:thinking",
+              label: "main-thinking",
+              displayName: "Main thinking",
+              derivedTitle: "Inspect reasoning",
+              kind: "direct",
+              updatedAt: 1_710_000_000_000,
+              thinkingLevel: "high",
+            },
+          ],
+        };
+      }
+      if (method === "sessions.get") {
+        return {
+          messages: [
+            {
+              role: "assistant",
+              content: [
+                { type: "thinking", thinking: "Hidden chain" },
+                { type: "text", text: "Visible answer" },
+              ],
+            },
+          ],
+        };
+      }
+      return { ok: true };
+    }) as GatewayClient["request"];
+    const agent = new AcpGatewayAgent(connection, createAcpGateway(request), {
+      sessionStore,
+    });
+
+    await agent.loadSession(createLoadSessionRequest("agent:main:thinking"));
+
+    expect(sessionUpdate).toHaveBeenCalledWith({
+      sessionId: "agent:main:thinking",
+      update: {
+        sessionUpdate: "agent_thought_chunk",
+        content: { type: "text", text: "Hidden chain" },
+      },
+    });
+    expect(sessionUpdate).toHaveBeenCalledWith({
+      sessionId: "agent:main:thinking",
+      update: {
+        sessionUpdate: "agent_message_chunk",
+        content: { type: "text", text: "Visible answer" },
+      },
+    });
+
+    sessionStore.clearAllSessionsForTest();
+  });
+
   it("falls back to an empty transcript when sessions.get fails during loadSession", async () => {
     const sessionStore = createInMemorySessionStore();
     const connection = createAcpConnection();

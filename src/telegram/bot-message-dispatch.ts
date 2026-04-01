@@ -26,7 +26,7 @@ import { getAgentScopedMediaLocalRoots } from "../media/local-roots.js";
 import type { RuntimeEnv } from "../runtime.js";
 import type { TelegramMessageContext } from "./bot-message-context.js";
 import type { TelegramBotOptions } from "./bot.js";
-import { deliverReplies } from "./bot/delivery.js";
+import { deliverReplies, emitInternalMessageSentHook } from "./bot/delivery.js";
 import type { TelegramStreamMode } from "./bot/types.js";
 import type { TelegramInlineButtons } from "./button-types.js";
 import { createTelegramDraftStream } from "./draft-stream.js";
@@ -478,6 +478,23 @@ export const dispatchTelegramMessage = async ({
     }
     return result.delivered;
   };
+  const emitPreviewFinalizedHook = (
+    result: Awaited<ReturnType<ReturnType<typeof createLaneTextDeliverer>>>,
+  ) => {
+    if (result !== "preview-finalized") {
+      return;
+    }
+    emitInternalMessageSentHook({
+      sessionKeyForInternalHooks: deliveryBaseOptions.sessionKeyForInternalHooks,
+      chatId: deliveryBaseOptions.chatId,
+      accountId: deliveryBaseOptions.accountId,
+      content: answerLane.lastPartialText,
+      success: true,
+      messageId: answerLane.stream?.messageId(),
+      isGroup: deliveryBaseOptions.mirrorIsGroup,
+      groupId: deliveryBaseOptions.mirrorGroupId,
+    });
+  };
   const deliverLaneText = createLaneTextDeliverer({
     lanes,
     archivedAnswerPreviews,
@@ -600,6 +617,9 @@ export const dispatchTelegramMessage = async ({
               previewButtons,
               allowPreviewUpdateForNonFinal: segment.lane === "reasoning",
             });
+            if (info.kind === "final" && segment.lane === "answer") {
+              emitPreviewFinalizedHook(result);
+            }
             if (segment.lane === "reasoning") {
               if (result !== "skipped") {
                 reasoningStepState.noteReasoningDelivered();

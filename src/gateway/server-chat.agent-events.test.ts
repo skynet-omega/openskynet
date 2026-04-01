@@ -5,6 +5,7 @@ import { resolveHeartbeatVisibility } from "../infra/heartbeat-visibility.js";
 import {
   createAgentEventHandler,
   createChatRunState,
+  createSessionEventSubscriberRegistry,
   createToolEventRecipientRegistry,
 } from "./server-chat.js";
 
@@ -47,6 +48,7 @@ describe("agent event handler", () => {
     const agentRunSeq = new Map<string, number>();
     const chatRunState = createChatRunState();
     const toolEventRecipients = createToolEventRecipientRegistry();
+    const sessionEventSubscribers = createSessionEventSubscriberRegistry();
 
     const handler = createAgentEventHandler({
       broadcast,
@@ -57,6 +59,7 @@ describe("agent event handler", () => {
       resolveSessionKeyForRun: params?.resolveSessionKeyForRun ?? (() => undefined),
       clearAgentRunContext: vi.fn(),
       toolEventRecipients,
+      sessionEventSubscribers,
     });
 
     return {
@@ -67,6 +70,7 @@ describe("agent event handler", () => {
       agentRunSeq,
       chatRunState,
       toolEventRecipients,
+      sessionEventSubscribers,
       handler,
     };
   }
@@ -197,6 +201,33 @@ describe("agent event handler", () => {
     expect(chatBroadcastCalls(broadcast)).toHaveLength(0);
     expect(sessionChatCalls(nodeSendToSession)).toHaveLength(0);
     nowSpy?.mockRestore();
+  });
+
+  it("emits sessions.changed to subscribed connections for lifecycle transitions", () => {
+    const { broadcastToConnIds, sessionEventSubscribers, handler } = createHarness({
+      resolveSessionKeyForRun: () => "session-1",
+    });
+    sessionEventSubscribers.subscribe("conn-session");
+
+    handler({
+      runId: "run-session",
+      seq: 1,
+      stream: "lifecycle",
+      ts: 1234,
+      data: { phase: "start" },
+    });
+
+    expect(broadcastToConnIds).toHaveBeenCalledWith(
+      "sessions.changed",
+      {
+        sessionKey: "session-1",
+        phase: "start",
+        runId: "run-session",
+        ts: 1234,
+      },
+      new Set(["conn-session"]),
+      { dropIfSlow: true },
+    );
   });
 
   it("does not include NO_REPLY text in chat final message", () => {
@@ -638,6 +669,46 @@ describe("agent event handler", () => {
     const payload = broadcastToConnIds.mock.calls[0]?.[1] as { data?: Record<string, unknown> };
     expect(payload.data?.result).toEqual(result);
     resetAgentRunContextForTest();
+  });
+
+  it("broadcasts session.tool to session subscribers", () => {
+    const { broadcastToConnIds, sessionEventSubscribers, handler } = createHarness({
+      resolveSessionKeyForRun: () => "session-1",
+    });
+
+    sessionEventSubscribers.subscribe("conn-session");
+
+    handler({
+      runId: "run-session-tool",
+      seq: 1,
+      stream: "tool",
+      ts: 1_234,
+      data: {
+        phase: "start",
+        name: "exec",
+        toolCallId: "tool-session-1",
+        args: { command: "echo hi" },
+      },
+    });
+
+    expect(broadcastToConnIds).toHaveBeenCalledTimes(1);
+    expect(broadcastToConnIds).toHaveBeenCalledWith(
+      "session.tool",
+      expect.objectContaining({
+        runId: "run-session-tool",
+        sessionKey: "session-1",
+        stream: "tool",
+        ts: 1_234,
+        data: expect.objectContaining({
+          phase: "start",
+          name: "exec",
+          toolCallId: "tool-session-1",
+          args: { command: "echo hi" },
+        }),
+      }),
+      new Set(["conn-session"]),
+      { dropIfSlow: true },
+    );
   });
 
   it("broadcasts fallback events to agent subscribers and node session", () => {

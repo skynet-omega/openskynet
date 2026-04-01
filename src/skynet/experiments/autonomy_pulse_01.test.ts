@@ -21,6 +21,7 @@ describe("skynet autonomy pulse 01", () => {
       continuity: {
         sessionKey: "agent:openskynet:main",
         updatedAt: 1,
+        projectName: "Skynet",
         cycleCount: 3,
         currentFocusKey: "endogenous_science_agenda",
         currentMode: "explore",
@@ -57,6 +58,7 @@ describe("skynet autonomy pulse 01", () => {
       commitment: {
         sessionKey: "agent:openskynet:main",
         updatedAt: 1,
+        projectName: "Skynet",
         kind: "artifact",
         artifactKind: "module",
         targetFocusKey: "endogenous_science_agenda",
@@ -69,6 +71,7 @@ describe("skynet autonomy pulse 01", () => {
       experiment: {
         sessionKey: "agent:openskynet:main",
         updatedAt: 1,
+        projectName: "Skynet",
         focusKey: "endogenous_science_agenda",
         mode: "explore",
         hypothesis: "Need artifact per cycle.",
@@ -80,6 +83,7 @@ describe("skynet autonomy pulse 01", () => {
       program: {
         sessionKey: "agent:openskynet:main",
         updatedAt: 1,
+        projectName: "Skynet",
         focusKey: "endogenous_science_agenda",
         mode: "explore",
         items: [

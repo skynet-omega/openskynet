@@ -52,6 +52,17 @@ export type ChatEventPayload = {
   errorMessage?: string;
 };
 
+export type SessionMessageEventPayload = {
+  sessionKey?: string;
+  message?: unknown;
+  messageId?: string;
+  ts?: number;
+};
+
+type ChatSubscriptionState = ChatState & {
+  subscribedSessionMessageKey?: string | null;
+};
+
 function maybeResetToolStream(state: ChatState) {
   const toolHost = state as ChatState & Partial<Parameters<typeof resetToolStream>[0]>;
   if (
@@ -64,6 +75,38 @@ function maybeResetToolStream(state: ChatState) {
   }
 }
 
+async function requestSessionMessageSubscription(
+  state: ChatState,
+  nextSessionKey: string,
+  previousSessionKey: string | null,
+) {
+  if (!state.client || !state.connected) {
+    return;
+  }
+  if (previousSessionKey && previousSessionKey !== nextSessionKey) {
+    await state.client.request("sessions.messages.unsubscribe", { key: previousSessionKey });
+  }
+  await state.client.request("sessions.messages.subscribe", { key: nextSessionKey });
+}
+
+export async function syncSessionMessageSubscription(state: ChatState): Promise<void> {
+  const nextSessionKey = state.sessionKey.trim();
+  const subscriptionState = state as ChatSubscriptionState;
+  const previousSessionKey = subscriptionState.subscribedSessionMessageKey ?? null;
+  if (!nextSessionKey) {
+    return;
+  }
+  if (!state.client || !state.connected) {
+    subscriptionState.subscribedSessionMessageKey = nextSessionKey;
+    return;
+  }
+  if (previousSessionKey === nextSessionKey) {
+    return;
+  }
+  await requestSessionMessageSubscription(state, nextSessionKey, previousSessionKey);
+  subscriptionState.subscribedSessionMessageKey = nextSessionKey;
+}
+
 export async function loadChatHistory(state: ChatState) {
   if (!state.client || !state.connected) {
     return;
@@ -71,6 +114,7 @@ export async function loadChatHistory(state: ChatState) {
   state.chatLoading = true;
   state.lastError = null;
   try {
+    await syncSessionMessageSubscription(state);
     const res = await state.client.request<{ messages?: Array<unknown>; thinkingLevel?: string }>(
       "chat.history",
       {
@@ -91,6 +135,48 @@ export async function loadChatHistory(state: ChatState) {
   } finally {
     state.chatLoading = false;
   }
+}
+
+function areMessagesEquivalent(a: unknown, b: unknown): boolean {
+  if (!a || !b || typeof a !== "object" || typeof b !== "object") {
+    return false;
+  }
+  const textA = extractText(a);
+  const textB = extractText(b);
+  if (typeof textA === "string" && typeof textB === "string" && textA === textB) {
+    return true;
+  }
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch {
+    return false;
+  }
+}
+
+export function handleSessionMessageEvent(
+  state: ChatState,
+  payload?: SessionMessageEventPayload,
+): "appended" | "reload" | null {
+  if (!payload?.sessionKey || payload.sessionKey !== state.sessionKey) {
+    return null;
+  }
+
+  if (state.chatRunId) {
+    return null;
+  }
+
+  const normalizedMessage = normalizeFinalAssistantMessage(payload.message);
+  if (!normalizedMessage || isAssistantSilentReply(normalizedMessage)) {
+    return "reload";
+  }
+
+  const lastMessage = state.chatMessages.at(-1);
+  if (areMessagesEquivalent(lastMessage, normalizedMessage)) {
+    return null;
+  }
+
+  state.chatMessages = [...state.chatMessages, normalizedMessage];
+  return "appended";
 }
 
 function dataUrlToBase64(dataUrl: string): { content: string; mimeType: string } | null {

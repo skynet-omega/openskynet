@@ -31,11 +31,18 @@ export async function induceScientificHypothesis(params: {
       const kernelFailures = snapshot.kernel.goals
         .filter((g) => g.lastErrorKind === errorKind)
         .map((g) => ({
+          id: `kernel-failure-${g.id}`,
           kind: "repeated_failure" as const,
           task: g.task,
           targets: g.targets,
           errorKind: g.lastErrorKind,
-          timestamp: g.updatedAt,
+          observedChangedFiles: g.observedChangedFiles,
+          successCount: g.successCount,
+          failureCount: Math.max(g.failureCount, 1),
+          learnedConstraints: [],
+          firstSeenAt: g.createdAt,
+          lastSeenAt: g.updatedAt,
+          lastOutcomeStatus: "error" as const,
         }));
       specificFailures.push(...kernelFailures);
     }

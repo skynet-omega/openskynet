@@ -113,6 +113,8 @@ export type RegisterTelegramHandlerParams = {
     options?: {
       messageIdOverride?: string;
       forceWasMentioned?: boolean;
+      ingressBuffer?: "inbound-debounce" | "text-fragment";
+      receivedAtMs?: number;
     },
     replyMedia?: TelegramMediaRef[],
   ) => Promise<void>;

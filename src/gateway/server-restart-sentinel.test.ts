@@ -89,6 +89,16 @@ describe("scheduleRestartSentinelWake", () => {
         session: { key: "agent:main:main", agentId: "agent-from-key" },
       }),
     );
-    expect(mocks.enqueueSystemEvent).not.toHaveBeenCalled();
+    expect(mocks.enqueueSystemEvent).toHaveBeenCalledWith(
+      "restart message",
+      expect.objectContaining({
+        sessionKey: "agent:main:main",
+        deliveryContext: expect.objectContaining({
+          channel: "whatsapp",
+          to: "+15550002",
+          accountId: "acct-2",
+        }),
+      }),
+    );
   });
 });

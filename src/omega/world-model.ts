@@ -1,19 +1,3 @@
-import { type SkynetBifurcationState } from "../skynet/bifurcation-engine.js";
-import {
-  formatSkynetContinuityBlock,
-  syncSkynetContinuityState,
-  type SkynetContinuityState,
-} from "../skynet/continuity-tracker.js";
-import {
-  formatSkynetNucleusBlock,
-  syncSkynetNucleus,
-  type SkynetNucleusState,
-} from "../skynet/nucleus.js";
-import {
-  formatSkynetStudyProgramBlock,
-  syncSkynetStudyProgram,
-  type SkynetStudyProgram,
-} from "../skynet/study-program.js";
 import {
   loadOmegaDurableMemory,
   queryOmegaDurableMemory,
@@ -21,6 +5,18 @@ import {
 } from "./durable-memory.js";
 import { loadOmegaEmpiricalMetrics } from "./empirical-metrics.js";
 import type { OmegaSessionSelfState } from "./event-model.js";
+import {
+  formatSkynetContinuityBlock,
+  syncOptionalSkynetContinuityState,
+  type SkynetContinuityState,
+  formatSkynetNucleusBlock,
+  syncOptionalSkynetNucleus,
+  type SkynetNucleusState,
+  formatSkynetStudyProgramBlock,
+  syncOptionalSkynetStudyProgram,
+  type SkynetBifurcationState,
+  type SkynetStudyProgram,
+} from "./internal-project-lab.js";
 import { loadOpenSkynetInternalProjectProfile } from "./internal-project.js";
 import {
   loadOmegaOperationalMemory,
@@ -79,11 +75,38 @@ export type OmegaWorldModelSnapshot = {
   relevantMemories: OmegaDurableMemoryEntry[];
   operationalSignals: OmegaOperationalTurnMemoryEntry[];
   studySupervisor?: OmegaStudySupervisorState;
+  internalProjectNucleus?: SkynetNucleusState;
+  internalProjectStudyProgram?: SkynetStudyProgram;
+  internalProjectContinuity?: SkynetContinuityState;
+  /** @deprecated compatibility alias */
   skynetNucleus?: SkynetNucleusState;
+  /** @deprecated compatibility alias */
   skynetStudyProgram?: SkynetStudyProgram;
+  /** @deprecated compatibility alias */
   skynetContinuity?: SkynetContinuityState;
   skynetBifurcation?: SkynetBifurcationState;
+  degradedComponents: Array<{
+    component: string;
+    reason: string;
+  }>;
 };
+
+async function captureWorldModelComponent<T>(
+  component: string,
+  degradedComponents: OmegaWorldModelSnapshot["degradedComponents"],
+  operation: () => Promise<T>,
+  fallback: () => Promise<T> | T,
+): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    degradedComponents.push({
+      component,
+      reason: error instanceof Error ? error.message : String(error),
+    });
+    return await fallback();
+  }
+}
 
 function normalizeWorldModelText(value: string): string {
   return value.toLowerCase().replace(/\s+/g, " ").trim();
@@ -350,6 +373,7 @@ export async function loadOmegaWorldModelSnapshot(params: {
   expectedPaths?: string[];
   watchedPaths?: string[];
 }): Promise<OmegaWorldModelSnapshot> {
+  const degradedComponents: OmegaWorldModelSnapshot["degradedComponents"] = [];
   const [sessionAuthority, empiricalMetrics, project] = await Promise.all([
     loadOmegaSessionAuthority(params),
     loadOmegaEmpiricalMetrics({ workspaceRoot: params.workspaceRoot }),
@@ -367,13 +391,19 @@ export async function loadOmegaWorldModelSnapshot(params: {
         })
       : allDurableMemory.slice(0, 4);
   const operationalSignals = (await loadOmegaOperationalMemory(params)).slice(-3).reverse();
-  const problemAgenda = await syncOmegaProblemAgenda({
-    workspaceRoot: params.workspaceRoot,
-    sessionKey: params.sessionKey,
-    kernel: sessionAuthority.kernel,
-    durableMemory: allDurableMemory,
-    operationalSignals,
-  }).catch(() => loadOmegaProblemAgenda(params));
+  const problemAgenda = await captureWorldModelComponent(
+    "problem_agenda",
+    degradedComponents,
+    () =>
+      syncOmegaProblemAgenda({
+        workspaceRoot: params.workspaceRoot,
+        sessionKey: params.sessionKey,
+        kernel: sessionAuthority.kernel,
+        durableMemory: allDurableMemory,
+        operationalSignals,
+      }),
+    () => loadOmegaProblemAgenda(params),
+  );
   const activeGoalTask = sessionAuthority.kernel?.goals.find(
     (goal) => goal.id === sessionAuthority.kernel?.activeGoalId,
   )?.task;
@@ -404,52 +434,76 @@ export async function loadOmegaWorldModelSnapshot(params: {
           updatedAt: Date.now(),
         }
       : undefined;
-  const studySupervisor = await syncOmegaStudySupervisor({
-    workspaceRoot: params.workspaceRoot,
-    sessionKey: params.sessionKey,
-    problemAgenda,
-    relevantMemories,
-    operationalSignals,
-    learnedConstraints: enrichedSelfState?.learnedConstraints ?? [],
-    activeGoalTask,
-    localityExecutionGuard: deriveLocalityExecutionGuard({
-      relevantMemories,
-      expectedPaths: params.expectedPaths,
-      watchedPaths: params.watchedPaths,
-    }),
-  }).catch(() => undefined);
+  const studySupervisor = await captureWorldModelComponent(
+    "study_supervisor",
+    degradedComponents,
+    () =>
+      syncOmegaStudySupervisor({
+        workspaceRoot: params.workspaceRoot,
+        sessionKey: params.sessionKey,
+        problemAgenda,
+        relevantMemories,
+        operationalSignals,
+        learnedConstraints: enrichedSelfState?.learnedConstraints ?? [],
+        activeGoalTask,
+        localityExecutionGuard: deriveLocalityExecutionGuard({
+          relevantMemories,
+          expectedPaths: params.expectedPaths,
+          watchedPaths: params.watchedPaths,
+        }),
+      }),
+    () => undefined,
+  );
   const localityExecutionGuard = deriveLocalityExecutionGuard({
     relevantMemories,
     expectedPaths: params.expectedPaths,
     watchedPaths: params.watchedPaths,
   });
-  const skynetNucleus = studySupervisor
-    ? await syncSkynetNucleus({
-        workspaceRoot: params.workspaceRoot,
-        sessionKey: params.sessionKey,
-        projectName: project.name,
-        studyFocus: studySupervisor.focus,
-        operationalSignals,
-        learnedConstraints: enrichedSelfState?.learnedConstraints ?? [],
-      }).catch(() => undefined)
+  const internalProjectNucleus = studySupervisor
+    ? await captureWorldModelComponent(
+        "skynet_nucleus",
+        degradedComponents,
+        () =>
+          syncOptionalSkynetNucleus({
+            workspaceRoot: params.workspaceRoot,
+            sessionKey: params.sessionKey,
+            projectName: project.name,
+            studyFocus: studySupervisor.focus,
+            operationalSignals,
+            learnedConstraints: enrichedSelfState?.learnedConstraints ?? [],
+          }),
+        () => undefined,
+      )
     : undefined;
-  const skynetStudyProgram =
-    studySupervisor && skynetNucleus
-      ? await syncSkynetStudyProgram({
-          workspaceRoot: params.workspaceRoot,
-          sessionKey: params.sessionKey,
-          supervisor: studySupervisor,
-          nucleus: skynetNucleus,
-        }).catch(() => undefined)
+  const internalProjectStudyProgram =
+    studySupervisor && internalProjectNucleus
+      ? await captureWorldModelComponent(
+          "skynet_study_program",
+          degradedComponents,
+          () =>
+            syncOptionalSkynetStudyProgram({
+              workspaceRoot: params.workspaceRoot,
+              sessionKey: params.sessionKey,
+              supervisor: studySupervisor,
+              nucleus: internalProjectNucleus,
+            }),
+          () => undefined,
+        )
       : undefined;
-  const skynetContinuity =
-    skynetNucleus && skynetStudyProgram
-      ? await syncSkynetContinuityState({
-          workspaceRoot: params.workspaceRoot,
-          sessionKey: params.sessionKey,
-          nucleus: skynetNucleus,
-          program: skynetStudyProgram,
-        }).catch(() => undefined)
+  const internalProjectContinuity =
+    internalProjectNucleus && internalProjectStudyProgram
+      ? await captureWorldModelComponent(
+          "skynet_continuity",
+          degradedComponents,
+          () =>
+            syncOptionalSkynetContinuityState({
+              workspaceRoot: params.workspaceRoot,
+              sessionKey: params.sessionKey,
+              nucleus: internalProjectNucleus,
+              program: internalProjectStudyProgram,
+            }),
+          () => undefined,
+        )
       : undefined;
 
   return {
@@ -473,9 +527,13 @@ export async function loadOmegaWorldModelSnapshot(params: {
     relevantMemories,
     operationalSignals,
     studySupervisor,
-    skynetNucleus,
-    skynetStudyProgram,
-    skynetContinuity,
+    internalProjectNucleus,
+    internalProjectStudyProgram,
+    internalProjectContinuity,
+    skynetNucleus: internalProjectNucleus,
+    skynetStudyProgram: internalProjectStudyProgram,
+    skynetContinuity: internalProjectContinuity,
+    degradedComponents,
   };
 }
 
@@ -522,6 +580,11 @@ export function formatOmegaWorldModelSnapshot(snapshot: OmegaWorldModelSnapshot)
       `Locality guard: isolate edits touching protected paths ${snapshot.localityExecutionGuard.atRiskPaths.join(", ")}`,
     );
   }
+  if (snapshot.degradedComponents.length > 0) {
+    lines.push(
+      `Degraded components: ${snapshot.degradedComponents.map((entry) => entry.component).join(", ")}`,
+    );
+  }
   if (snapshot.problemAgenda.length > 0) {
     lines.push(
       `Open problem classes: ${snapshot.problemAgenda
@@ -531,15 +594,15 @@ export function formatOmegaWorldModelSnapshot(snapshot: OmegaWorldModelSnapshot)
     );
   }
   lines.push(...formatOmegaStudySupervisorBlock(snapshot.studySupervisor));
-  if (snapshot.skynetNucleus) {
+  if (snapshot.internalProjectNucleus) {
     lines.push("");
-    lines.push(...formatSkynetNucleusBlock(snapshot.skynetNucleus));
+    lines.push(...formatSkynetNucleusBlock(snapshot.internalProjectNucleus));
   }
-  if (snapshot.skynetStudyProgram) {
-    lines.push(...formatSkynetStudyProgramBlock(snapshot.skynetStudyProgram));
+  if (snapshot.internalProjectStudyProgram) {
+    lines.push(...formatSkynetStudyProgramBlock(snapshot.internalProjectStudyProgram));
   }
-  if (snapshot.skynetContinuity) {
-    lines.push(...formatSkynetContinuityBlock(snapshot.skynetContinuity));
+  if (snapshot.internalProjectContinuity) {
+    lines.push(...formatSkynetContinuityBlock(snapshot.internalProjectContinuity));
   }
   if (snapshot.relevantMemories.length > 0) {
     lines.push("");

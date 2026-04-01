@@ -116,28 +116,21 @@ export {
   type OmegaStudyTrackKey,
 } from "./study-supervisor.js";
 export {
-  deriveSkynetContinuityState,
   formatSkynetContinuityBlock,
-  syncSkynetContinuityState,
   type SkynetContinuityState,
-} from "../skynet/continuity-tracker.js";
-export {
-  deriveSkynetNucleusState,
-  formatSkynetNucleusBlock,
-  syncSkynetNucleus,
   type SkynetExecutiveLobe,
   type SkynetMetabolism,
   type SkynetNucleusMode,
   type SkynetNucleusState,
   type SkynetPatternField,
-} from "../skynet/nucleus.js";
-export {
-  deriveSkynetStudyProgram,
+  syncOptionalSkynetContinuityState,
+  formatSkynetNucleusBlock,
   formatSkynetStudyProgramBlock,
-  syncSkynetStudyProgram,
+  syncOptionalSkynetNucleus,
+  syncOptionalSkynetStudyProgram,
   type SkynetStudyProgram,
   type SkynetStudyWorkItem,
-} from "../skynet/study-program.js";
+} from "./internal-project-lab.js";
 
 export {
   registerLearnedRule,

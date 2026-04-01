@@ -152,4 +152,53 @@ describe("acp prompt cwd prefix", () => {
       { expectFinal: true },
     );
   });
+
+  it("falls back to chat.send without provenance when gateway rejects admin-scope provenance", async () => {
+    const requestSpy = vi.fn(async (_method: string, params: Record<string, unknown>) => {
+      if (params.systemInputProvenance || params.systemProvenanceReceipt) {
+        const err = new Error("system provenance fields require admin scope");
+        err.name = "GatewayClientRequestError";
+        (err as Error & { gatewayCode?: string }).gatewayCode = "INVALID_REQUEST";
+        throw err;
+      }
+      throw new Error("stop-after-fallback-send");
+    });
+
+    const sessionStore = createInMemorySessionStore();
+    sessionStore.createSession({
+      sessionId: TEST_SESSION_ID,
+      sessionKey: TEST_SESSION_KEY,
+      cwd: path.join(os.homedir(), "openclaw-test"),
+    });
+
+    const agent = new AcpGatewayAgent(
+      createAcpConnection(),
+      createAcpGateway(requestSpy as unknown as GatewayClient["request"]),
+      {
+        sessionStore,
+        provenanceMode: "meta+receipt",
+      },
+    );
+
+    await expect(agent.prompt(TEST_PROMPT)).rejects.toThrow("stop-after-fallback-send");
+    expect(requestSpy).toHaveBeenCalledTimes(2);
+    expect(requestSpy).toHaveBeenNthCalledWith(
+      1,
+      "chat.send",
+      expect.objectContaining({
+        systemInputProvenance: expect.any(Object),
+        systemProvenanceReceipt: expect.any(String),
+      }),
+      { expectFinal: true },
+    );
+    expect(requestSpy).toHaveBeenNthCalledWith(
+      2,
+      "chat.send",
+      expect.not.objectContaining({
+        systemInputProvenance: expect.anything(),
+        systemProvenanceReceipt: expect.anything(),
+      }),
+      { expectFinal: true },
+    );
+  });
 });

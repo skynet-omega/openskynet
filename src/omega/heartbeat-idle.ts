@@ -136,6 +136,7 @@ export async function buildIdleOmegaHeartbeatPrompt(params: {
   workspaceRoot: string;
   sessionKey: string;
   kernel?: OmegaSelfTimeKernelState;
+  lobeState?: FrontalLobeState;
 }): Promise<string> {
   const [worldModel, wsp] = await Promise.all([
     loadOmegaWorldModelSnapshot({

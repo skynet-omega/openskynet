@@ -13,15 +13,16 @@ export type OpenSkynetInternalProjectProfile = {
 const DEFAULT_INTERNAL_PROJECT: OpenSkynetInternalProjectProfile = {
   key: "skynet",
   name: "Skynet",
-  role: "Parallel experimental AI research program pursued by OpenSkyNet during free autonomous cycles.",
+  role: "Optional experimental self-improvement lab pursued by OpenSkyNet during free autonomous cycles.",
   mission:
-    "Investigate whether older experimental ideas can become a transferable artificial intelligence paradigm through sustained autonomous work.",
+    "Investigate ideas that might improve OpenSkyNet, then transfer only validated gains into the OpenSkyNet/Omega kernel.",
   benchmarkPurpose:
     "Measure whether OpenSkyNet can maintain, improve, and empirically advance a long-running internal research project without constant human prompting.",
   successCriteria: [
     "The project preserves continuity across autonomous cycles.",
     "The project produces runnable artifacts, measurements, or falsifiable findings.",
     "OpenSkyNet distinguishes platform maintenance from project progress.",
+    "Validated findings can be transferred into the OpenSkyNet kernel without making the platform depend on src/skynet.",
     "The project can be replaced by another domain without code changes to the runtime spine.",
   ],
 };

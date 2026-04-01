@@ -33,4 +33,5 @@ OpenSkyNet está en proceso de transición de un conjunto de módulos heterogén
 - El LLM debe ser un órgano periférico (engine), no el centro ontológico de la decisión.
 - `OpenSkyNet` es el agente principal; `Omega` sigue siendo su línea experimental interna principal.
 - El proyecto definido en `INTERNAL_PROJECT.json` es una carga de trabajo autónoma configurable. Hoy es `Skynet`, pero puede reemplazarse por otro dominio sin reescribir el spine del runtime.
+- `Skynet` debe tratarse como laboratorio de auto-mejora de `OpenSkyNet`, no como parte obligatoria del kernel. Los hallazgos útiles se transfieren al kernel de `OpenSkyNet` y se validan en la práctica; `src/skynet` puede desaparecer sin que la plataforma deje de compilar o funcionar.
 - El siguiente frente serio ya no es más saneamiento lateral, sino cerrar limitaciones críticas: soberanía de decisión, metabolismo cognitivo y ciencia autónoma medible. Ver `docs/architecture/LIMITACIONES_CRITICAS_OPENSKYNET_2026-03-26.md`.

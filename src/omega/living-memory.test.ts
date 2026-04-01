@@ -2,8 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { SkynetCommitmentDecision } from "../skynet/commitment-engine.js";
-import type { SkynetExperimentPlan } from "../skynet/experiment-cycle.js";
+import type { SkynetCommitmentDecision, SkynetExperimentPlan } from "./internal-project-lab.js";
 import {
   collectOpenSkynetMemoryCandidates,
   planOpenSkynetMemoryReset,
@@ -33,6 +32,7 @@ describe("omega living memory", () => {
     const experiment: SkynetExperimentPlan = {
       sessionKey,
       updatedAt: Date.now(),
+      projectName: "Skynet",
       focusKey: "endogenous_science_agenda",
       mode: "explore",
       hypothesis: "h",
@@ -44,6 +44,7 @@ describe("omega living memory", () => {
     const commitment: SkynetCommitmentDecision = {
       sessionKey,
       updatedAt: Date.now(),
+      projectName: "Skynet",
       kind: "artifact",
       artifactKind: "module",
       targetFocusKey: "endogenous_science_agenda",
@@ -65,7 +66,10 @@ describe("omega living memory", () => {
     expect(state.internalProjectState.commitment?.kind).toBe("artifact");
     expect(state.selfModel.platform.name).toBe("OpenSkyNet");
     expect(state.selfModel.internalProject.name).toBe("Skynet");
+    expect(state.skynet.name).toBe("Skynet");
     expect(state.selfModel.reporting.separatePlatformFromInternalProject).toBe(true);
+    expect(state.selfModel.reporting.internalProjectFindingsMustTransferToKernel).toBe(true);
+    expect(state.selfModel.reporting.internalProjectMustNotBeKernelDependency).toBe(true);
     expect(state.agenticBenchmark.projectKey).toBe("skynet");
     expect(state.agenticBenchmark.benchmarkScore).toBeGreaterThan(0);
 
@@ -74,6 +78,7 @@ describe("omega living memory", () => {
     ) as typeof state;
     expect(persisted.internalProjectState.recommendedAction).toBe("Execute the top item");
     expect(persisted.selfModel.reporting.maintenanceIsNotProjectProgress).toBe(true);
+    expect(persisted.selfModel.reporting.internalProjectMustNotBeKernelDependency).toBe(true);
 
     const historyLines = (
       await fs.readFile(resolveOpenSkynetLivingHistoryFile(workspaceRoot), "utf-8")
@@ -145,5 +150,6 @@ describe("omega living memory", () => {
     expect(state.selfModel.internalProject.key).toBe("protein-lab");
     expect(state.selfModel.internalProject.name).toBe("Protein Lab");
     expect(state.agenticBenchmark.projectName).toBe("Protein Lab");
+    expect(state.skynet.name).toBe("Protein Lab");
   });
 });

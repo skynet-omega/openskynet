@@ -27,6 +27,10 @@ export type SkynetPulseResult = {
   commitment?: SkynetCommitmentDecision;
   filePath: string;
   benchmarkSnapshotPath?: string;
+  degradedComponents: Array<{
+    component: string;
+    reason: string;
+  }>;
 };
 
 function resolveSkynetPulseFile(workspaceRoot: string): string {
@@ -73,6 +77,7 @@ function buildPulseMarkdown(result: SkynetPulseResult): string {
     }`,
     `- Top work item: ${result.topWorkItem ?? "none"}`,
     `- Recommended action: ${result.recommendedAction ?? "none"}`,
+    `- Degraded components: ${result.degradedComponents.length > 0 ? result.degradedComponents.map((entry) => entry.component).join(", ") : "none"}`,
     ...formatSkynetExperimentPlanBlock(result.experimentPlan),
     ...formatSkynetCommitmentBlock(result.commitment),
     ...formatResearchLoop(result.researchLoop),
@@ -111,20 +116,21 @@ export async function runSkynetPulse(params: {
     updatedAt: Date.now(),
     projectName: runtimeAuthority.project.name,
     focusTitle: snapshot.studySupervisor?.focus.title,
-    nucleusMode: snapshot.skynetNucleus?.mode,
-    continuityScore: snapshot.skynetContinuity?.continuityScore,
-    topWorkItem: snapshot.skynetStudyProgram?.items[0]?.title,
+    nucleusMode: snapshot.internalProjectNucleus?.mode,
+    continuityScore: snapshot.internalProjectContinuity?.continuityScore,
+    topWorkItem: snapshot.internalProjectStudyProgram?.items[0]?.title,
     recommendedAction: deriveOpenSkynetRecommendedAction({
       focusTitle: snapshot.studySupervisor?.focus.title,
-      nucleusMode: snapshot.skynetNucleus?.mode,
-      continuityScore: snapshot.skynetContinuity?.continuityScore,
-      topWorkItem: snapshot.skynetStudyProgram?.items[0]?.title,
+      nucleusMode: snapshot.internalProjectNucleus?.mode,
+      continuityScore: snapshot.internalProjectContinuity?.continuityScore,
+      topWorkItem: snapshot.internalProjectStudyProgram?.items[0]?.title,
     }),
     researchLoop,
     experimentPlan: runtimeAuthority.experimentPlan,
     commitment: runtimeAuthority.commitment,
     filePath: resolveSkynetPulseFile(params.workspaceRoot),
     benchmarkSnapshotPath: benchmarkSnapshot.runtime.benchmarkSnapshotFile,
+    degradedComponents: runtimeAuthority.degradedComponents,
   };
 
   await fs.mkdir(path.dirname(result.filePath), { recursive: true });

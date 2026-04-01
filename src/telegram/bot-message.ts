@@ -1,6 +1,6 @@
 import type { ReplyToMode } from "../config/config.js";
 import type { TelegramAccountConfig } from "../config/types.telegram.js";
-import { danger } from "../globals.js";
+import { danger, logVerbose, shouldLogVerbose } from "../globals.js";
 import type { RuntimeEnv } from "../runtime.js";
 import {
   buildTelegramMessageContext,
@@ -9,6 +9,7 @@ import {
 } from "./bot-message-context.js";
 import { dispatchTelegramMessage } from "./bot-message-dispatch.js";
 import type { TelegramBotOptions } from "./bot.js";
+import { buildTelegramThreadParams } from "./bot/helpers.js";
 import type { TelegramContext, TelegramStreamMode } from "./bot/types.js";
 
 /** Dependencies injected once when creating the message processor. */
@@ -52,9 +53,15 @@ export const createTelegramMessageProcessor = (deps: TelegramMessageProcessorDep
     primaryCtx: TelegramContext,
     allMedia: TelegramMediaRef[],
     storeAllowFrom: string[],
-    options?: { messageIdOverride?: string; forceWasMentioned?: boolean },
+    options?: BuildTelegramMessageContextParams["options"],
     replyMedia?: TelegramMediaRef[],
   ) => {
+    const ingressReceivedAtMs =
+      typeof options?.receivedAtMs === "number" && Number.isFinite(options.receivedAtMs)
+        ? options.receivedAtMs
+        : undefined;
+    const ingressDebugEnabled = shouldLogVerbose();
+    const ingressContextStartMs = ingressReceivedAtMs ? Date.now() : undefined;
     const context = await buildTelegramMessageContext({
       primaryCtx,
       allMedia,
@@ -77,7 +84,20 @@ export const createTelegramMessageProcessor = (deps: TelegramMessageProcessorDep
       sendChatActionHandler,
     });
     if (!context) {
+      if (ingressDebugEnabled && ingressReceivedAtMs && ingressContextStartMs) {
+        logVerbose(
+          `telegram ingress: chatId=${primaryCtx.message.chat.id} dropped after ${Date.now() - ingressReceivedAtMs}ms` +
+            `${options?.ingressBuffer ? ` buffer=${options.ingressBuffer}` : ""}`,
+        );
+      }
       return;
+    }
+    if (ingressDebugEnabled && ingressReceivedAtMs && ingressContextStartMs) {
+      logVerbose(
+        `telegram ingress: chatId=${context.chatId} contextReadyMs=${Date.now() - ingressReceivedAtMs}` +
+          ` preDispatchMs=${Date.now() - ingressContextStartMs}` +
+          `${options?.ingressBuffer ? ` buffer=${options.ingressBuffer}` : ""}`,
+      );
     }
     try {
       await dispatchTelegramMessage({
@@ -91,13 +111,19 @@ export const createTelegramMessageProcessor = (deps: TelegramMessageProcessorDep
         telegramCfg,
         opts,
       });
+      if (ingressDebugEnabled && ingressReceivedAtMs) {
+        logVerbose(
+          `telegram ingress: chatId=${context.chatId} dispatchCompleteMs=${Date.now() - ingressReceivedAtMs}` +
+            `${options?.ingressBuffer ? ` buffer=${options.ingressBuffer}` : ""}`,
+        );
+      }
     } catch (err) {
       runtime.error?.(danger(`telegram message processing failed: ${String(err)}`));
       try {
         await bot.api.sendMessage(
           context.chatId,
           "Something went wrong while processing your request. Please try again.",
-          context.threadSpec?.id != null ? { message_thread_id: context.threadSpec.id } : undefined,
+          buildTelegramThreadParams(context.threadSpec),
         );
       } catch {
         // Best-effort fallback; delivery may fail if the bot was blocked or the chat is invalid.

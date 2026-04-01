@@ -48,6 +48,7 @@ describe("autonomous executor", () => {
       commitment: {
         sessionKey,
         updatedAt: Date.now(),
+        projectName: "Protein Lab",
         kind: "artifact",
         artifactKind: "module",
         targetFocusKey: "protein_structures",
@@ -62,8 +63,9 @@ describe("autonomous executor", () => {
       sessionKey,
       signal: {
         kind: "entropy_alert",
-        severity: 0.9,
-        source: "test",
+        silentMs: 90_000,
+        reason: "test_entropy_alert",
+        urgency: 0.9,
       },
       kernel: {
         identity: { continuityId: "c1" },

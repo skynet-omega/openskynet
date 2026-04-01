@@ -8,6 +8,7 @@ import {
   buildConfiguredAcpSessionKey,
   normalizeText,
   type ConfiguredAcpBindingSpec,
+  type ResolvedConfiguredAcpBinding,
 } from "./persistent-bindings.types.js";
 import { readAcpSessionEntry } from "./runtime/session-meta.js";
 
@@ -106,6 +107,26 @@ export async function ensureConfiguredAcpBindingSession(params: {
   }
 }
 
+export async function ensureConfiguredAcpBindingReady(params: {
+  cfg: OpenClawConfig;
+  configuredBinding: ResolvedConfiguredAcpBinding | null;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!params.configuredBinding) {
+    return { ok: true };
+  }
+  const ensured = await ensureConfiguredAcpBindingSession({
+    cfg: params.cfg,
+    spec: params.configuredBinding.spec,
+  });
+  if (ensured.ok) {
+    return { ok: true };
+  }
+  return {
+    ok: false,
+    error: ensured.error ?? "unknown error",
+  };
+}
+
 export async function resetAcpSessionInPlace(params: {
   cfg: OpenClawConfig;
   sessionKey: string;
@@ -119,14 +140,17 @@ export async function resetAcpSessionInPlace(params: {
     };
   }
 
-  const configuredBinding = resolveConfiguredAcpBindingSpecBySessionKey({
-    cfg: params.cfg,
-    sessionKey,
-  });
   const meta = readAcpSessionEntry({
     cfg: params.cfg,
     sessionKey,
   })?.acp;
+  const configuredBinding =
+    !meta || !normalizeText(meta.agent)
+      ? resolveConfiguredAcpBindingSpecBySessionKey({
+          cfg: params.cfg,
+          sessionKey,
+        })
+      : null;
   if (!meta) {
     if (configuredBinding) {
       const ensured = await ensureConfiguredAcpBindingSession({

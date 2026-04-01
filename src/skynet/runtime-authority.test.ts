@@ -1,7 +1,8 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as experimentCycle from "./experiment-cycle.js";
 import { syncOpenSkynetRuntimeAuthority } from "./runtime-authority.js";
 
 describe("skynet runtime authority", () => {
@@ -65,5 +66,30 @@ describe("skynet runtime authority", () => {
 
     expect(persisted.internalProjectState?.focusKey).toBe("endogenous_science_agenda");
     expect(persisted.internalProjectState?.recommendedAction).toContain("Empujar foco activo");
+    expect(state.degradedComponents).toEqual([]);
+  });
+
+  it("surfaces degraded runtime components instead of silently hiding them", async () => {
+    const experimentSpy = vi
+      .spyOn(experimentCycle, "syncSkynetExperimentPlan")
+      .mockRejectedValueOnce(new Error("experiment writer unavailable"));
+
+    const state = await syncOpenSkynetRuntimeAuthority({
+      workspaceRoot,
+      sessionKey: "agent:openskynet:main",
+    });
+
+    expect(state.experimentPlan).toBeUndefined();
+    expect(state.commitment).toBeUndefined();
+    expect(state.degradedComponents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          component: "skynet_experiment_plan",
+          reason: "experiment writer unavailable",
+        }),
+      ]),
+    );
+
+    experimentSpy.mockRestore();
   });
 });

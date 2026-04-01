@@ -15,6 +15,7 @@ import { promisify } from "node:util";
 import type { InnerDriveSignal } from "./inner-life/drives.js";
 import { evaluateInnerDrives } from "./inner-life/drives.js";
 import { loadOpenSkynetInternalProjectProfile } from "./internal-project.js";
+import { collectOpenSkynetMemoryCandidates } from "./living-memory.js";
 import { runResearchLoop, hasRecentResearchProse } from "./research-loop.js";
 import { loadOpenSkynetOmegaRuntimeAuthority } from "./runtime-authority.js";
 import { compressScienceBase } from "./science-base-compressor.js";
@@ -46,6 +47,7 @@ async function logAutonomousExecution(
 ): Promise<void> {
   const logPath = path.join(workspaceRoot, ".openskynet", AUTONOMOUS_LOG_FILE);
   const line = JSON.stringify(execution) + "\n";
+  await fs.mkdir(path.dirname(logPath), { recursive: true }).catch(() => undefined);
   await fs.appendFile(logPath, line).catch(() => undefined);
 }
 
@@ -310,16 +312,13 @@ export async function runAutonomousCycle(params: {
   if (!kernel) {
     return null;
   }
-  const authority = await loadOpenSkynetOmegaRuntimeAuthority({
-    workspaceRoot: params.workspaceRoot,
-    sessionKey: params.sessionKey,
-  });
+  const memoryCandidates = await collectOpenSkynetMemoryCandidates(params.workspaceRoot);
 
   // Evaluar drives
   const signal = evaluateInnerDrives({
     kernel,
     nowMs: Date.now(),
-    memoryCandidates: authority.memoryCandidates,
+    memoryCandidates,
   });
 
   if (signal.kind === "idle") {

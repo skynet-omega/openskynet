@@ -2,8 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { movePathToTrash } from "../browser/trash.js";
 import { writeJsonAtomic } from "../infra/json-files.js";
-import type { SkynetCommitmentDecision } from "../skynet/commitment-engine.js";
-import type { SkynetExperimentPlan } from "../skynet/experiment-cycle.js";
+import type { SkynetCommitmentDecision, SkynetExperimentPlan } from "./internal-project-lab.js";
 import {
   loadOpenSkynetInternalProjectProfile,
   type OpenSkynetInternalProjectProfile,
@@ -33,6 +32,8 @@ export type OpenSkynetLivingState = {
       separatePlatformFromInternalProject: true;
       maintenanceIsNotProjectProgress: true;
       internalProjectActsAsAgenticBenchmark: true;
+      internalProjectFindingsMustTransferToKernel: true;
+      internalProjectMustNotBeKernelDependency: true;
       avoidAnthropomorphicClaimsWithoutEvidence: true;
       authoritativeStateSources: string[];
     };
@@ -84,7 +85,7 @@ export type OpenSkynetLivingState = {
   };
   /** @deprecated compatibility alias; prefer internalProjectState */
   skynet: {
-    name: "Skynet";
+    name: string;
     focusKey: string | null;
     focusTitle: string | null;
     mode: string | null;
@@ -266,7 +267,7 @@ function deriveLivingState(params: {
   commitment?: SkynetCommitmentDecision;
   experiment?: SkynetExperimentPlan;
 }): OpenSkynetLivingState {
-  const continuityScore = params.snapshot.skynetContinuity?.continuityScore ?? null;
+  const continuityScore = params.snapshot.internalProjectContinuity?.continuityScore ?? null;
   const hasRunnableExperiment = Boolean(params.experiment);
   const hasExplicitCommitment = Boolean(params.commitment?.executableTask);
   const hasRecommendedAction = Boolean(params.recommendedAction);
@@ -303,6 +304,8 @@ function deriveLivingState(params: {
         separatePlatformFromInternalProject: true,
         maintenanceIsNotProjectProgress: true,
         internalProjectActsAsAgenticBenchmark: true,
+        internalProjectFindingsMustTransferToKernel: true,
+        internalProjectMustNotBeKernelDependency: true,
         avoidAnthropomorphicClaimsWithoutEvidence: true,
         authoritativeStateSources: [
           ".openskynet/living-memory/state/*.json",
@@ -336,11 +339,14 @@ function deriveLivingState(params: {
     },
     internalProjectState: {
       name: params.project.name,
-      focusKey: params.snapshot.skynetStudyProgram?.focusKey ?? params.experiment?.focusKey ?? null,
+      focusKey:
+        params.snapshot.internalProjectStudyProgram?.focusKey ??
+        params.experiment?.focusKey ??
+        null,
       focusTitle: params.snapshot.studySupervisor?.focus.title ?? null,
-      mode: params.snapshot.skynetNucleus?.mode ?? null,
-      continuityScore: params.snapshot.skynetContinuity?.continuityScore ?? null,
-      topWorkItem: params.snapshot.skynetStudyProgram?.items[0]?.title ?? null,
+      mode: params.snapshot.internalProjectNucleus?.mode ?? null,
+      continuityScore: params.snapshot.internalProjectContinuity?.continuityScore ?? null,
+      topWorkItem: params.snapshot.internalProjectStudyProgram?.items[0]?.title ?? null,
       recommendedAction: params.recommendedAction ?? null,
       commitment: params.commitment
         ? {
@@ -361,12 +367,15 @@ function deriveLivingState(params: {
         : null,
     },
     skynet: {
-      name: "Skynet",
-      focusKey: params.snapshot.skynetStudyProgram?.focusKey ?? params.experiment?.focusKey ?? null,
+      name: params.project.name,
+      focusKey:
+        params.snapshot.internalProjectStudyProgram?.focusKey ??
+        params.experiment?.focusKey ??
+        null,
       focusTitle: params.snapshot.studySupervisor?.focus.title ?? null,
-      mode: params.snapshot.skynetNucleus?.mode ?? null,
-      continuityScore: params.snapshot.skynetContinuity?.continuityScore ?? null,
-      topWorkItem: params.snapshot.skynetStudyProgram?.items[0]?.title ?? null,
+      mode: params.snapshot.internalProjectNucleus?.mode ?? null,
+      continuityScore: params.snapshot.internalProjectContinuity?.continuityScore ?? null,
+      topWorkItem: params.snapshot.internalProjectStudyProgram?.items[0]?.title ?? null,
       recommendedAction: params.recommendedAction ?? null,
       commitment: params.commitment
         ? {

@@ -144,6 +144,7 @@ For `~/openskynet`, keep this distinction explicit:
 
 By default that internal project is `Skynet`, but it is a configurable benchmark workload, not the identity of the whole system.
 Do not confuse platform maintenance with progress of the internal project.
+Treat `src/skynet` as an optional experimental lab: useful discoveries should be transferred into the `OpenSkyNet`/`Omega` kernel and validated there, but the platform must remain able to compile and function without `src/skynet`.
 
 ### Heartbeat vs Cron: When to Use Each
 

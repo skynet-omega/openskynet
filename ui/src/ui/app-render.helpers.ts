@@ -6,7 +6,7 @@ import { refreshChat } from "./app-chat.ts";
 import { syncUrlWithSessionKey } from "./app-settings.ts";
 import type { AppViewState } from "./app-view-state.ts";
 import { OpenClawApp } from "./app.ts";
-import { ChatState, loadChatHistory } from "./controllers/chat.ts";
+import { ChatState, loadChatHistory, syncSessionMessageSubscription } from "./controllers/chat.ts";
 import { loadSessions } from "./controllers/sessions.ts";
 import { icons } from "./icons.ts";
 import { iconForTab, pathForTab, titleForTab, type Tab } from "./navigation.ts";
@@ -310,6 +310,7 @@ function switchChatSession(state: AppViewState, nextSessionKey: string) {
     nextSessionKey,
     true,
   );
+  void syncSessionMessageSubscription(state as unknown as ChatState);
   void loadChatHistory(state as unknown as ChatState);
   void refreshSessionOptions(state);
 }

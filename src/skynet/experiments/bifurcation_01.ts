@@ -46,9 +46,9 @@ export async function runSkynetBifurcation01(params: {
 
   const snapshot = await loadOmegaWorldModelSnapshot(params);
   console.log(`Continuity Score: ${snapshot.skynetContinuity?.continuityScore.toFixed(2)}`);
-  console.log(
-    `Commitment: ${snapshot.skynetCommitment?.kind} -> ${snapshot.skynetCommitment?.artifactKind}`,
-  );
+  const commitmentItem =
+    snapshot.skynetStudyProgram?.items[0]?.title ?? snapshot.activeGoalTask ?? "none";
+  console.log(`Commitment Context: ${commitmentItem}`);
 }
 
 async function main() {

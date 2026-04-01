@@ -13,7 +13,7 @@ describe("omega engine signal scoring", () => {
         kind: "contradiction",
         severity: 0.5,
         summary: "stale goals contradict claimed completion",
-        contradictionKind: "goal_state_mismatch",
+        contradictionKind: "goal_conflict",
       },
     ] satisfies OmegaEngineSignal[]);
 

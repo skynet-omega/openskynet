@@ -1,5 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import {
+  dequantizeEmbedding,
+  quantizeNormalizedEmbedding,
+  type QuantizedEmbedding,
+} from "./embedding-quantization.js";
 import { cosineSimilarity, createMemoryEmbedding } from "./memory-vectors.js";
 import { resolveOmegaLegacyStateFile, resolveOmegaStateFile } from "./paths.js";
 import { OMEGA_MAX_MEMORY_RESONANCE_RESULTS, OMEGA_MEMORY_EMBEDDING_DIMENSIONS } from "./policy.js";
@@ -8,8 +13,19 @@ export interface SemanticFossil {
   id: number;
   content: string;
   metadata: Record<string, unknown>;
-  embedding: number[];
+  embedding?: number[];
+  quantizedEmbedding?: QuantizedEmbedding;
   createdAt: number;
+}
+
+function resolveFossilEmbedding(fossil: SemanticFossil): number[] {
+  if (Array.isArray(fossil.embedding) && fossil.embedding.length > 0) {
+    return fossil.embedding;
+  }
+  if (fossil.quantizedEmbedding) {
+    return dequantizeEmbedding(fossil.quantizedEmbedding);
+  }
+  return new Array(OMEGA_MEMORY_EMBEDDING_DIMENSIONS).fill(0);
 }
 
 /**
@@ -48,18 +64,22 @@ export class HolographicMemoryManager {
    * Transduce a thought or outcome into a semantic fossil.
    */
   async fossilize(content: string, metadata: Record<string, unknown>, embedding?: number[]) {
+    const resolvedEmbedding =
+      embedding && embedding.length > 0
+        ? embedding
+        : createMemoryEmbedding({
+            content,
+            metadata,
+            dimensions: OMEGA_MEMORY_EMBEDDING_DIMENSIONS,
+          });
+    const quantizedEmbedding = quantizeNormalizedEmbedding({
+      embedding: resolvedEmbedding,
+    });
     const fossil: SemanticFossil = {
       id: Date.now(),
       content,
       metadata,
-      embedding:
-        embedding && embedding.length > 0
-          ? embedding
-          : createMemoryEmbedding({
-              content,
-              metadata,
-              dimensions: OMEGA_MEMORY_EMBEDDING_DIMENSIONS,
-            }),
+      ...(quantizedEmbedding ? { quantizedEmbedding } : { embedding: resolvedEmbedding }),
       createdAt: Date.now(),
     };
     this.fossils.push(fossil);
@@ -90,7 +110,7 @@ export class HolographicMemoryManager {
         content: fossil.content,
         metadata: fossil.metadata,
         // Use the blended workingMemory for searching, not just the raw query
-        distance: 1 - cosineSimilarity(this.workingMemory!, fossil.embedding),
+        distance: 1 - cosineSimilarity(this.workingMemory!, resolveFossilEmbedding(fossil)),
       }))
       .sort((left, right) => left.distance - right.distance);
 

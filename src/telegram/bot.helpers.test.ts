@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { resolveTelegramStreamMode } from "./bot/helpers.js";
+import { describe, expect, it, vi } from "vitest";
+import { resolveTelegramForumFlag, resolveTelegramStreamMode } from "./bot/helpers.js";
 
 describe("resolveTelegramStreamMode", () => {
   it("defaults to partial when telegram streaming is unset", () => {
@@ -20,5 +20,48 @@ describe("resolveTelegramStreamMode", () => {
 
   it("maps unified progress mode to partial on Telegram", () => {
     expect(resolveTelegramStreamMode({ streaming: "progress" })).toBe("partial");
+  });
+});
+
+describe("resolveTelegramForumFlag", () => {
+  it("keeps explicit forum metadata when Telegram already provides it", async () => {
+    const getChat = vi.fn(async () => ({ is_forum: false }));
+    await expect(
+      resolveTelegramForumFlag({
+        chatId: -100123,
+        chatType: "supergroup",
+        isGroup: true,
+        isForum: true,
+        getChat,
+      }),
+    ).resolves.toBe(true);
+    expect(getChat).not.toHaveBeenCalled();
+  });
+
+  it("falls back to getChat for supergroups when is_forum is omitted", async () => {
+    const getChat = vi.fn(async () => ({ is_forum: true }));
+    await expect(
+      resolveTelegramForumFlag({
+        chatId: -100123,
+        chatType: "supergroup",
+        isGroup: true,
+        getChat,
+      }),
+    ).resolves.toBe(true);
+    expect(getChat).toHaveBeenCalledWith(-100123);
+  });
+
+  it("returns false when forum lookup is unavailable", async () => {
+    const getChat = vi.fn(async () => {
+      throw new Error("lookup failed");
+    });
+    await expect(
+      resolveTelegramForumFlag({
+        chatId: -100123,
+        chatType: "supergroup",
+        isGroup: true,
+        getChat,
+      }),
+    ).resolves.toBe(false);
   });
 });
