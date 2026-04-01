@@ -2,7 +2,6 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import {
   OMEGA_METABOLISM_ACTIVATION_THRESHOLD,
-  OMEGA_METABOLISM_BASE_ACTIVITY,
   OMEGA_METABOLISM_FRUSTRATION_MULTIPLIER,
 } from "./policy.js";
 import type { ComponentType } from "./sparse-metabolism.js";

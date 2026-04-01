@@ -80,7 +80,7 @@ export class AutonomyLogger {
           this.metrics = parsed;
         }
       }
-    } catch (error) {
+    } catch {
       // Archivo vacío o corrupto, empezar de cero
       this.metrics = [];
     }
