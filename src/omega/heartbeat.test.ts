@@ -719,19 +719,40 @@ describe("omega heartbeat", () => {
         wsp: undefined,
         controllerState: undefined,
         operationalSummary: {
-          recentIterations: 0,
+          recentTurnCount: 0,
           recentResolvedTurns: 0,
           recentStalledTurns: 0,
-          recentErrors: 0,
-          meanLatencyMs: 0,
-          lastTurnHealth: undefined,
-          lastTerminationReason: undefined,
+          latestTurnHealth: undefined,
+          freshness: "missing",
+          averageCausalImpact: 0,
+          latestCausalImpact: 0,
         },
         stateAuthority: {
-          authoritativeSources: [],
-          fallbackSources: [],
-          warnings: [],
-          driveAuthority: "kernel",
+          continuity: {
+            source: "session-context",
+            status: "fallback",
+            reason: "kernel_unavailable",
+          },
+          executive: {
+            source: "kernel-fallback",
+            status: "fallback",
+            reason: "no_executive_snapshot_loaded",
+          },
+          operationalHealth: {
+            source: "operational-memory",
+            status: "fallback",
+            reason: "operational_summary_unavailable",
+          },
+          worldObservation: {
+            source: "kernel-fallback",
+            status: "fallback",
+            reason: "world_snapshot_not_requested_or_unavailable",
+          },
+          drives: {
+            source: "kernel-fallback",
+            status: "fallback",
+            reason: "no_persistent_drive_state_loaded",
+          },
         },
         policy: {
           wakeAction: { kind: "heartbeat_ok", reason: "none" },
@@ -758,6 +779,86 @@ describe("omega heartbeat", () => {
     expect(prompt).toContain("[OMEGA Degraded]");
     expect(prompt).toContain("controller_state, omega_wsp");
     expect(prompt).toContain("conservative inspection or maintenance");
+  });
+
+  it("emits a conservative degraded prompt when operational memory is stale even without missing components", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    vi.spyOn(runtimeAuthority, "loadOpenSkynetOmegaRuntimeAuthority").mockResolvedValue({
+      workspaceRoot,
+      sessionKey: "main",
+      project: {
+        key: "skynet",
+        name: "Skynet",
+        role: "lab",
+        mission: "benchmark",
+        benchmarkPurpose: "benchmark",
+        successCriteria: [],
+      },
+      memoryCandidates: [],
+      decisionContext: {
+        timeline: [],
+        sessionState: undefined,
+        kernel: undefined,
+        wsp: undefined,
+        controllerState: undefined,
+        operationalSummary: {
+          recentTurnCount: 1,
+          recentResolvedTurns: 0,
+          recentStalledTurns: 1,
+          latestTurnHealth: "stalled",
+          freshness: "stale",
+          averageCausalImpact: 0,
+          latestCausalImpact: 0,
+        },
+        stateAuthority: {
+          continuity: {
+            source: "session-context",
+            status: "fallback",
+            reason: "kernel_unavailable",
+          },
+          executive: {
+            source: "kernel-fallback",
+            status: "fallback",
+            reason: "no_executive_snapshot_loaded",
+          },
+          operationalHealth: {
+            source: "operational-memory",
+            status: "fallback",
+            reason: "recent_turn_health_stale",
+          },
+          worldObservation: {
+            source: "kernel-fallback",
+            status: "fallback",
+            reason: "world_snapshot_not_requested_or_unavailable",
+          },
+          drives: {
+            source: "kernel-fallback",
+            status: "fallback",
+            reason: "no_persistent_drive_state_loaded",
+          },
+        },
+        policy: {
+          wakeAction: { kind: "heartbeat_ok", reason: "none" },
+          driveSignal: { kind: "idle" },
+          driveSignalSource: "kernel",
+          shouldRunAutonomy: false,
+          needsRecoveryAttention: false,
+        },
+        shouldDispatchHeartbeatPrompt: false,
+        degradedComponents: [],
+      },
+      worldSnapshot: undefined,
+      livingState: undefined,
+    } as any);
+
+    const prompt = await buildOmegaHeartbeatPrompt({
+      workspaceRoot,
+      sessionKey: "main",
+    });
+
+    expect(prompt).toContain("[OMEGA Degraded]");
+    expect(prompt).toContain("Operational memory is stale");
+    expect(prompt).toContain("Revalidate active state before expanding scope");
   });
 
   it("returns no prompt when the executive dispatch plan defers active work under budget pressure", async () => {

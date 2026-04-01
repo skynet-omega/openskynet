@@ -7,6 +7,10 @@ import {
   loadOpenSkynetInternalProjectProfile,
   type OpenSkynetInternalProjectProfile,
 } from "./internal-project.js";
+import {
+  loadOmegaOperationalMemorySummary,
+  type OmegaOperationalMemorySummary,
+} from "./operational-memory.js";
 import { resolveOmegaStateDir } from "./paths.js";
 import type { OmegaWorldModelSnapshot } from "./world-model.js";
 
@@ -49,6 +53,8 @@ export type OpenSkynetLivingState = {
     worldModelStatus: "healthy" | "degraded";
     kernelStatus: "available" | "missing";
     degradedComponents: string[];
+    operationalMemoryStatus: "fresh" | "aging" | "stale" | "missing";
+    operationalMemoryLatestAt: number | null;
   };
   omega: {
     timelineLength: number;
@@ -268,6 +274,7 @@ function deriveLivingState(params: {
   project: OpenSkynetInternalProjectProfile;
   sessionKey: string;
   snapshot: OmegaWorldModelSnapshot;
+  operationalSummary?: OmegaOperationalMemorySummary;
   recommendedAction?: string;
   commitment?: SkynetCommitmentDecision;
   experiment?: SkynetExperimentPlan;
@@ -277,6 +284,8 @@ function deriveLivingState(params: {
   const hasExplicitCommitment = Boolean(params.commitment?.executableTask);
   const hasRecommendedAction = Boolean(params.recommendedAction);
   const degradedComponents = params.snapshot.degradedComponents.map((entry) => entry.component);
+  const operationalMemoryStatus = params.operationalSummary?.freshness ?? "missing";
+  const operationalMemoryLatestAt = params.operationalSummary?.latestRecordedAt ?? null;
   const authorityPenalty = degradedComponents.length > 0 ? 0.75 : 1;
   const benchmarkScore = Math.max(
     0,
@@ -333,6 +342,8 @@ function deriveLivingState(params: {
       worldModelStatus: degradedComponents.length > 0 ? "degraded" : "healthy",
       kernelStatus: params.snapshot.kernel ? "available" : "missing",
       degradedComponents,
+      operationalMemoryStatus,
+      operationalMemoryLatestAt,
     },
     omega: {
       timelineLength: params.snapshot.timelineLength,
@@ -551,13 +562,20 @@ export async function syncOpenSkynetLivingMemory(params: {
   workspaceRoot: string;
   sessionKey: string;
   snapshot: OmegaWorldModelSnapshot;
+  operationalSummary?: OmegaOperationalMemorySummary;
   recommendedAction?: string;
   commitment?: SkynetCommitmentDecision;
   experiment?: SkynetExperimentPlan;
 }): Promise<OpenSkynetLivingState> {
   const prior = await loadOpenSkynetLivingState(params);
   const project = await loadOpenSkynetInternalProjectProfile(params.workspaceRoot);
-  const next = deriveLivingState({ ...params, project });
+  const operationalSummary =
+    params.operationalSummary ??
+    (await loadOmegaOperationalMemorySummary({
+      workspaceRoot: params.workspaceRoot,
+      sessionKey: params.sessionKey,
+    }).catch(() => undefined));
+  const next = deriveLivingState({ ...params, project, operationalSummary });
   const statePath = resolveOpenSkynetLivingStateFile(params);
   await writeJsonAtomic(statePath, next, { trailingNewline: true });
   await appendEvents(

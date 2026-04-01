@@ -153,6 +153,7 @@ export async function buildOmegaHeartbeatPrompt(params: {
     kernel,
     wakeAction,
     effectiveWakeAction,
+    stateAuthority,
     controllerState,
     driveSignal: sharedDriveSignal,
     shouldDispatchPrompt,
@@ -160,20 +161,35 @@ export async function buildOmegaHeartbeatPrompt(params: {
   } = await loadOmegaHeartbeatDecisionContext(params);
   const engines = getOmegaHeartbeatEngineRegistry();
 
+  const staleOperationalMemory =
+    stateAuthority?.operationalHealth?.status === "fallback" &&
+    stateAuthority?.operationalHealth?.reason === "recent_turn_health_stale";
+
   if (
-    degradedComponents.length > 0 &&
+    (degradedComponents.length > 0 || staleOperationalMemory) &&
     wakeAction.kind === "heartbeat_ok" &&
     !shouldDispatchPrompt
   ) {
     const degradedNames = degradedComponents.map((entry) => entry.component).join(", ");
-    return [
-      "[OMEGA Degraded]",
-      `Detected degraded components: ${degradedNames}`,
-      "Treat missing subsystems as degraded state, not as evidence of calm or completion.",
+    const lines = ["[OMEGA Degraded]"];
+    if (degradedComponents.length > 0) {
+      lines.push(`Detected degraded components: ${degradedNames}`);
+      lines.push(
+        "Treat missing subsystems as degraded state, not as evidence of calm or completion.",
+      );
+    }
+    if (staleOperationalMemory) {
+      lines.push(
+        "Operational memory is stale; do not assume recent continuity from persisted turns alone.",
+      );
+      lines.push("Revalidate active state before expanding scope or inventing new work.");
+    }
+    lines.push(
       "Run only conservative inspection or maintenance. Do not invent new goals from partial state.",
       "",
       "If no user-facing update is needed after inspection, reply HEARTBEAT_OK.",
-    ].join("\n");
+    );
+    return lines.join("\n");
   }
 
   if (kernel) {
@@ -261,6 +277,15 @@ export async function buildOmegaHeartbeatPrompt(params: {
     );
     lines.push(
       "Treat missing subsystems as degraded state, not as evidence of calm or completion.",
+    );
+  }
+  if (stateAuthority?.operationalHealth?.reason === "recent_turn_health_stale") {
+    lines.push(
+      "Operational memory is stale; verify current continuity before trusting old turn summaries.",
+    );
+  } else if (stateAuthority?.operationalHealth?.reason === "recent_turn_health_aging") {
+    lines.push(
+      "Operational memory is aging; prefer lightweight revalidation before committing to new branches of work.",
     );
   }
 

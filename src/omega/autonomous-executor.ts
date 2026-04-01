@@ -143,10 +143,18 @@ async function loadLivingStateProposal(params: {
     const benchmark = livingState.agenticBenchmark;
     const projectState = livingState.internalProjectState;
     const commitmentTask = projectState.commitment?.executableTask?.trim();
+    const operationalMemoryStatus = livingState.authority.operationalMemoryStatus;
 
     if (commitmentTask) {
       return {
         hypothesis: `[${project.name}] Execute committed task: ${commitmentTask}`,
+        testable: true,
+      };
+    }
+
+    if (operationalMemoryStatus === "stale") {
+      return {
+        hypothesis: `[${project.name}] Revalidate stale operational continuity before expanding scope: inspect the active goal, current blockers, and the next measurable step.`,
         testable: true,
       };
     }

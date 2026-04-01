@@ -104,4 +104,26 @@ describe("omega state authority", () => {
       reason: "persistent_drive_state_stale",
     });
   });
+
+  it("demotes stale operational memory from authority to fallback", () => {
+    const snapshot = deriveOmegaStateAuthoritySnapshot({
+      operationalSummary: {
+        recentTurnCount: 3,
+        recentStalledTurns: 2,
+        recentResolvedTurns: 1,
+        latestTurnHealth: "stalled",
+        latestRecordedAt: 1_000,
+        ageMs: 3 * 60 * 60 * 1000,
+        freshness: "stale",
+        averageCausalImpact: 0.2,
+        latestCausalImpact: 0,
+      },
+    });
+
+    expect(snapshot.operationalHealth).toMatchObject({
+      source: "operational-memory",
+      status: "fallback",
+      reason: "recent_turn_health_stale",
+    });
+  });
 });

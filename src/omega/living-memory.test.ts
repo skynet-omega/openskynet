@@ -186,4 +186,33 @@ describe("omega living memory", () => {
       healthyState.agenticBenchmark.benchmarkScore,
     );
   });
+
+  it("persists operational memory freshness in living authority state", async () => {
+    const snapshot = await loadOmegaWorldModelSnapshot({
+      workspaceRoot,
+      sessionKey,
+    });
+
+    const state = await syncOpenSkynetLivingMemory({
+      workspaceRoot,
+      sessionKey,
+      snapshot,
+      operationalSummary: {
+        recentTurnCount: 2,
+        recentStalledTurns: 1,
+        recentResolvedTurns: 1,
+        latestTurnHealth: "resolved",
+        latestRecordedAt: 12345,
+        ageMs: 3 * 60 * 60 * 1000,
+        freshness: "stale",
+        averageCausalImpact: 0.5,
+        latestCausalImpact: 1,
+      },
+    });
+
+    expect(state.authority).toMatchObject({
+      operationalMemoryStatus: "stale",
+      operationalMemoryLatestAt: 12345,
+    });
+  });
 });

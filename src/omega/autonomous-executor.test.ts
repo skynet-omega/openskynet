@@ -90,4 +90,66 @@ describe("autonomous executor", () => {
       expect(result.hypothesis).toContain("Generate one runnable protein search artifact");
     }
   });
+
+  it("prefers revalidating continuity when living operational memory is stale", async () => {
+    await fs.mkdir(path.join(workspaceRoot, "memory"), { recursive: true });
+    await fs.writeFile(
+      path.join(workspaceRoot, "memory", "omega-research-20990101-000000.prose"),
+      "# existing research\n",
+      "utf-8",
+    );
+
+    const snapshot = await loadOmegaWorldModelSnapshot({
+      workspaceRoot,
+      sessionKey,
+    });
+    await syncOpenSkynetLivingMemory({
+      workspaceRoot,
+      sessionKey,
+      snapshot,
+      recommendedAction: "Expand the active research scope.",
+      operationalSummary: {
+        recentTurnCount: 2,
+        recentStalledTurns: 1,
+        recentResolvedTurns: 1,
+        latestTurnHealth: "resolved",
+        latestRecordedAt: 1000,
+        ageMs: 3 * 60 * 60 * 1000,
+        freshness: "stale",
+        averageCausalImpact: 0.4,
+        latestCausalImpact: 0.2,
+      },
+    });
+
+    const result = await executeAutonomousAction({
+      workspaceRoot,
+      sessionKey,
+      signal: {
+        kind: "entropy_alert",
+        silentMs: 90_000,
+        reason: "test_entropy_alert",
+        urgency: 0.9,
+      },
+      kernel: {
+        identity: { continuityId: "c1" },
+        turnCount: 1,
+        tension: {
+          openGoalCount: 0,
+          failureStreak: 0,
+          repeatedFailureKinds: [],
+        },
+        world: {
+          lastOutcomeStatus: "nominal",
+          lastErrorKind: undefined,
+          lastObservedChangedFiles: [],
+        },
+        goals: [],
+      } as never,
+    });
+
+    expect(result.kind).toBe("experiment_proposed");
+    if (result.kind === "experiment_proposed") {
+      expect(result.hypothesis).toContain("Revalidate stale operational continuity");
+    }
+  });
 });

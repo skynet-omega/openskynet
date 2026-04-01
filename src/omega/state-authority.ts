@@ -79,10 +79,19 @@ export function deriveOmegaStateAuthoritySnapshot(params: {
     },
     operationalHealth: {
       source: "operational-memory",
-      status: params.operationalSummary ? "authoritative" : "fallback",
-      reason: params.operationalSummary
-        ? "recent_turn_health_is_persisted"
-        : "operational_summary_unavailable",
+      status:
+        !params.operationalSummary || params.operationalSummary.freshness === "stale"
+          ? "fallback"
+          : params.operationalSummary.freshness === "aging"
+            ? "derived"
+            : "authoritative",
+      reason: !params.operationalSummary
+        ? "operational_summary_unavailable"
+        : params.operationalSummary.freshness === "stale"
+          ? "recent_turn_health_stale"
+          : params.operationalSummary.freshness === "aging"
+            ? "recent_turn_health_aging"
+            : "recent_turn_health_is_fresh",
     },
     worldObservation: {
       source: "world-model",

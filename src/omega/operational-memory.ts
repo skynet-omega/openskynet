@@ -25,6 +25,9 @@ export type OmegaOperationalMemorySummary = {
   recentStalledTurns: number;
   recentResolvedTurns: number;
   latestTurnHealth?: OmegaHeartbeatTurnPolicy["turnHealth"];
+  latestRecordedAt?: number;
+  ageMs?: number;
+  freshness: "fresh" | "aging" | "stale" | "missing";
   /** Average causal impact of recent turns (0-1). */
   averageCausalImpact: number;
   /** Causal impact of the single most recent turn (0-1). */
@@ -39,6 +42,8 @@ type OmegaOperationalMemoryStore = {
 };
 
 const OMEGA_OPERATIONAL_MEMORY_LIMIT = 12;
+const OMEGA_OPERATIONAL_MEMORY_FRESH_MS = 15 * 60 * 1000;
+const OMEGA_OPERATIONAL_MEMORY_AGING_MS = 2 * 60 * 60 * 1000;
 
 function sanitizeSessionKey(sessionKey: string): string {
   const normalized = sessionKey.trim() || "main";
@@ -129,14 +134,31 @@ export async function loadOmegaOperationalMemory(params: {
 
 export function summarizeOmegaOperationalMemory(
   entries: OmegaOperationalTurnMemoryEntry[],
+  nowMs: number = Date.now(),
 ): OmegaOperationalMemorySummary {
   const recent = entries.slice(-5);
   const totalImpact = recent.reduce((sum, entry) => sum + (entry.causalImpact ?? 0), 0);
+  const latestRecordedAt = recent.at(-1)?.recordedAt;
+  const ageMs =
+    typeof latestRecordedAt === "number" && Number.isFinite(latestRecordedAt)
+      ? Math.max(0, nowMs - latestRecordedAt)
+      : undefined;
+  const freshness =
+    ageMs === undefined
+      ? "missing"
+      : ageMs <= OMEGA_OPERATIONAL_MEMORY_FRESH_MS
+        ? "fresh"
+        : ageMs <= OMEGA_OPERATIONAL_MEMORY_AGING_MS
+          ? "aging"
+          : "stale";
   return {
     recentTurnCount: recent.length,
     recentStalledTurns: recent.filter((entry) => entry.turnHealth === "stalled").length,
     recentResolvedTurns: recent.filter((entry) => entry.turnHealth === "resolved").length,
     latestTurnHealth: recent.at(-1)?.turnHealth,
+    latestRecordedAt,
+    ageMs,
+    freshness,
     averageCausalImpact: recent.length > 0 ? totalImpact / recent.length : 0,
     latestCausalImpact: recent.at(-1)?.causalImpact ?? 0,
   };
