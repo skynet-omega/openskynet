@@ -1,34 +1,36 @@
 /**
  * Sparse Metabolism para OpenSkyNet
- * 
+ *
  * Problema: Cada ciclo de heartbeat corre TODOS los componentes
  *   - Neural Logic Engine (64 reglas)
  *   - Hierarchical Memory (query episodic)
  *   - Lyapunov Control (calcular divergencia)
  *   - Causal Reasoner (BFS sobre grafo)
  *   Resultado: Compute innecesario, latencia creciente
- * 
+ *
  * Solución: "Metabolismo Disperso"
  *   - Cada componente se ejecuta SOLO cuando lo necesita
  *   - Ajusta su actividad basado en frustración actual
  *   - Resultado: Eficiencia + mayor autonomía bajo presión
- * 
+ *
  * Inspiración: exp19_sparse_metabolism en EXPERIMENTOS
  */
 
 export type ComponentType =
-  | 'neural_logic_engine'
-  | 'hierarchical_memory'
-  | 'lyapunov_controller'
-  | 'causal_reasoner'
-  | 'autonomy_logger'
-  | 'jepa_enhancer';
+  | "neural_logic_engine"
+  | "hierarchical_memory"
+  | "lyapunov_controller"
+  | "causal_reasoner"
+  | "autonomy_logger"
+  | "jepa_enhancer";
 
 export interface MetabolismState {
   timestamp: number;
-  frustration: number;           // 0-1 input
+  frustration: number; // 0-1 input
+  effectiveFrustration: number; // smoothed frustration used for activation
+  surprise: number; // change magnitude vs previous frustration
   componentActivities: Record<ComponentType, number>; // 0-1 cada uno
-  totalMetabolicRate: number;    // 0-1 total metabolic cost
+  totalMetabolicRate: number; // 0-1 total metabolic cost
   activatedComponents: ComponentType[];
   skippedComponents: ComponentType[];
   reason: string;
@@ -37,50 +39,62 @@ export interface MetabolismState {
 export class SparseMetabolism {
   // Configuración de metabolismo base para cada componente
   private baseMetabolism: Record<ComponentType, number> = {
-    neural_logic_engine: 0.15,      // Costoso: 64 reglas
-    hierarchical_memory: 0.2,        // Costoso: queries + consolidación
-    lyapunov_controller: 0.05,       // Barato: solo matemática
-    causal_reasoner: 0.1,            // Moderado: BFS
-    autonomy_logger: 0.02,           // Muy barato: append logs
-    jepa_enhancer: 0.08,             // Moderado: calcula boost
+    neural_logic_engine: 0.15, // Costoso: 64 reglas
+    hierarchical_memory: 0.2, // Costoso: queries + consolidación
+    lyapunov_controller: 0.05, // Barato: solo matemática
+    causal_reasoner: 0.1, // Moderado: BFS
+    autonomy_logger: 0.02, // Muy barato: append logs
+    jepa_enhancer: 0.08, // Moderado: calcula boost
   };
 
   // Cuando frustración sube, qué componentes se activan más agresivamente
   private frustrationMultipliers: Record<ComponentType, number> = {
-    neural_logic_engine: 1.5,   // Más razonamiento cuando frustrado
-    hierarchical_memory: 2.0,   // Más lookup de episémico
-    lyapunov_controller: 3.0,   // Control crítico cuando diverge
-    causal_reasoner: 1.8,       // Más análisis cuando estresado
-    autonomy_logger: 1.0,       // No cambia
-    jepa_enhancer: 2.0,         // Más boost cuando necesario
+    neural_logic_engine: 1.5, // Más razonamiento cuando frustrado
+    hierarchical_memory: 2.0, // Más lookup de episémico
+    lyapunov_controller: 3.0, // Control crítico cuando diverge
+    causal_reasoner: 1.8, // Más análisis cuando estresado
+    autonomy_logger: 1.0, // No cambia
+    jepa_enhancer: 2.0, // Más boost cuando necesario
   };
 
   // Thresholds de activación (sólo pasa frustración > threshold)
   private activationThresholds: Record<ComponentType, number> = {
-    neural_logic_engine: 0.0,   // Siempre
-    hierarchical_memory: 0.4,   // Cuando hay cierta dificultad
-    lyapunov_controller: 0.3,   // Bastante pronto
-    causal_reasoner: 0.6,       // Cuando está muy frustrado
-    autonomy_logger: 0.0,       // Siempre
-    jepa_enhancer: 0.2,         // Bastante pronto
+    neural_logic_engine: 0.0, // Siempre
+    hierarchical_memory: 0.4, // Cuando hay cierta dificultad
+    lyapunov_controller: 0.3, // Bastante pronto
+    causal_reasoner: 0.6, // Cuando está muy frustrado
+    autonomy_logger: 0.0, // Siempre
+    jepa_enhancer: 0.2, // Bastante pronto
   };
 
   private lastState: MetabolismState | null = null;
   private activationHistory: number[] = [];
   private readonly HISTORY_SIZE = 50;
+  private smoothedFrustration = 0;
+  private lastObservedFrustration: number | null = null;
 
   constructor() {
-    console.log('[Metabolism] Sparse metabolism initialized');
+    console.log("[Metabolism] Sparse metabolism initialized");
   }
 
   /**
    * Core: Calcular qué componentes ejecutar este ciclo
-   * 
+   *
    * Entrada: frustración actual (0-1)
    * Salida: MetabolismState con decisiones
    */
   computeMetabolism(frustration: number): MetabolismState {
     const timestamp = Date.now();
+    const surprise =
+      this.lastObservedFrustration === null
+        ? 0
+        : Math.abs(frustration - this.lastObservedFrustration);
+    this.smoothedFrustration =
+      this.lastObservedFrustration === null
+        ? frustration
+        : Math.max(0, Math.min(1, 0.78 * this.smoothedFrustration + 0.22 * frustration));
+    this.lastObservedFrustration = frustration;
+    const effectiveFrustration = this.smoothedFrustration;
     const componentActivities: Record<ComponentType, number> = {
       neural_logic_engine: 0,
       hierarchical_memory: 0,
@@ -94,16 +108,14 @@ export class SparseMetabolism {
     const skippedComponents: ComponentType[] = [];
 
     // Para cada componente, decidir si ejecutar
-    for (const [component, baseActivity] of Object.entries(
-      this.baseMetabolism
-    ) as [ComponentType, number][]) {
-      const threshold = this.activationThresholds[component];
-
-      // Activado solo si frustración > threshold
-      if (frustration >= threshold) {
+    for (const [component, baseActivity] of Object.entries(this.baseMetabolism) as [
+      ComponentType,
+      number,
+    ][]) {
+      if (this.shouldActivateComponent(component, effectiveFrustration, surprise)) {
         // ¿Qué tan activo? Base + multiplier de frustración
         const multiplier = this.frustrationMultipliers[component];
-        const activity = baseActivity * (1 + frustration * multiplier);
+        const activity = baseActivity * (1 + effectiveFrustration * multiplier);
 
         // Saturar entre 0 e 1
         componentActivities[component] = Math.min(1, activity);
@@ -115,10 +127,9 @@ export class SparseMetabolism {
     }
 
     // Metabolismo total = suma ponderada
-    const totalMetabolicRate = Object.values(componentActivities).reduce(
-      (s, v) => s + v,
-      0
-    ) / Object.keys(componentActivities).length;
+    const totalMetabolicRate =
+      Object.values(componentActivities).reduce((s, v) => s + v, 0) /
+      Object.keys(componentActivities).length;
 
     // Guardar en historia para análisis de tendencias
     this.activationHistory.push(totalMetabolicRate);
@@ -127,20 +138,22 @@ export class SparseMetabolism {
     }
 
     // Razón textual
-    let reason = '';
-    if (frustration < 0.2) {
-      reason = 'Low frustration: minimal metabolism';
-    } else if (frustration < 0.5) {
-      reason = 'Moderate frustration: selective component activation';
-    } else if (frustration < 0.8) {
-      reason = 'High frustration: aggressive activation';
+    let reason = "";
+    if (effectiveFrustration < 0.2) {
+      reason = "Low frustration: minimal metabolism";
+    } else if (effectiveFrustration < 0.5) {
+      reason = "Moderate frustration: selective component activation";
+    } else if (effectiveFrustration < 0.8) {
+      reason = "High frustration: aggressive activation";
     } else {
-      reason = 'CRITICAL frustration: full metabolic engagement';
+      reason = "CRITICAL frustration: full metabolic engagement";
     }
 
     const state: MetabolismState = {
       timestamp,
       frustration,
+      effectiveFrustration,
+      surprise,
       componentActivities,
       totalMetabolicRate,
       activatedComponents,
@@ -150,6 +163,28 @@ export class SparseMetabolism {
 
     this.lastState = state;
     return state;
+  }
+
+  private shouldActivateComponent(
+    component: ComponentType,
+    effectiveFrustration: number,
+    surprise: number,
+  ): boolean {
+    switch (component) {
+      case "neural_logic_engine":
+      case "autonomy_logger":
+        return true;
+      case "hierarchical_memory":
+        return effectiveFrustration >= 0.44 || (effectiveFrustration >= 0.28 && surprise >= 0.12);
+      case "lyapunov_controller":
+        return effectiveFrustration >= 0.3 || surprise >= 0.18;
+      case "causal_reasoner":
+        return (effectiveFrustration >= 0.65 && surprise <= 0.18) || effectiveFrustration >= 0.82;
+      case "jepa_enhancer":
+        return effectiveFrustration >= 0.2 || surprise >= 0.08;
+      default:
+        return effectiveFrustration >= this.activationThresholds[component];
+    }
   }
 
   /**
@@ -174,9 +209,7 @@ export class SparseMetabolism {
   /**
    * Predecir metabolismo futuro basado en tendencia
    */
-  predictFutureMetabolism(
-    frustrationAhead: number
-  ): {
+  predictFutureMetabolism(frustrationAhead: number): {
     estimatedMetabolicRate: number;
     predictedActivations: ComponentType[];
   } {
@@ -192,7 +225,7 @@ export class SparseMetabolism {
    */
   explain(): string {
     if (!this.lastState) {
-      return '[Metabolism] No metabolism computed. Call computeMetabolism() first.';
+      return "[Metabolism] No metabolism computed. Call computeMetabolism() first.";
     }
 
     const state = this.lastState;
@@ -203,22 +236,25 @@ export class SparseMetabolism {
 
     let report = `[Sparse Metabolism Report]\n`;
     report += `  Frustration: ${(state.frustration * 100).toFixed(1)}%\n`;
+    report += `  Effective frustration: ${(state.effectiveFrustration * 100).toFixed(1)}%\n`;
+    report += `  Surprise: ${(state.surprise * 100).toFixed(1)}%\n`;
     report += `  Total Metabolic Rate: ${(state.totalMetabolicRate * 100).toFixed(1)}%\n`;
     report += `  Activated Components: ${state.activatedComponents.length}/${Object.keys(state.componentActivities).length}\n`;
-    report += `    ${state.activatedComponents.join(', ')}\n`;
+    report += `    ${state.activatedComponents.join(", ")}\n`;
     if (state.skippedComponents.length > 0) {
-      report += `  Skipped: ${state.skippedComponents.join(', ')}\n`;
+      report += `  Skipped: ${state.skippedComponents.join(", ")}\n`;
     }
     report += `\n  Component Activities:\n`;
 
     for (const [comp, activity] of Object.entries(state.componentActivities)) {
-      const bar = '█'.repeat(Math.round(activity * 10)) + '░'.repeat(10 - Math.round(activity * 10));
+      const bar =
+        "█".repeat(Math.round(activity * 10)) + "░".repeat(10 - Math.round(activity * 10));
       report += `    ${comp}: [${bar}] ${(activity * 100).toFixed(0)}%\n`;
     }
 
     report += `\n  Metrics:\n`;
     report += `    Avg metabolic rate (last ${this.activationHistory.length} cycles): ${(avgMetabolism * 100).toFixed(1)}%\n`;
-    report += `    Trend: ${trend > 0 ? '📈' : trend < 0 ? '📉' : '➡️'} ${(trend * 100).toFixed(1)}% per cycle\n`;
+    report += `    Trend: ${trend > 0 ? "📈" : trend < 0 ? "📉" : "➡️"} ${(trend * 100).toFixed(1)}% per cycle\n`;
     report += `\n  Reason: ${state.reason}`;
 
     return report;
