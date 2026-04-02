@@ -5,6 +5,7 @@ import type { SessionEntry, SessionInterruptedTurn, SessionUnfinishedTurn } from
 
 const UNFINISHED_TURN_PREVIEW_MAX_CHARS = 240;
 export const MAX_INTERRUPTED_RESUME_COUNT = 3;
+export const MAX_RATE_LIMIT_INTERRUPTED_RESUME_COUNT = 4;
 
 function normalizeUnfinishedTurnPreview(text: string): string | undefined {
   const collapsed = text.replace(/\s+/g, " ").trim();
@@ -94,9 +95,18 @@ export async function markSessionUnfinishedTurn(params: {
   return unfinishedTurn;
 }
 
-export function canAttemptInterruptedResume(entry: SessionEntry | undefined): boolean {
+export function canAttemptInterruptedResume(
+  entry: SessionEntry | undefined,
+  options?: {
+    maxResumeCount?: number;
+  },
+): boolean {
   const resumeCount = entry?.interruptedTurn?.resumeCount ?? 0;
-  return resumeCount < MAX_INTERRUPTED_RESUME_COUNT;
+  const maxResumeCount =
+    typeof options?.maxResumeCount === "number" && Number.isFinite(options.maxResumeCount)
+      ? Math.max(1, Math.floor(options.maxResumeCount))
+      : MAX_INTERRUPTED_RESUME_COUNT;
+  return resumeCount < maxResumeCount;
 }
 
 export async function markSessionInterruptedResumeAttempt(params: {

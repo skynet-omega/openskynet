@@ -3,10 +3,12 @@ import { lookupContextTokens } from "../../agents/context.js";
 import { DEFAULT_CONTEXT_TOKENS } from "../../agents/defaults.js";
 import { resolveModelAuthMode } from "../../agents/model-auth.js";
 import { isCliProvider } from "../../agents/model-selection.js";
+import { classifyFailoverReason } from "../../agents/pi-embedded-helpers.js";
 import { queueEmbeddedPiMessage } from "../../agents/pi-embedded.js";
 import { hasNonzeroUsage } from "../../agents/usage.js";
 import {
   canAttemptInterruptedResume,
+  MAX_RATE_LIMIT_INTERRUPTED_RESUME_COUNT,
   markSessionUnfinishedTurn,
   markSessionInterruptedResumeAttempt,
   resolveAgentIdFromSessionKey,
@@ -33,6 +35,7 @@ import type { OriginatingChannelType, TemplateContext } from "../templating.js";
 import { resolveResponseUsageMode, type VerboseLevel } from "../thinking.js";
 import type { GetReplyOptions, ReplyPayload } from "../types.js";
 import { runAgentTurnWithFallback } from "./agent-runner-execution.js";
+import type { RuntimeFallbackAttempt } from "./agent-runner-execution.js";
 import {
   createShouldEmitToolOutput,
   createShouldEmitToolResult,
@@ -69,6 +72,33 @@ import { createTypingSignaler } from "./typing-mode.js";
 import type { TypingController } from "./typing.js";
 
 const BLOCK_REPLY_SEND_TIMEOUT_MS = 15_000;
+const RATE_LIMIT_INTERRUPTED_RESUME_DELAY_MS = 10_000;
+
+function extractRunErrorMessage(error: unknown): string | undefined {
+  if (typeof error === "string") {
+    const trimmed = error.trim();
+    return trimmed || undefined;
+  }
+  if (!error || typeof error !== "object") {
+    return undefined;
+  }
+  if ("message" in error && typeof error.message === "string") {
+    const trimmed = error.message.trim();
+    return trimmed || undefined;
+  }
+  return undefined;
+}
+
+function shouldBackoffInterruptedRetry(params: {
+  fallbackAttempts: RuntimeFallbackAttempt[];
+  runError?: unknown;
+}): boolean {
+  if (params.fallbackAttempts.some((attempt) => attempt.reason === "rate_limit")) {
+    return true;
+  }
+  const rawError = extractRunErrorMessage(params.runError);
+  return rawError ? classifyFailoverReason(rawError) === "rate_limit" : false;
+}
 
 export async function runReplyAgent(params: {
   commandBody: string;
@@ -285,12 +315,15 @@ export async function runReplyAgent(params: {
     agentCfgContextTokens,
   });
 
-  const maybeQueueInterruptedRetry = async () => {
+  const maybeQueueInterruptedRetry = async (options?: { rateLimitBackoff?: boolean }) => {
     if (!sessionKey || !storePath || !currentUnfinishedTurn) {
       return false;
     }
     const entryForResume = activeSessionStore?.[sessionKey] ?? activeSessionEntry;
-    if (!canAttemptInterruptedResume(entryForResume)) {
+    const maxResumeCount = options?.rateLimitBackoff
+      ? MAX_RATE_LIMIT_INTERRUPTED_RESUME_COUNT
+      : undefined;
+    if (!canAttemptInterruptedResume(entryForResume, { maxResumeCount })) {
       return false;
     }
     const updatedEntry = await markSessionInterruptedResumeAttempt({
@@ -299,6 +332,14 @@ export async function runReplyAgent(params: {
       storePath,
     });
     const nextResumeCount = updatedEntry?.interruptedTurn?.resumeCount ?? 1;
+    const queueSettings =
+      options?.rateLimitBackoff &&
+      (resolvedQueue.debounceMs ?? 0) < RATE_LIMIT_INTERRUPTED_RESUME_DELAY_MS
+        ? {
+            ...resolvedQueue,
+            debounceMs: RATE_LIMIT_INTERRUPTED_RESUME_DELAY_MS,
+          }
+        : resolvedQueue;
     const enqueued = enqueueFollowupRun(
       queueKey,
       {
@@ -309,7 +350,7 @@ export async function runReplyAgent(params: {
           ? `Auto-resume: ${followupRun.summaryLine}`
           : "Auto-resume interrupted turn",
       },
-      resolvedQueue,
+      queueSettings,
     );
     if (enqueued && updatedEntry) {
       activeSessionEntry = updatedEntry;
@@ -562,6 +603,10 @@ export async function runReplyAgent(params: {
         hadExecutionError: runResult.meta?.stopReason === "error" || Boolean(runResult.meta?.error),
         hasActiveBackgroundTask,
       });
+    const shouldBackoffAutoResume = shouldBackoffInterruptedRetry({
+      fallbackAttempts,
+      runError: runResult.meta?.error,
+    });
 
     // Drain any late tool/block deliveries before deciding there's "nothing to send".
     // Otherwise, a late typing trigger (e.g. from a tool callback) can outlive the run and
@@ -569,7 +614,9 @@ export async function runReplyAgent(params: {
     if (payloadArray.length === 0) {
       const turnOutcome = resolveTurnOutcome(0);
       if (turnOutcome.shouldSynthesizeDegradedReply) {
-        const autoResumeQueued = await maybeQueueInterruptedRetry();
+        const autoResumeQueued = await maybeQueueInterruptedRetry({
+          rateLimitBackoff: shouldBackoffAutoResume,
+        });
         return finalizeWithFollowup(
           hasActiveBackgroundTask
             ? autoResumeQueued
@@ -613,7 +660,9 @@ export async function runReplyAgent(params: {
     if (replyPayloads.length === 0) {
       const turnOutcome = resolveTurnOutcome(0);
       if (turnOutcome.shouldSynthesizeDegradedReply) {
-        const autoResumeQueued = await maybeQueueInterruptedRetry();
+        const autoResumeQueued = await maybeQueueInterruptedRetry({
+          rateLimitBackoff: shouldBackoffAutoResume,
+        });
         return finalizeWithFollowup(
           hasActiveBackgroundTask
             ? autoResumeQueued

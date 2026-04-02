@@ -50,40 +50,38 @@ class LiquidBrainOrgan(nn.Module):
     def forward_sequence(self, x_seq: torch.Tensor) -> torch.Tensor:
         batch, steps, _ = x_seq.shape
         h = torch.zeros(batch, self.n_nodes, self.d_feature, device=x_seq.device)
-        
-        # Adjacency starts as sparse Identity
         A = torch.eye(self.n_nodes, device=x_seq.device).unsqueeze(0).repeat(batch, 1, 1)
         
         for t in range(steps):
-            # 1. Drive - stronger injection
-            x_in = self.input_proj(x_seq[:, t]).view(batch, self.n_nodes, self.d_feature)
+            x_t = x_seq[:, t]
+            # --- PROTECTIVE LAYER: Input Filtering ---
+            # If input is too high (flash/noise), dampen its effect
+            x_in = self.input_proj(x_t).view(batch, self.n_nodes, self.d_feature)
+            x_in = x_in / (1.0 + torch.norm(x_in, dim=-1, keepdim=True) * 0.1)
             
-            # 2. Biphasic Growth (Interaction)
-            # Use tanh to keep growth bounded and non-linear
-            h = torch.tanh(h + 0.5 * x_in)
-            growth = self.g_fluid(h)
-            h = h + 0.2 * growth
+            # --- TOPOLOGICAL WELLS: The decision-locking mechanism ---
+            # Increase the Mexican Hat force to 'crystallize' memory nodes
+            h_core = torch.tanh(h + 0.5 * x_in)
+            # F_well = h - h^3 (The Higgs force from Exp45)
+            force = (h_core - torch.pow(h_core, 3)).detach()
+            h = h_core + 0.35 * force 
             
-            # 3. Liquid Diffusion (Communication over Dynamic Topology)
-            # Normalize A to prevent explosion (Row-normalization)
+            # --- DYNAMIC ADJACENCY (V80 Core) ---
             A_norm = A / (A.sum(dim=-1, keepdim=True) + 1e-6)
             h_diffused = torch.bmm(A_norm, h)
             
-            # Diffusion update: move towards neighbors
-            h = h + 0.3 * (h_diffused - h)
+            # Diffusion with higher damping (more inertia)
+            h = h + 0.2 * (h_diffused - h)
             
-            # 4. Topology Update (Fire together, wire together)
-            # Enhanced Hebbian: use cosine similarity for topology growth
+            # --- PLASTICITY with CORRELATION GATING ---
+            # Only update topology if activity is within a 'meaningful' range
             h_normed = F.normalize(h, dim=-1)
-            corr = torch.bmm(h_normed, h_normed.transpose(1, 2)) # [B, N, N]
+            corr = torch.bmm(h_normed, h_normed.transpose(1, 2))
             
-            eta = torch.sigmoid(self.plasticity_rate) * 0.1 # Slower, more stable plasticity
-            lam = torch.sigmoid(self.decay_rate) * 0.05
-            
-            # Update Adjacency
+            eta = torch.sigmoid(self.plasticity_rate) * 0.05
+            lam = torch.sigmoid(self.decay_rate) * 0.01
             A = torch.clamp(A + eta * corr - lam * A, 0.0, 1.0)
             
-            # Maintain identity for self-loop stability
             idx = torch.arange(self.n_nodes, device=x_seq.device)
             A[:, idx, idx] = 1.0
             

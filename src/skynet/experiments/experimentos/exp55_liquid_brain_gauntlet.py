@@ -69,10 +69,13 @@ def run_stress_battery():
     
     # 1. Train on a 'standard' difficult mix
     print("Training on mixed stress conditions...")
-    x_train, y_train = generate_gauntlet_data(2500, mode="long_silence") # Base training
+    x_train_1, y_train_1 = generate_gauntlet_data(1500, mode="long_silence") 
+    x_train_2, y_train_2 = generate_gauntlet_data(1500, mode="signal_noise") 
+    x_train = torch.cat([x_train_1, x_train_2])
+    y_train = torch.cat([y_train_1, y_train_2])
     
     model = LiquidBrainOrgan(n_nodes=16, d_feature=8).to(DEVICE)
-    train_on_dataset(model, x_train, y_train, max_epochs=30)
+    train_on_dataset(model, x_train, y_train, max_epochs=40)
     
     # 2. Evaluate each scenario
     for mode in scenarios:

@@ -139,12 +139,28 @@ You are free to edit `HEARTBEAT.md` with a short checklist or reminders. Keep it
 For `~/openskynet`, keep this distinction explicit:
 
 - `OpenSkyNet` = platform, substrate, runtime, tooling, primary agent
-- `Omega` = internal experimental line of the platform itself
-- `INTERNAL_PROJECT.json` = configurable free-cycle project that OpenSkyNet can pursue autonomously
+- `Skynet Brain Lab` = separate research line for new brain architectures and non-traditional substrates
+- `Omega` = internal experimental line of the platform itself, but still part of `OpenSkyNet`
+- `INTERNAL_PROJECT.json` = configurable free-cycle benchmark workload that `OpenSkyNet` can pursue autonomously
 
-By default that internal project is `Skynet`, but it is a configurable benchmark workload, not the identity of the whole system.
-Do not confuse platform maintenance with progress of the internal project.
-Treat `src/skynet` as an optional experimental lab: useful discoveries should be transferred into the `OpenSkyNet`/`Omega` kernel and validated there, but the platform must remain able to compile and function without `src/skynet`.
+Two-line directive:
+
+1. `OpenSkyNet`
+   Productive system. Optimize for reliability, recovery, autonomy quality, lower waste, and measurable runtime utility.
+2. `Skynet Brain Lab`
+   Research system. Optimize for discovering a new kind of brain, substrate, or generalist architecture beyond a plain LLM-centric agent.
+
+Current priority directive:
+
+- For now, prioritize line `2. Skynet Brain Lab`.
+- Treat line `1. OpenSkyNet` as relatively stable.
+- Do not make new architectural changes in `OpenSkyNet` unless they fix a real operational continuity bug, reliability bug, or clear runtime defect.
+- New exploratory cognition work should land in `src/skynet`, not in the platform kernel first.
+
+By default the internal benchmark project is `Skynet`, but that does not make `Skynet Brain Lab` the identity of the whole platform.
+Do not confuse platform maintenance with progress of the brain lab.
+Treat `src/skynet` as an optional experimental lab: useful discoveries may be promoted into the `OpenSkyNet`/`Omega` kernel only after empirical validation and explicit cost/benefit review, and the platform must remain able to compile and function without `src/skynet`.
+Do not force the brain lab to justify itself only by short-term `OpenSkyNet` gains; evaluate it on its own research benchmarks first, then transfer only what survives.
 For broad ideas like causal valence, “sentir”, generalized importance, or non-LLM cognition:
 
 - Do not hardwire large behavioral theories into `Omega` first.

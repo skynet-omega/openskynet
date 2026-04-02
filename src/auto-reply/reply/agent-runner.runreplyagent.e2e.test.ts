@@ -341,6 +341,173 @@ describe("runReplyAgent heartbeat followup guard", () => {
   });
 });
 
+describe("runReplyAgent interrupted auto-resume backoff", () => {
+  it("backs off rate-limited auto-resume retries and allows a fourth attempt", async () => {
+    await withStateDirEnv("openclaw-rate-limit-auto-resume-", async ({ stateDir }) => {
+      const storePath = path.join(stateDir, "sessions", "sessions.json");
+      const now = Date.now();
+      const sessionEntry: SessionEntry = {
+        sessionId: "session",
+        updatedAt: now,
+        interruptedTurn: {
+          runId: "prior-turn",
+          message: "continue the prior task",
+          startedAt: now - 5_000,
+          resumeCount: 3,
+          lastResumeAt: now - 1_000,
+        },
+      };
+      const sessionStore = { main: sessionEntry };
+      await seedSessionStore({
+        storePath,
+        sessionKey: "main",
+        entry: sessionEntry,
+      });
+
+      state.runEmbeddedPiAgentMock.mockResolvedValueOnce({
+        payloads: [],
+        meta: {
+          stopReason: "error",
+          error: {
+            message:
+              "Cloud Code Assist API error (429): No capacity available for model gemini-3-flash-preview on the server",
+          },
+        },
+      });
+
+      const fallbackSpy = vi
+        .spyOn(modelFallbackModule, "runWithModelFallback")
+        .mockImplementationOnce(
+          async ({
+            provider,
+            model,
+            run,
+          }: {
+            provider: string;
+            model: string;
+            run: (provider: string, model: string) => Promise<unknown>;
+          }) => ({
+            result: await run(provider, model),
+            provider,
+            model,
+            attempts: [
+              {
+                provider,
+                model,
+                error: "429 No capacity available",
+                reason: "rate_limit",
+              },
+            ],
+          }),
+        );
+
+      try {
+        vi.mocked(enqueueFollowupRun).mockReturnValueOnce(true);
+        const { run } = createMinimalRun({
+          sessionEntry,
+          sessionStore,
+          sessionKey: "main",
+          storePath,
+        });
+        const result = await run();
+
+        expect(result).toMatchObject({
+          text: expect.stringContaining("queued an automatic retry"),
+        });
+        expect(vi.mocked(enqueueFollowupRun)).toHaveBeenCalledTimes(1);
+        const [_queueKey, queuedRun, queueSettings] = vi.mocked(enqueueFollowupRun).mock.calls[0]!;
+        expect((queuedRun as FollowupRun).messageId).toContain(":4");
+        expect(queueSettings).toMatchObject({ debounceMs: 10_000 });
+        expect(sessionStore.main.interruptedTurn?.resumeCount).toBe(4);
+
+        const persisted = JSON.parse(await fs.readFile(storePath, "utf-8"));
+        expect(persisted.main.interruptedTurn.resumeCount).toBe(4);
+      } finally {
+        fallbackSpy.mockRestore();
+      }
+    });
+  });
+
+  it("does not enqueue a fifth rate-limited auto-resume retry", async () => {
+    await withStateDirEnv("openclaw-rate-limit-auto-resume-limit-", async ({ stateDir }) => {
+      const storePath = path.join(stateDir, "sessions", "sessions.json");
+      const now = Date.now();
+      const sessionEntry: SessionEntry = {
+        sessionId: "session",
+        updatedAt: now,
+        interruptedTurn: {
+          runId: "prior-turn",
+          message: "continue the prior task",
+          startedAt: now - 5_000,
+          resumeCount: 4,
+          lastResumeAt: now - 1_000,
+        },
+      };
+      const sessionStore = { main: sessionEntry };
+      await seedSessionStore({
+        storePath,
+        sessionKey: "main",
+        entry: sessionEntry,
+      });
+
+      state.runEmbeddedPiAgentMock.mockResolvedValueOnce({
+        payloads: [],
+        meta: {
+          stopReason: "error",
+          error: {
+            message:
+              "Cloud Code Assist API error (429): No capacity available for model gemini-3-flash-preview on the server",
+          },
+        },
+      });
+
+      const fallbackSpy = vi
+        .spyOn(modelFallbackModule, "runWithModelFallback")
+        .mockImplementationOnce(
+          async ({
+            provider,
+            model,
+            run,
+          }: {
+            provider: string;
+            model: string;
+            run: (provider: string, model: string) => Promise<unknown>;
+          }) => ({
+            result: await run(provider, model),
+            provider,
+            model,
+            attempts: [
+              {
+                provider,
+                model,
+                error: "429 No capacity available",
+                reason: "rate_limit",
+              },
+            ],
+          }),
+        );
+
+      try {
+        const { run } = createMinimalRun({
+          sessionEntry,
+          sessionStore,
+          sessionKey: "main",
+          storePath,
+        });
+        const result = await run();
+
+        expect(result).toMatchObject({
+          text: expect.stringContaining("Please retry"),
+        });
+        expect(vi.mocked(enqueueFollowupRun)).not.toHaveBeenCalled();
+        expect(sessionStore.main.interruptedTurn?.resumeCount).toBe(4);
+      } finally {
+        fallbackSpy.mockRestore();
+      }
+    });
+  });
+});
+
 describe("runReplyAgent typing (heartbeat)", () => {
   async function withTempStateDir<T>(fn: (stateDir: string) => Promise<T>): Promise<T> {
     return await withStateDirEnv(
