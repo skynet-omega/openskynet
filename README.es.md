@@ -41,11 +41,24 @@ Mirrors públicos y contacto:
 
 ## Dirección Actual
 
-OpenSkyNet hoy tiene tres capas separadas con bastante más claridad:
+OpenSkyNet debe leerse hoy como dos líneas explícitas de trabajo:
 
-- **Gateway / plataforma agente**: canales, sesiones, herramientas, cron, UI y la base operativa heredada de OpenClaw.
-- **Runtime Omega**: el spine experimental principal para contexto de decisión, recuperación, routing, despacho ejecutivo, world model y memoria estructurada.
-- **Proyecto interno benchmark**: una carga de trabajo autónoma configurable mediante [`INTERNAL_PROJECT.json`](./INTERNAL_PROJECT.json). Por defecto ese proyecto es `Skynet`, pero no es la identidad de OpenSkyNet y puede reemplazarse por otro dominio.
+- **OpenSkyNet**: la plataforma misma. Incluye gateway, sesiones, herramientas, canales, cron, UI y el spine runtime de `Omega` para memoria, routing, recuperación y control ejecutivo.
+- **Skynet Brain Lab**: la línea de investigación separada en [`src/skynet`](./src/skynet) para buscar un sustrato cognitivo nuevo más allá del agente centrado en LLM.
+
+También existe una carga de trabajo autónoma configurable mediante [`INTERNAL_PROJECT.json`](./INTERNAL_PROJECT.json). Por defecto ese proyecto es `Skynet`, pero ese archivo define un benchmark interno de la plataforma, no la identidad completa del repositorio.
+
+Regla práctica:
+
+- si la meta es calidad del runtime, autonomía, recuperación, observabilidad o menor desperdicio, el trabajo va en `OpenSkyNet`
+- si la meta es un cerebro nuevo, un sustrato nuevo, cuantización geométrica, cognición bifásica/cyborg o una arquitectura generalista distinta al stack actual, el trabajo va en `Skynet Brain Lab`
+- sólo deben promoverse mecanismos del lab a la plataforma después de validación empírica y revisión explícita de costo/beneficio
+
+Prioridad actual del repo:
+
+- `OpenSkyNet` ya está lo bastante estable como para pausar casi todo el trabajo arquitectónico ahí
+- sólo bugs operativos o de continuidad justifican tocar la plataforma ahora
+- la exploración activa debe moverse a `Skynet Brain Lab`
 
 El benchmark práctico es este:
 
@@ -95,33 +108,45 @@ OpenClaw sigue siendo la plataforma base y aporta mucho del plumbing esencial. O
 - **Soberanía de runtime**: `heartbeat`, `omega_work` y la ejecución autónoma están convergiendo hacia una autoridad común en vez de reconstruir contexto por separado.
 - **Énfasis en decisión y recuperación**: Omega modela de forma explícita recuperación, preferencias de routing, world state y presión de mantenimiento.
 - **Spine Omega concreto**: memoria viva, world model, wake policy, selección de drives, metabolismo, control correctivo y recuperación ejecutiva ya existen como módulos explícitos, no como una sola masa conversacional.
-- **Motor de Bifurcación y Cosecha de Investigación**: Skynet emplea ahora rutas paralelas de decisión (bifurcación) y recolección autónoma de artefactos (cosecha) para asegurar la continuidad de la investigación incluso ante fallos de modelos.
+- **Línea interna de investigación**: el benchmark/lab `Skynet` incluye probes de bifurcación, cosecha de episodios causales y otros loops experimentales sin volverlos obligatorios para el runtime central de la plataforma.
 - **Proyecto interno benchmark**: el sistema puede trabajar en un proyecto configurable durante ciclos libres, y ese proyecto funciona además como benchmark empírico de autonomía.
 - **Postura empírica**: la arquitectura intenta mantenerse atada a tests, snapshots de estado, logs y comportamiento medible, no solo a narrativa.
 
 ## Snapshot de Arquitectura
 
-Este diagrama resume la forma actual del runtime. Es una guía, no la fuente legal exacta. Para comportamiento preciso, revisa [`src/omega`](./src/omega), [`src/skynet`](./src/skynet), los tests y `docs/architecture/`.
+Este diagrama resume la forma actual del runtime. Es una guía, no la fuente legal exacta. La corrección importante frente a diagramas viejos es que `Omega` ya no es sólo "Decision Context -> World Model -> Execution". El spine real hoy pasa por `runtime-authority`, `decision-context`, `policy`, `living-memory`, `world-model`, `execution-controller` y `heartbeat-core`.
+
+Para comportamiento preciso, revisa [`src/omega`](./src/omega), [`src/skynet`](./src/skynet), los tests y `docs/architecture/`.
 
 ```mermaid
 graph TD
     User[Usuario / Cron / Evento de Canal] --> Gateway[Gateway]
     Gateway --> Agent[Flujo Estándar del Agente]
-    Gateway --> Omega[Spine Runtime Omega]
+    Gateway --> Authority[Autoridad Runtime Omega]
 
     subgraph Runtime Omega
-        Omega --> Session[Autoridad de Sesión]
-        Session --> Decision[Decision Context]
-        Session --> World[World Model]
-        Session --> Living[Living Memory]
+        Authority --> Project[Perfil del Proyecto Interno]
+        Authority --> Decision[Decision Context]
+        Authority --> Living[Living Memory]
+        Authority --> Observer[Runtime Observer / Cognitive Kernel]
 
-        Decision --> Executive[Executive State + Execution Controller]
-        World --> Executive
-        Living --> Executive
+        Decision --> Session[Session Context + Self-Time Kernel]
+        Decision --> Policy[Policy + Wake Policy + Drives]
+        Decision --> Controller[Execution Controller]
+        Controller --> World[World Model]
 
+        Session --> Heartbeat[Heartbeat Core]
+        Policy --> Heartbeat
+        Controller --> Heartbeat
+        World --> Heartbeat
+        Living --> Heartbeat
+        Observer --> Heartbeat
+        Project --> Heartbeat
+
+        Heartbeat --> Executive[Ejecutivo / Recovery / Autonomous Executor]
         Executive --> Route[Routing / Recovery / Validation]
         Route --> Work[Tools / Sessions / Subagents]
-        Work --> Metrics[Métricas Empíricas + Memoria Durable]
+        Work --> Metrics[Memoria Operativa + Empírica + Durable]
         Metrics --> World
         Metrics --> Living
     end
