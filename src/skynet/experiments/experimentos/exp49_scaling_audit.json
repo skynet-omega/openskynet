@@ -1,0 +1,11 @@
+{
+  "experiment": "exp49_scaling_aliasing_audit",
+  "problem_description": "A single dot scaled 10x becomes a 10x10 block. Lenia kernel fires on all its edges.",
+  "naive_scaling": {
+    "false_detections": 16
+  },
+  "geometric_quantizer": {
+    "false_detections": 1
+  },
+  "conclusion": "VERIFIED"
+}

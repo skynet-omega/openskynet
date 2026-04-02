@@ -1,0 +1,45 @@
+{
+  "experiment": "exp53_v28_geometric_quantizer_suite",
+  "patterns": {
+    "center_dot": {
+      "naive_false_detections": 16,
+      "bilinear_false_detections": 2,
+      "quantized_false_detections": 1,
+      "quantizer_beats_naive": true,
+      "quantizer_beats_bilinear": true
+    },
+    "horizontal_line": {
+      "naive_false_detections": 96,
+      "bilinear_false_detections": 24,
+      "quantized_false_detections": 24,
+      "quantizer_beats_naive": true,
+      "quantizer_beats_bilinear": false
+    },
+    "corner_L": {
+      "naive_false_detections": 176,
+      "bilinear_false_detections": 17,
+      "quantized_false_detections": 15,
+      "quantizer_beats_naive": true,
+      "quantizer_beats_bilinear": true
+    },
+    "diagonal": {
+      "naive_false_detections": 48,
+      "bilinear_false_detections": 3,
+      "quantized_false_detections": 3,
+      "quantizer_beats_naive": true,
+      "quantizer_beats_bilinear": false
+    },
+    "double_dot": {
+      "naive_false_detections": 32,
+      "bilinear_false_detections": 4,
+      "quantized_false_detections": 2,
+      "quantizer_beats_naive": true,
+      "quantizer_beats_bilinear": true
+    }
+  },
+  "summary": {
+    "patterns_tested": 5,
+    "wins_vs_naive": 5,
+    "wins_vs_bilinear": 3
+  }
+}

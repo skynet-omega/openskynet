@@ -1,0 +1,14 @@
+{
+  "rule_baseline": {
+    "acc_id": 0.9625,
+    "acc_ood": 0.8975
+  },
+  "mexican_hat_v2": {
+    "acc_id": 0.98499995470047,
+    "acc_ood": 0.9174999594688416
+  },
+  "bifurcation_gating": {
+    "acc_id": 0.9874999523162842,
+    "acc_ood": 0.9274999499320984
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "experiment": "exp52_organ_search_benchmark",
+  "tasks": ["hybrid_binding", "pure_regime_tracking", "deceptive_memory_recall"],
+  "results": {
+    "hybrid_binding": {
+      "gru_baseline": {
+        "acc_ood": 0.60546875,
+        "epochs_to_80": 9,
+        "wall_ms": 2809.276123046875,
+        "debug": {
+          "state_energy_mean": 0.6798113481356547
+        }
+      },
+      "organ_only": {
+        "acc_ood": 0.99609375,
+        "epochs_to_80": 3,
+        "wall_ms": 6061.24072265625,
+        "debug": {
+          "temperature_mean": 0.23102020214383417,
+          "state_energy_mean": 0.19087736308574677
+        }
+      }
+    },
+    "pure_regime_tracking": {
+      "gru_baseline": {
+        "acc_ood": 1.0,
+        "epochs_to_80": 1,
+        "wall_ms": 2733.4755859375,
+        "debug": {
+          "state_energy_mean": 0.8021064364910125
+        }
+      },
+      "organ_only": {
+        "acc_ood": 1.0,
+        "epochs_to_80": 1,
+        "wall_ms": 6659.2275390625,
+        "debug": {
+          "temperature_mean": 0.27203305184841153,
+          "state_energy_mean": 0.3998258113861084
+        }
+      }
+    },
+    "deceptive_memory_recall": {
+      "gru_baseline": {
+        "acc_ood": 0.58984375,
+        "epochs_to_80": 3,
+        "wall_ms": 2342.35986328125,
+        "debug": {
+          "state_energy_mean": 0.6045433320105076
+        }
+      },
+      "organ_only": {
+        "acc_ood": 1.0,
+        "epochs_to_80": 2,
+        "wall_ms": 5480.142578125,
+        "debug": {
+          "temperature_mean": 0.13664435578340833,
+          "state_energy_mean": 0.41754594445228577
+        }
+      }
+    }
+  },
+  "summary": {
+    "gru_baseline": {
+      "mean_acc_ood": 0.7317708333333334
+    },
+    "organ_only": {
+      "mean_acc_ood": 0.9986979166666666
+    }
+  }
+}

@@ -1,0 +1,2077 @@
+﻿Under review as a conference paper at ICLR 2026
+
+000 MAMBA-3: IMPROVED SEQUENCE MODELING USING
+001
+002 STATE SPACE PRINCIPLES
+003
+004
+005 Anonymous authors
+006 Paper under double-blind review
+007
+008
+009 ABSTRACT
+010
+011 The recent scaling of test-time compute for LLMs has restricted the practical de-
+012 ployment of models to those with strong capabilities that can generate high-quality
+
+outputs in an inference-efficient manner. While current Transformer-based mod-
+013 els are the standard, their quadratic compute and linear memory bottlenecks have
+014 spurred the development of sub-quadratic models with linear-scaling compute
+015 with constant memory requirements. However, many recent linear-style models
+016 lack certain capabilities or lag behind in quality, and even their linear-time infer-
+017 ence is not hardware-efficient. Guided by an inference-first perspective, we intro-
+018 duce three core methodological improvements inspired by the state-space model
+019 viewpoint of linear models. We combine a: 1) more expressive recurrence derived
+020 from discretization , 2) complex-valued state update rule that enables richer
+021 state tracking, and 3) multi-input, multi-output formulation together, resulting
+022 in a stronger model. Together with architectural refinements, our Mamba-3
+023 model achieves significant gains across retrieval, state-tracking, and downstream
+
+language modeling tasks. Our new architecture sets the Pareto-frontier for per-
+024 formance under a fixed inference budget and outperforms strong baselines in a
+025 head-to-head comparison.
+026
+027 1 INTRODUCTION
+028
+
+Test-time compute has emerged as a key driver of progress in AI, with techniques like chain-of-
+029 thought reasoning and iterative refinement demonstrating that inference-time scaling can unlock
+030 new capabilities (Wu et al., 2025; Snell et al., 2024). This paradigm shift makes inference effi-
+031 ciency (Kwon et al., 2023; Li et al., 2024) paramount, as the practical impact of AI systems now
+032 depends critically on their ability to perform large-scale inference during deployment. Model archi-
+033 tecture design plays a fundamental role in determining inference efficiency, as architectural choices
+034 directly dictate the computational and memory requirements during generation. While Transformer-
+035 based models (Vaswani et al., 2017) are the current industry standard, they are fundamentally bottle-
+036 necked by linearly increasing memory demands through the KV cache and quadratically increasing
+037 compute requirements through the self-attention mechanism. These drawbacks have motivated re-
+038 cent lines of work on sub-quadratic models, e.g., state-space models (SSMs), which, despite utilizing
+039 only constant memory and linear compute, have comparable or better performance than their Trans-
+
+former counterparts. Models that benefit the most from this new scaling paradigm perform well on
+040 the following three axes: (i) quality, (ii) capability, and (iii) inference efficiency.
+041
+042 Recent model architectures have tried to strike a balance between the three, but many fall short on
+043 at least one of these three axes. In particular, Mamba-2 and Gated DeltaNet (GDN), which have
+044 gained significant traction and adoption due to their inference efficiency, made architectural design
+045 choices that enable their linear compute requirements but sacrifice quality and capabilities (Dao &
+
+Gu, 2024; Yang et al., 2025a). For example, Mamba-2 was developed to improve training speed
+046 and simplicity over Mamba-1 (Gu & Dao, 2024), opting out of more expressive parameterizations
+047 of the underlying SSM and hindering the quality of the model (Dao & Gu, 2024). Linear attention-
+048 style models (Katharopoulos et al., 2020) have also been shown to lack certain capabilities, with
+049 poor state-tracking abilities, e.g., determining parity of bit sequences, being one of the most no-
+050 table (Grazzi et al., 2025; Sarrof et al., 2024). In addition, despite these sub-quadratic models being
+051 prized for theoretically efficient inference, these inference algorithms are not hardware efficient. In
+052 particular, because these algorithms were developed from a training perspective, their decoding
+053 phase has low arithmetic intensity (the ratio of FLOPs to memory traffic), resulting in large portions
+
+of hardware remaining idle.
+
+1
+
+
+
+Under review as a conference paper at ICLR 2026
+
+054 To develop more performant models from an inference-first paradigm, we introduce three core
+055 methodological changes on top of Mamba-2, influenced by a SSM-centric viewpoint of sub-
+056 quadratic models. While many recent models fall into the linear attention framework (Dao &
+057 Gu, 2024; Yang et al., 2025a; Sun et al., 2023), we find that the classical SSM toolbox (Kalman,
+058 1960; Gopal, 1993) leads to natural interpretations and improvements on modeling.
+059
+060 Trapezoidal Discretization. We discretize the underlying continuous-time dynamical system with
+061 a trapezoidal methodology. The final recurrence is a more expressive superset of Mamba-2’s recur-
+
+rence and can be viewed as a convolution. We combine this new discretization with applied biases
+062 on the B,C, inspired by Yu & Erichson (2025), and find that their synergy is able to empirically
+063 replace the short causal convolution in language modeling which was previously hypothesized to be
+064 essential for recurrent models.
+065
+066 Complex-valued State-Space Model. By viewing the underlying SSM of Mamba-3 as complex-
+067 valued, we enable a more expressive state update than Mamba-2’s. This change in update rule,
+068 designed to be lightweight for training and inference, overcomes the lack of state-tracking ability
+069 common in many current linear models. We emphasize that our complex-valued update rule is equiv-
+
+alent to a data-dependent rotary embedding and can be efficiently computed (Su et al., 2023).
+070
+071 Multi-Input, Multi-Output SSM. To improve FLOP-efficiency during decoding, we shift from
+072 outer-product-based state update to matrix-multiplication-based state update . In view of the signal
+073 processing foundations of SSMs, such a transition exactly coincides with the generalization from
+074 a single-input single-output (SISO) sequence dynamic to a multiple-input multiple-output (MIMO)
+075 one. Here, we found that MIMO is particularly suitable for inference, as the extra expressivity allows
+076 for more compute during state update, without increasing the state size and hence compromising
+077 speed.
+078 These three SSM-centric methodological changes are core to our Mamba-3 mixer primitive. We
+079 also make adjustments to the overall architecture to ensure more similarity to the baseline Trans-
+080 former architecture. Mamba-3 swaps the pre-output projection norm with the more common QK-
+081 normalization (Team et al., 2025; OLMo et al., 2025) and makes the short convolution, a common
+082 component found in many other sub-quadratic models (Gu & Dao, 2024; Yang et al., 2025a; von
+083 Oswald et al., 2025), optional.
+084 We empirically validate our new model on a suite of synthetic and language-modeling tasks.
+085
+086 • Better Quality. Mamba-3 matches or outperforms Mamba-2 and other open-source architectures
+087 on standard downstream language modeling evaluations. For example, Mamba-3-1.5B’s average
+088 accuracy on all downstream tasks is better than that of its Transformer, Mamba-2, and Gated
+089 DeltaNet counterparts.
+090 • New Capabilities. Mamba-3’s complexification of the SSM state enables the model to solve
+091 synthetic state-tracking tasks that Mamba-2 cannot. We empirically demonstrate that the efficient
+092 RoPE-like calculation is able to near perfectly solve arithmetic tasks, while Mamba-3 without
+093 RoPE and Mamba-2 perform not better than random guessing.
+094
+095 • Stronger Inference Efficiency. Mamba-3’s MIMO variant retains the same state size while en-
+096 abling better hardware utilization compared to standard Mamba-3 and other models. Its improved
+097 performance without increased memory requirements pushes the pareto-frontier of inference ef-
+098 ficiency.
+099 2 PRELIMINARIES
+100
+101 2.1 NOTATION
+
+102 Scalars are denoted by plain-text letters (e.g., x, y). Tensors, including vectors and matrices, are
+103 denoted by bold letters (e.g., h,C). The shape of the tensor can be inferred from the context. We
+104 denote the input sequence length as T , the model dimension as D, and the SSM state size as N . For
+105 time indices, we use subscripts (e.g., xt for the input at time t). The Hadamard product between two
+106 tensors is denoted by ⊙.∏For a vector of size v ∈ Rd, we denote Diag(v) ∈ Rd×d as the diagonal
+107 matrix with the vector v as the diagonal, and for products of scalars across time steps, we use the
+
+notation t
+αt···s = α×
+
+t:s = i=s αi.
+
+2
+
+
+
+Under review as a conference paper at ICLR 2026
+
+108 2.2 SSM PRELIMINARIES
+109
+110 State Space Models (SSMs) describe continuous-time linear dynamics via
+111 ḣ(t) = A(t)h(t) +B(t)x(t), y(t) = C(t)⊤h(t),
+112
+113 where h(t)∈RN is the hidden state, x(t)∈R the input, and A(t)∈RN×N , B(t),C(t)∈RN . For
+114 discrete sequences with step size ∆t, Euler’s discretization gives the recurrence
+115
+
+h
+116 t = e∆tAt ht−1 +∆t Bt xt, yt = C⊤
+
+t ht.
+
+117 Mamba-2’s parameterization. Mamba-2 (Dao & Gu, 2024) makes the SSM data-dependent and
+118 hardware-efficient by (i) projecting A = A ∈ R<0, and B,C ∈ RN from the current token and (ii)
+119 choosing transition matrix A = A as a data-dependent scalar. Writing αt := e∆tAt ∈ (0, 1) and
+120 γt := ∆t, the update becomes
+121
+122 ht = αt ht−1 + γt Bt xt, yt = C⊤
+
+t ht.
+123 The scalar At < 0 is an input-dependent forget-gate (decay) αt, and the parameter selectivity ∆t
+124 jointly controls the forget-gate (αt = exp(∆tAt)) and the input-gate (γt = ∆t): larger ∆t forgets
+125 faster and up-weights the current token more strongly, while smaller ∆t retains the hidden state with
+126 minimal contributions from the current token.
+127 2.3 STRUCTURED MASKED REPRESENTATION AND STATE SPACE DUALITY
+128
+129 Dao & Gu (2024) show that a large class of SSMs admit a matrix form that vectorizes the time-step
+130 recurrence. For instance, Mamba-2’s recurrence can be vectorized as a masked matrix multiplica-
+
+tion,
+131   
+132
+133
+134 Y = (L⊙CB̄⊤)X = 
+
+1
+
+ α1 1
+.. . 
+. .  
+
+⊙CB⊤X, (1)
+.
+
+135 αT...1 · · · αT 1
+136
+137 where L ∈ RT×T is the structured mask, B,C ∈ RT×N , X ∈ RT×D is the input to the SSM and
+138 Y ∈ RT×D is its output. Within this form, Mamba-2 can be viewed as a type of linear attention by
+139 setting Q= C, K= B, V= X and viewing L as a causal, data-dependent mask. When all α = 1,
+140 the expression reduces to (causal) linear attention (Katharopoulos et al., 2020). A more detailed
+141 coverage of related linear-time sequence mixers can be found at Appendix A.
+142 3 MODEL DESIGN FROM A STATE-SPACE VIEWPOINT
+143
+
+We introduce Mamba-3, with three new innovations rooted in classical state-space theory: trape-
+144 zoidal discretization for more expressive dynamics, complex-valued state spaces for state-tracking,
+145 and multi-input multi-output (MIMO) to improve hardware utilization. These advances address the
+146 quality, capability, and efficiency limitations of current sub-quadratic architectures.
+147
+
+3.1 TRAPEZOIDAL DISCRETIZATION
+148
+149 Structured SSMs are naturally defined as continuous-time dynamical systems that map input func-
+150 tions, x(t) ∈ R, to output functions, y(t) ∈ R, for time t > 0. In sequence modeling, however,
+151 the data is only observed at discrete time steps, which then requires applying a discretization step
+152 to the SSM to transform its continuous-time dynamics into a discrete recurrence. The preliminary
+
+step in deriving Mamba-3’s discretization is to apply the Variation of Constants formula (Proposi-
+153 tion 5), which decomposes the hidden state into an exponentially decay term and a state update term
+154 “information” term dependent on the most recent inputs.
+155
+156 The first step in deriving the discretized recurrence is to approximate the “state-update” integral in
+157 equation 10. A straightforward choice, used in Mamba-2, is applying Euler’s rule (Süli & Mayers,
+
+2003), which approximates the integral by holding the (right) endpoint constant throughout the
+158 interval (Fig. 1). This yields Mamba-2’s recurrence,
+159
+160 ht = e∆tAt ht−1 + (τt − τt−1)e
+
+(τt−τt)At Bt xt
+161 ≈ e∆tAt ht−1 + ∆t Bt xt. (2)
+
+3
+
+
+
+Under review as a conference paper at ICLR 2026
+
+	𝑡!
+
+≈ !𝑒!!(#!$%)		𝐵 𝜏 𝑥 𝜏 𝑑𝜏
+1 𝛾
+
+162 '
+	𝑡!"#
+
+163 𝛼× 1 𝛽 𝛾
+ℳ ! !
+
+= !:!	
+
+164 𝛼× ×
+%:!	 𝛼%:%	 1 𝛽% 𝛾%
+
+165 𝛼×&:!	 𝛼×&:%	 𝛼×&:&	 1 𝛽& 𝛾&
+166
+
+𝑡!"# 𝑡! 𝑡!"# 𝑡!
+167
+168 Figure 1: Left: The structured mask induced by the generalized trapezoid rule is a product of the
+169 decay and convolutional mask. Right: Euler (hold endpoint) vs trapezoidal rule (average endpoints).
+170
+171 However, Euler’s rule provides only a first-order approximation to the “state-update” integral: local
+172 truncation error is O(∆2
+
+t ), which accumulates across steps to yield a global error of O(∆t) over the
+173 sequence. In contrast, we adopt a generalized trapezoidal rule, which provides a second-order ac-
+174 curate approximation of the integral, offering improved accuracy over the Euler’s rule. Specifically,
+175 it approximates the integral with a data-dependent, convex combination of both interval endpoints.
+176 This generalization extends the classical trapezoidal rule (Süli & Mayers, 2003), which simply aver-
+177 ages the interval endpoints, by allowing for a data-dependent convex combination (Fig. 1).
+178 Proposition 1 (Generalized Trapezoidal Discretization). Approximating the state-update integral
+179 in equation 10 by the general trapezoidal rule yields the recurrence,
+180
+
+h
+181 t = e∆tAtht−1 + (1− λt)∆te
+
+∆tAtBt−1xt−1 + λt∆tBtxt, (3)
+182 := αtht−1 + βtBt−1xt−1 + γtBtxt, (4)
+183 where λt ∈ [0, 1] is a data-dependent scalar, αt := e∆tAt , βt := (1− λt)∆te
+
+∆tAt , γt := λt∆t.
+184 Remark 1 (Expressivity). Our scheme is a generalization of a) The classical trapezoid rule which is
+185 recovered when λt =
+
+1
+2 . b) Mamba-2’s Euler’s rule, which is recovered when λt = 1.
+
+186
+187 Remark 2 (Error Rate). This is a second-order discretization with local truncation error O(∆3
+
+t )
+188 and global error O(∆2
+
+t ) over the sequence under standard stability assumptions, provided that the
+189 trapezoidal parameter satisfies λt =
+
+1
+2 +O(∆t). However, our ablations indicate that not enforcing
+
+190 this constraint is the best for empirical performance. See Appendix B.2,B.3 for details.
+191 3.1.1 TRAPEZOIDAL DISCRETIZATION IS A CONVOLUTIONAL MASK
+192 We can view the generalized trapezoidal discretization as applying a data-dependent convolution
+193 of size two on the projected input, Btxt, to the SSM. We now show that a similar vectorization to
+194 Equation (1) holds with the generalized trapezoidal discretization. Unrolling the recurrence starting
+195 from h0 = γ0B0x0 results in hT = αT ···2(γ0α1 + β1)B0x0 + · · ·+ γTBTxT .
+196 Unrolling these rows shows that the mask induced by the trapezoidal update is no longer a fixed av-
+197 eraging of endpoints (as in the classical trapezoidal rule), but a data-dependent convex combination
+198 ofthe two interval endpoints. In the SSD representation, this corresponds to a mask L:
+199
+200     
+
+ γ0   α 1
+201
+202   1
+
+ (γ0α1 + β1) 1
+
+ α2(γ0α1 + β1) γ2 =   γ0
+
+
+β1 
+
+α2α1  0 γ 
+2  . (5
+
+.. .  )
+.. .
+. . .
+
+203 . . .
+. . . . . . 
+
+204 αT ···2(γ0α1 + β1) · · · γT αT ···1 · · · 1 0 · · · γT
+205 Here, the first factor is precisely the lower-triangular decay mask from Mamba-2, while the second
+206 factor encodes the size two convolution induced by the trapezoidal rule through the coefficients
+207 (βt, γt). We provide a rigorous proof for this decomposition in Appendix B.1.
+208 3.2 COMPLEX-VALUED SSMS
+209 Modern SSMs are designed with efficiency as the central goal, motivated by the need to scale to
+210 larger models and longer sequences. For instance, successive architectures have progressively sim-
+211 plified the state transition matrix: S4 (Gu et al., 2022a) used complex-valued Normal plus Low Rank
+212 (NPLR) matrices, Mamba (Gu & Dao, 2024) reduced this to a diagonal of reals, and Mamba-2 (Dao
+213 & Gu, 2024) further simplified it to a single scalar. Although these simplifications largely maintain
+214 language modeling performance, recent works (Merrill et al., 2025; Sarrof et al., 2024; Grazzi et al.,
+215 2025) have shown that they degrade the capabilities of the model on simple state-tracking tasks such
+
+as parity and modular arithmetic, which can be solved by a one-layer LSTM.
+
+4
+
+
+
+Under review as a conference paper at ICLR 2026
+
+216 This limitation, formalized in Theorem-1 of (Grazzi et al., 2024), arises from restrict∑ing the eigen-
+217 values of the transition matrix to real numbers, which cannot represent “rotational” hidden state dy-
+218 namics. For instance, consider the parity function on binary inputs {0, 1}, defined as t xt mod 2.
+219 This task can be performed using update: ht = R(πxt)ht−1, where R(·) is a 2-D rotation matrix.
+220 Such rotational dynamics cannot be expressed with real eigenvalues.
+221 To recover this capability, we begin with complex SSMs (6), which are capable of representing
+222 state-tracking dynamics. We show that, under discretization (Proposition 5), complex SSMs can
+223 be formulated as a real SSMs with a block-diagonal transition matrix composed of 2 × 2 rotation
+224 matrices (Proposition 2). We then show that this is equivalent to applying data-dependent rotary
+225 embeddings on both the input and output projections B,C respectively. This result establishes a
+226 theoretical connection between complex SSMs and data-dependent RoPE embeddings (Proposition
+227 3). Finally, this allows for an efficient implementation of the complex-valued SSM via the “RoPE
+228 trick”, enabling efficient complex-valued state transition matrix with minimal computational over-
+229 head over real-valued SSMs.
+230 Proposition 2 (Complex-to-Real SSM Equivalence). Consider a complex-valued SSM
+231
+232 ḣ(t) = Dia( ( ) ( )
+
+g( A(t) + iθ(t))h(t) +) B(t) + iB̂(t) x(t), (6)
+233 ⊤
+
+y(t) = Re C(t) + iĈ(t) h(t) ,
+234
+235 where h(t) ∈ CN/2, θ(t),B(t), B̂(t),C(t), Ĉ(t) ∈ RN/2, and x(t), A(t) ∈ R. Under Euler
+236 discretization, this system is equivalent to a real-valued SSM
+237
+
+h
+238 t = e∆tAt Rt ht−1 +∆tBtxt, (7)
+239 yt = C⊤
+
+t ht,
+240 with state ht ∈ RN , projections
+241 [ ] [ ]
+242 Bt
+
+Bt = ∈ RN Ct
+, C = N
+
+B̂ t R
+t − ∈ ,
+
+243 Ĉt
+
+244 and a transition matri(x245 ) [ ]
+246 Rt = Block {R(∆tθt[i])}N/2 N×
+
+i=1 ∈ R N cos(Θ) − sin(Θ)
+, R(Θ) = .
+
+247 sin(Θ) cos(Θ)
+
+248
+249 The proof is in Appendix C.1.
+250 Proposition 2 shows that the discretized complex SSM has an equivalent real SSM with doubled
+251 state dimension (N ), and a block-diagonal transition matrix multiplied with a scalar decay, where
+252 each 2× 2 block is a data-dependent rotation matrix (e∆tA
+
+t Rt). We now show that the rotations can
+253 equivalently be absorbed into the input and output projections Bt,Ct, yielding an equivalent view
+254 that complex SSMs are real SSMs equipped with data-dependent rotary embeddings (RoPE).
+255 Proposition 3 (Complex SSM, Data-Dependent RoPE Equivalence). Under the notation established
+256 in Proposition 2, consider the real SSM defined in Eq. 7 unrolled for T time-steps. The output of
+257 the above SSM is equivalent to that of a vanilla scalar transition matrix-based SSM (Eq. 2) with a
+258 data-dependent rotary embeddin∏g applied on the B,C compon
+
+t (ent∏s of the SSM
+t ) defined as:
+
+259 ⊤
+260 ht = e∆tAtht−1 + ( R⊤
+
+i )Btxt, yt = ( R⊤
+i )Ct ht (8)
+
+261 i=0 i=0
+
+262 ∏
+where the matrix production represents right matrix multiplication, e.g., 1
+
+i=0 Ri = R0R1. We
+263 denote employing the vanilla SSM to compute the Complex SSM as “RoPE trick”.
+264
+265 The proof is in Appendix C.2.
+266 To observe the connection of complex SSMs to RoPE embeddings, note that in the above proposi-
+267 tion, the data-dependent rotations Ri are aggregated across time-steps and applied to C,B, which,
+268 by the State Space Duality of Dao & Gu (2024), correspond to the Query (Q) and Key (K) compo-
+269 nents of Attention. Analogously, vanilla RoPE (Su et al., 2023) applies data-independent rotation
+
+matrices, where the rotation angles follow a fixed frequency schedule θ[i] = 10000−2i/N .
+
+5
+
+
+
+Under review as a conference paper at ICLR 2026
+
+270 Remark 3 (Generality). Proposition 3 extends to the fully general case where the transition is given
+271 by any complex matrix. By the complex d(iagonalization)theorem, such a matrix is unitarily equiv-
+272 alent to a complex diagonal matrix, Diag A(t) + iθ(t) with A(t) ∈ RN . However, in practice,
+273 we restrict A(t) to a scalar, mirroring the simplification from Mamba to Mamba-2, to enable faster
+274 implementation by avoiding GPU memory bottlenecks.
+275 Proposition 4 (Rotary Embedding Equivalence with Trapezoidal Discretization). Discretizing a
+276 complex SSM with the trapezoidal ru(le )
+
+t∏(Propo
+− )sition 1) yields the(re277
+1
+
+278 ∏currence
+t
+
+ht = α
+279 tht−1 + β R⊤
+
+t i B
+
+) t−1xt−1 + γ R⊤
+
+280 ( t i Btxt,
+
+281 (∏ i=0 i=0
+
+t ⊤
+
+282 y ⊤
+t = Ri )Ct ht. (9)
+
+283 i=0
+
+284 Here Rt is the block-diagonal rotation matrix defined in Proposition 3.
+285 The proof is in Appendix C.3.
+286 Remark 4 (RoPE Trick). Complex SSMs discretized with the general trapezoidal rule of a complex
+287 SSM naturally admit the RoPE trick we established for SSMs discretized with Euler’s rule.
+288
+289 3.3 MULTI-INPUT, MULTI-OUTPUT
+
+290 During the decoding phase of autoregressive inference, outputs are generated one token at a time, and
+291 performance is typically measured using in Tokens generated Per Second (TPS). In this metric, sub-
+292 quadratic models, such as Mamba-2 (Dao & Gu, 2024), have a significant advantage over standard
+293 Transformer-style attention, since they feature a fixed-size hidden state (Equation (2)) rather than
+
+maintaining a key–value (KV) cache that grows linearly with the sequence length.
+294
+295 TPS, however, does not explicitly factor in hardware efficiency, where we aim to be in a compute-
+296 bound regime (as opposed to memory-bound) in order to fully utilize on-chip accelerators. To
+297 better characterize hardware efficiency, we would need to consider the arithmetic intensity of token
+298 generation. Recall that arithmetic intensity is defined as FLOPs divided by the number of input-
+
+output bytes, for a given op. In order to fully utilize both the accelerators and the bandwidth, we
+299 would like the arithmetic intensity to match the ops:byte ratio of the hardware, which in the case
+300 of NVIDIA H100-SXM5, is 295.2 bfloat16 ops per second with respect to the DRAM, and 31.9
+301 bfloat16 ops per second with respect to the SRAM [Fleetwood].
+302
+303 Table 2(a) shows the arithmetic intensity for a single generation in the SSM component of Mamba
+
+(with respect to 2-byte data). We see that it falls far short of a compute-bound regime, and moreover
+304 it is not clear how one can adjust the existing parameters in Mamba to mitigate the lack of hardware
+305 efficiency. We note that this observation applies generally to other sub-quadratic models, such as
+306 causal linear attention.
+307
+308 Input Output FLOPs Arithmetic Input Output FLOPs Arithmetic
+309 Intensity Intensity
+310 5pn p(4nr + 2n)
+
+Ht : (n, p) yt : (p) 5pn Ht : (n, p) yt : 4nrp+
+311 2(1 + 2n+ p+ np)
+
+xt : (p) (p, r) 2np 2(1 + 2nr + pr + np)
+≈ 2.5 = Θ(1) xt : (p, r) ≈ 2r = Θ(r)
+
+312 at : (1) at : (1)
+313 bt : (n) bt : (n, r)
+314 ct : (n) ct : (n, r)
+315
+
+(a) SISO (2-byte data). (b) MIMO (2-byte data).
+316
+317 Figure 2: Arithmetic Intensity for (a) SISO, (b) MIMO. Batch and head dimensions cancel out.
+318
+319 In light of this, we made the following simple adjustment to our recurrent relation: instead of trans-
+320 forming the input xt ∈ Rp to state Ht ∈ Rn×p via an outer product, i.e., Ht ← atHt−1+bt⊗xt, we
+321 made such a transformation via a matrix product, i.e., Ht ← atHt−1 +BtX
+
+⊤
+t , where Bt ∈ Rn×r
+
+322 and Xt ∈ Rp×r are now matrices with an additional rank r. The emission from state to output
+323 similarly acquire an extra rank r, i.e., Yt ∈ Rr×p ← C⊤
+
+t Ht, where Ct ∈ Rn×r,Ht ∈ Rn×p.
+This simple change increases the arithmetic intensity of recurrence, which now scales with the rank
+
+6
+
+
+
+Under review as a conference paper at ICLR 2026
+
+324 r (Figure 2(b)). Hence, by increasing r, arithmetic intensity improves and shifts decode generation
+325 towards a more compute-bound regime. This increase in FLOPs during decode does not compromise
+326 runtime, as the operation is bounded by the I/O of state Ht ∈ Rn×p.
+327
+
+Moreover, moving from outer-product-based state update to matrix-product-based coincides exactly
+328 with generalizing from SISO to MIMO SSM, with the rank r being the MIMO rank. Such a gen-
+329 eralization recovers a key expressive feature of SSMs in classical literature; indeed, there has been
+330 previous work, namely Smith et al. (2023), that explored MIMO SSM as a drop-in replacement of
+331 attention, albeit not in the context of Mamba and not necessarily with inference in view. We note
+332 that training and prefilling is generally compute bound, resulting in MIMO incurring increased costs
+333 during these stages, while decoding, a memory-bound operation, sees very little increase in latency
+334 when utilizing MIMO over SISO.
+335 Details of the MIMO formulation for Mamba-3 are provided in Appendix D.
+336
+337 3.4 MAMBA-3 ARCHITECTURE
+
+338 The Mamba-3 block retains the overall layout of its predecessor while introducing several key modi-
+339 fications. Most notably, the SSD layer is replaced with the more expressive trapezoidal SSM defined
+340 in Proposition 4. The extra normalization layer, first introduced between Mamba-1 and Mamba-2 for
+341 training stability, is repositioned to follow the B,C projection, mirroring the QK-Norm commonly
+
+used in modern Transformers (Henry et al., 2020; Wortsman et al., 2023). Inspired by the findings
+342 of Yu & Erichson (2025), which prove adding channel-specific bias to B in a blockwise variant
+343 of Mamba-1 grants universal approximation capabilities, Mamba-3 incorporates a head-specific,
+344 channel-wise bias into both the B and C components after its normalization. These learnable bi-
+345 ases are data-independent parameters that are initialized to all ones and independent across B and
+346 C (ablations for bias parameterization can be found in Appendix G). Our trapezoidal discretization
+347 complements this bias, empirically eliminating the need for the original short causal convolution and
+348 its accompanying activation function (Section 4.3). Mamba-3 employs the SISO SSM by default,
+349 though we view its MIMO variant as a flexible option that can be toggled depending on inference
+350 requirements. The overall architecture follows the Llama design (Grattafiori et al., 2024), alternating
+351 Mamba-3 and SwiGLU blocks with pre-normalization.
+352 4 EMPIRICAL VALIDATION
+353 We empirically validate our SSM-centric methodological changes through the Mamba-3 model on
+354 a host of synthetic and real world tasks. Section 4.1 compares our SISO-variant of Mamba-3 on
+355 language modeling and retrieval-based tasks, while Section 4.2 demonstrates inference efficiency of
+356 Mamba-3 and MIMO Mamba-3’s benefits over SISO Mamba-3 under fixed inference compute. We
+357 ablate the impact of our new discretization and BC bias on performance and show that complexifica-
+358 tion of the SSM leads capabilities that prior SSMs such as Mamba-2 lacked in Section 4.3.
+359 4.1 LANGUAGE MODELING
+360
+361 All models are pretrained with 100B tokens of the FineWeb-Edu dataset (Penedo et al., 2024) with
+
+the Llama-3.1 tokenizer (Grattafiori et al., 2024) at a 2K context length with the same standard
+362 training protocol. Training and evaluation details can be found in Appendix E.
+363
+364 Across all four model scales, Mamba-3 outperforms popular baselines at various downstream tasks
+365 (Table 1). We highlight that Mamba-3 does not utilize the short convolution that has been empirically
+366 identified as an important component in many performant linear models (Allen-Zhu, 2025).
+367 4.1.1 RETRIEVAL CAPABILITIES
+368 Beyond standard language modeling, an important measure for linear models is their retrieval ability
+369 — how well they can recall information from earlier in the sequence (Arora et al., 2025a;b). Unlike
+370 attention models, which can freely revisit past context with the growing KV cache, linear models
+371 must compress context into a fixed-size state. This trade-off is reflected in the Transformer baseline’s
+372 substantially stronger retrieval scores. To evaluate Mamba-3 under this lens, Table 2 compares it
+373 against baselines on both real-world and synthetic needle-in-a-haystack (NIAH) tasks (Hsieh et al.,
+374 2024), using our pretrained 1.5B models from Section 4.1. We restrict the task sequence length to
+
+2K tokens to match the training setup and adopt the cloze-style format for our real-world tasks to
+375 mirror the next-token-prediction objective, following Arora et al. (2025b; 2024).
+376
+377 Mamba-3 is competitive on real-world associative recall and question-answering but struggles when
+
+extracting information from semi-structured or unstructured data. On synthetic NIAH tasks, how-
+
+7
+
+
+
+Under review as a conference paper at ICLR 2026
+
+378 Table 1: Downstream language modeling evaluations on models trained with 100B FineWeb-Edu
+379 tokens. Best results for each size are bolded, and second best are underlined. All models are trained
+380 with the same procedure. Mamba-3 outperforms Mamba-2 and others at every model scale.
+381
+382 Model FW-Edu LAMB. LAMB. HellaS. PIQA Arc-E Arc-C WinoGr. OBQA Average
+
+ppl ↓ ppl ↓ acc ↑ acc n ↑ acc ↑ acc ↑ acc n ↑ acc ↑ acc ↑ acc ↑
+383
+
+Transformer-180M 16.89 45.0 32.5 39.0 67.1 59.8 27.9 51.2 21.8 42.8
+384 Gated DeltaNet-180M 16.61 35.9 33.7 40.2 66.8 59.6 28.5 51.2 21.6 43.1
+385 Mamba-2-180M 16.76 41.8 30.9 40.1 66.8 60.1 27.3 52.0 23.2 42.9
+
+Mamba-3-180M (SISO) 16.59 37.7 32.5 40.8 66.1 61.5 27.9 52.0 22.8 43.4
+386
+387 Transformer-440M 13.03 21.2 41.7 50.5 69.9 67.6 34.6 56.7 26.0 49.6
+
+Gated DeltaNet-440M 13.12 19.0 40.4 50.5 70.5 67.5 34.0 55.3 25.8 49.1
+388 Mamba-2-440M 13.00 19.6 40.8 51.7 70.6 68.8 35.0 54.1 26.0 49.6
+
+389 Mamba-3-440M (SISO) 12.87 19.6 40.2 51.7 71.9 68.9 34.4 55.8 26.0 49.8
+
+390 Transformer-880M 11.42 15.0 44.7 57.2 72.6 71.6 39.2 57.7 26.8 52.8
+Gated DeltaNet-880M 11.39 12.7 47.1 57.5 72.6 72.5 38.8 57.9 30.6 53.9
+
+391 Mamba-2-880M 11.35 13.8 45.0 58.1 72.5 72.3 38.7 56.8 30.2 53.4
+
+392 Mamba-3-880M (SISO) 11.23 12.9 47.2 58.8 73.6 72.7 40.2 58.4 30.0 54.4
+
+393 Transformer-1.5B 10.51 11.1 50.3 60.6 73.8 74.0 40.4 58.7 29.6 55.4
+Gated DeltaNet-1.5B 10.51 10.8 49.9 60.5 74.3 73.3 40.4 61.5 30.4 55.7
+
+394 Mamba-2-1.5B 10.47 12.0 47.8 61.4 73.6 75.3 41.8 57.5 32.6 55.7
+395 Mamba-3-1.5B (SISO) 10.35 10.9 49.4 61.9 73.6 75.9 42.7 59.4 32.0 56.4
+
+396
+397
+398 Table 2: Retrieval capabilities measured by a mixture of real-world and synthetic retrieval tasks. Real-world re-
+399 trieval tasks utilize cloze variants of the original datasets and are truncated to 2K length. Mamba-3 demonstrates
+
+strong associative recall and question-answering but suffers with information extraction of semi-structured and
+400 unstructured data. Mamba-3 has strong needle-in-a-haystack (NIAH) accuracy and generalizes outside its
+401 trained context.
+402
+403 Model (1.5B) SWDE SQUAD FDA TQA NQ Drop NIAH-Single-1 NIAH-Single-2 NIAH-Single-3
+
+404 Context Length 2048 1024 2048 4096 1024 2048 4096 1024 2048 4096
+
+405 Transformer 48.9 46.6 58.4 67.5 31.7 26.4 100.0 100.0 0.0 92.2 100.0 0.0 98.6 99.4 0.0
+
+406 Gated DeltaNet 32.7 40.0 28.3 63.5 25.7 24.5 100.0 100.0 99.8 100.0 93.8 49.8 83.8 68.4 34.2
+Mamba-2 30.7 39.1 23.7 64.3 25.1 28.5 100.0 99.6 62.0 100.0 53.8 11.8 95.8 87.4 13.4
+
+407 Mamba-3 (SISO) 28.5 40.1 23.4 64.5 26.5 27.4 100.0 100.0 88.2 100.0 95.4 50.6 92.4 81.4 34.2
+
+408
+409
+410 ever, Mamba-3 surpasses or matches baselines on most cases and notably demonstrates markedly
+411 better out-of-distribution retrieval abilities than its Mamba-2 predecessor.
+412
+413 4.2 INFERENCE EFFICIENCY
+414
+415 In this section, we investigate our methodological changes in the context of inference performance.
+
+We first present our inference benchmark in Section 4.2.1; we then establish a framework for com-
+416 paring the inference performance in Section 4.2.2. Finally, we focus on the effectiveness of MIMO
+417 in Section 4.2.3.
+418
+419 4.2.1 FAST MAMBA-3 KERNELS
+420
+421 We complement Mamba-3’s methodological advances with optimized kernels that deliver fast infer-
+422 ence in practical settings. Specifically, we implement a new series of inference kernels for Mamba-
+423 3—using Triton for the forward (prefill) path and CuTe-DSL for decode—and compare their per-
+
+token decode latency against the released Triton kernels for Mamba-2 and Gated DeltaNet (GDN)1
+424 in Table 3. The evaluation uses the setting: a decode step at batch size 128 on a single H100 for
+425 1.5B-parameter models with model dimension 2048, state dimension ∈ {64, 128} in both FP32 and
+426 BF16 datatypes. Across all configurations, SISO achieves the lowest latency amongst baselines,
+427 while MIMO incurs only a minor overhead relative to SISO. This indicates that our CuTe-DSL de-
+428 code implementation is competitive and that the additional components of Mamba-3 (trapezoidal
+429 update, complex-valued state, and MIMO projections) are lightweight. This supports our overall
+430 inference-first perspective: the Mamba-3 admits simple, low-latency implementation while pro-
+431 viding strong empirical performance. A thorough analysis, including prefill and prefill with decode
+
+results are provided in Appendix H.
+
+8
+
+
+
+Under review as a conference paper at ICLR 2026
+
+432 Relative Total State Size vs Pretraining Perplexity
+433 15.2
+
+Mamba-2
+434 15.0 Mamba-3 
+435 Mamba-3 MIMO
+
+Model FP32 BF16
+436 14.8
+
+dstate = 64 dstate = 128 dstate = 64 dstate = 128
+437 Mamba-2 0.295 0.409 0.127 0.203 14.6
+438 Gated DeltaNet 0.344 0.423 0.176 0.257
+
+Mamba-3 (SISO) 0.261 0.356 0.106 0.152
+
+439 Mamba-3 (MIMO) 0.285 0.392 0.136 0.185 105
+Relative Total State Size
+
+440 Table 3: Latency (in milliseconds) compari-
+441 son across models, precision, and dstate val- Figure 3: Exploration of state size (inference
+442 ues. Both Mamba-3 SISO and MIMO are speed proxy) versus pretraining perplexity (per-
+443 faster than the Mamba-2 and Gated DeltaNet formance proxy) across different Mamba variants.
+444 at the commonly used bf16, dstate = 128 set- Mamba-3 MIMO drives the-Pareto frontier with-
+445 ting. out increasing state size.
+446
+447 4.2.2 PARETO FRONTIER FOR INFERENCE EFFICIENCY
+448
+
+For Mamba and many variants of sub-quadratic models, the generation of tokens during decoding is
+449 heavily dominated by memory I/O due to the low arithmetic intensity of computing the recurrent up-
+450 date (c.f. Section 3.3). Furthermore, among the data being transferred, the latent state Ht dominates
+451 in terms of size. Indeed, from Table 3, we see that the runtime scales with dstate, which configures
+452 the size of the hidden state.
+453
+454 As dstate dominates the decode runtime for the subquadratic models considered in this paper, we
+
+opt to use it as a proxy for inference speed. By plotting the validation perplexity (itself a proxy
+455 for model performance) as a function of dstate, we aim to formulate a holistic picture about how the
+456 subquadratic models can trade off performance with inference speed.
+457
+458 Figure 3 shows such a Pareto front for the Mamba variants models considered in this paper. For each
+459 data point, we train a 440M parameter model to 2× Chinchilla optimal tokens on the Fineweb-Edu
+460 dataset, where the model is configured with a dstate of {16, 32, 64, 128}. As expected, we observe
+
+an inverse correlation between validation loss and d
+461 state; moreover, we noticed a general downward
+
+shift on the Pareto front moving from Mamba-2 to Mamba-3. A further downward shift is observed
+462 when moving from the SISO variant of Mamba-3 to the MIMO variant of Mamba-3 (where we set
+463 the Mimo rank r = 4 and decrease our MLP inner dimension to parameter match the SISO variants).
+464 We expand the comparison to include the Gated DeltaNet baseline in Figure 7. The results highlight
+465 both the expressivity gain coming our methodology change as well as the effectiveness of the MIMO
+466 mechanism in improving decoding efficiency.
+467 4.2.3 MIMO ENHANCES INFERENCE EFFICIENCY
+468
+469 MIMO, with its higher arithmetic intensity, increases the decoding FLOPs without significantly
+
+increasing decode runtime (Table 3)2 The implication is that any performance gain from MIMO
+470 translates into efficiency gain in decoding: a conclusion supported by the downward shift of the
+471 MIMO pareto curve we observed in Section 4.2.2.
+472
+473 We aim to further verify the gain from MIMO by investigating its language-modeling capabilities.
+474 To that end, we train a 440M and 820M parameter MIMO models with MIMO rank r = 4 on 100B
+
+tokens on Fineweb-Edu (i.e., same setting as the 440M parameter run in Section 4.1; we are currently
+475 training the 1.5B model). To ensure the total parameter count equals SISO, we decrease the inner
+476 dimension of the MLP layers to compensate for the increase due to the MIMO projections.
+477
+478 On both validation perplexity and our suite of language evaluation tasks (Table 6), we see significant
+479 gain when moving from SISO to MIMO. Namely, we attain a perplexity gain of 0.16 on the 100B
+480 tokens run, and Figure 3 illustrates the downward shift in our validation loss. On the language
+
+evaluation front, we see significant gain on most tasks when compared to SISO, resulting in an
+481 overall gain of 1.2 point over SISO. This strongly supports MIMO as a SSM-centric technique to
+482 improve model quality without compromising decoding speed.
+483
+484 1Details on each kernel DSL and the exact kernel fusion structure is provided in Appendix H.
+485 2The kernel for MIMO Mamba-3 in fact fuses the MIMO projection, and so the reported wall clock time is
+
+actually an overestimate for the pure SSM update.
+
+9
+
+Pretraining Perplexity
+
+
+
+Under review as a conference paper at ICLR 2026
+
+486 Table 4: Left: Ablations on core modeling components of Mamba-3, results on test split of dataset. A
+487 combination of our BC bias and trapezoidal discretization makes the convolution optional. Right: Formal
+488 language evaluation (scaled accuracy, %). Higher is better. Models are trained on short sequences and evaluated
+489 on longer lengths to test length generalization. For Gated DeltaNet we report the variant with eigenvalue range
+
+[−1, 1].
+490
+491 Arith. w/ ↑
+492 Model Variant (SISO) ppl ↓ Model Parity ↑ Arith. w/o ↑
+
+brackets brackets
+493
+
+Mamba-3 − bias − trap 16.68 Mamba-3 100.00 98.51 87.75
+494 Mamba-3 − bias 16.49 Mamba-3 (w/o RoPE) 2.27 1.49 0.72
+495 Mamba-3 15.72 Mamba-3 (w/ Std. RoPE) 1.56 20.70 2.62
+496 Mamba-3 + conv 15.85 Mamba-2 0.90 47.81 0.88
+497 (a) Component ablation (350M). Gated DeltaNet [-1,1] 100.00 99.25 93.50
+
+498 (b) Performance comparison on formal language tasks. Re-
+499 sults show that unlike Mamba-2, Mamba-3 features state
+
+tracking ability stemming from data-dependent RoPE em-
+500 beddings. We used Mamba-3 (SISO) for these ablations.
+501
+502
+503 4.3 SSM-CENTRIC METHODOLOGICAL ABLATIONS
+504 Table 4a ablates the changes made to the core SSM component, mainly the introduction of BC bias
+505 and trapezoidal discretization. We report the pretraining test perplexity on models at the 440M scale,
+506 trained for Chinchilla optimal tokens. We find that the bias and trapezoidal SSM synergize well and
+507 make the short convolution utilized by many current linear models redundant.
+508
+
+We empirically demonstrate that data-dependent RoPE in Mamba-3 enables state tracking. Follow-
+509 ing Grazzi et al. (2025), we evaluate on tasks from the Chomsky hierarchy—Parity, Modular Arith-
+510 metic (without brackets), and Modular Arithmetic (with brackets)—and report scaled accuracies in
+511 Table 4b. Mamba-3 solves Parity and Modular Arithmetic (without brackets), and nearly closes the
+512 accuracy gap on Modular Arithmetic (with brackets). In contrast, Mamba-3 without RoPE, Mamba-
+513 3 with standard RoPE (Su et al., 2023), and Mamba-2 fail to learn these tasks. We use the state-
+514 tracking–enabled Gated DeltaNet variant of and observe that Mamba-3 is competitive—matching
+515 parity and approaching its performance on both modular-arithmetic tasks. Experimental settings are
+516 covered in Appendix E.
+517 5 CONCLUSION AND FUTURE WORK
+518
+519 We introduce Mamba-3, an SSM model with three axes of improvement rooted in SSM princi-
+
+ples: (i) improved quality, via trapezoidal discretization; (ii) new capabilities, through complex
+520 SSMs that recover state-tracking; and (iii) higher inference efficiency, with a MIMO formulation
+521 that raises arithmetic intensity. Mamba-3 delivers strong language modeling results and establishes
+522 a new Pareto frontier on the performance-efficiency axes with respect to strong baseline models. A
+523 limitation remains in retrieval, where fixed-state architectures lags attention-based models. We see
+524 hybrid Mamba-3 architectures that integrate retrieval mechanisms as a promising path, alongside
+525 broader application of our design principles to linear-time sequence models.
+526
+527
+528
+529
+530
+531
+532
+533
+534
+535
+536
+537
+538
+539
+
+10
+
+
+
+Under review as a conference paper at ICLR 2026
+
+540 REFERENCES
+541
+542 Zeyuan Allen-Zhu. Physics of Language Models: Part 4.1, Architecture Design and the Magic
+543 of Canon Layers. SSRN Electronic Journal, May 2025. https://ssrn.com/abstract=
+
+5240330.
+544
+545 Aryaman Arora, Neil Rathi, Nikil Roashan Selvam, Róbert Csordás, Dan Jurafsky, and Christopher
+546 Potts. Mechanistic evaluation of transformers and state space models, 2025a. URL https:
+547 //arxiv.org/abs/2505.15105.
+548
+549 Simran Arora, Aman Timalsina, Aaryan Singhal, Benjamin Spector, Sabri Eyuboglu, Xinyi Zhao,
+550 Ashish Rao, Atri Rudra, and Christopher Ré. Just read twice: closing the recall gap for recurrent
+
+language models, 2024. URL https://arxiv.org/abs/2407.05483.
+551
+552 Simran Arora, Sabri Eyuboglu, Michael Zhang, Aman Timalsina, Silas Alberti, Dylan Zinsley,
+553 James Zou, Atri Rudra, and Christopher Ré. Simple linear attention language models balance
+554 the recall-throughput tradeoff, 2025b. URL https://arxiv.org/abs/2402.18668.
+555
+556 Aviv Bick, Kevin Y. Li, Eric P. Xing, J. Zico Kolter, and Albert Gu. Transformers to ssms: Distill-
+557 ing quadratic knowledge to subquadratic models, 2025a. URL https://arxiv.org/abs/
+
+558 2408.10189.
+559 Aviv Bick, Eric Xing, and Albert Gu. Understanding the skill gap in recurrent language models:
+560 The role of the gather-and-aggregate mechanism, 2025b. URL https://arxiv.org/abs/
+561 2504.18574.
+562
+563 Yonatan Bisk, Rowan Zellers, Ronan Le Bras, Jianfeng Gao, and Yejin Choi. Piqa: Reasoning about
+564 physical commonsense in natural language, 2019. URL https://arxiv.org/abs/1911.
+565 11641.
+566 Krzysztof Choromanski, Valerii Likhosherstov, David Dohan, Xingyou Song, Andreea Gane, Tamas
+567 Sarlos, Peter Hawkins, Jared Davis, Afroz Mohiuddin, Lukasz Kaiser, David Belanger, Lucy
+568 Colwell, and Adrian Weller. Rethinking attention with performers, 2022. URL https://
+569 arxiv.org/abs/2009.14794.
+570
+571 Peter Clark, Isaac Cowhey, Oren Etzioni, Tushar Khot, Ashish Sabharwal, Carissa Schoenick, and
+572 Oyvind Tafjord. Think you have solved question answering? try arc, the ai2 reasoning challenge,
+573 2018. URL https://arxiv.org/abs/1803.05457.
+574 Tri Dao and Albert Gu. Transformers are ssms: Generalized models and efficient algorithms through
+575 structured state space duality, 2024. URL https://arxiv.org/abs/2405.21060.
+576
+577 Dheeru Dua, Yizhong Wang, Pradeep Dasigi, Gabriel Stanovsky, Sameer Singh, and Matt Gardner.
+578 Drop: A reading comprehension benchmark requiring discrete reasoning over paragraphs, 2019.
+579 URL https://arxiv.org/abs/1903.00161.
+580 Christopher Fleetwood. Domain specific architectures for ai inference. URL https://
+581 fleetwood.dev/posts/domain-specific-architectures.
+582
+583 Leo Gao, Jonathan Tow, Baber Abbasi, Stella Biderman, Sid Black, Anthony DiPofi, Charles Fos-
+584 ter, Laurence Golding, Jeffrey Hsu, Alain Le Noac’h, Haonan Li, Kyle McDonell, Niklas Muen-
+585 nighoff, Chris Ociepa, Jason Phang, Laria Reynolds, Hailey Schoelkopf, Aviya Skowron, Lintang
+586 Sutawika, Eric Tang, Anish Thite, Ben Wang, Kevin Wang, and Andy Zou. The language model
+587 evaluation harness, 07 2024. URL https://zenodo.org/records/12608602.
+588 Madan Gopal. Modern control system theory. New Age International, 1993.
+589
+590 Aaron Grattafiori, Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad
+591 Al-Dahle, Aiesha Letman, Akhil Mathur, Alan Schelten, Alex Vaughan, Amy Yang, Angela Fan,
+592 Anirudh Goyal, Anthony Hartshorn, Aobo Yang, Archi Mitra, Archie Sravankumar, Artem Ko-
+593 renev, Arthur Hinsvark, Arun Rao, Aston Zhang, and et. al. The llama 3 herd of models, 2024.
+
+URL https://arxiv.org/abs/2407.21783.
+
+11
+
+
+
+Under review as a conference paper at ICLR 2026
+
+594 Riccardo Grazzi, Julien Siems, Simon Schrodi, Thomas Brox, and Frank Hutter. Is mamba capable
+595 of in-context learning?, 2024. URL https://arxiv.org/abs/2402.03170.
+596
+597 Riccardo Grazzi, Julien Siems, Arber Zela, Jörg K. H. Franke, Frank Hutter, and Massimiliano
+598 Pontil. Unlocking state-tracking in linear rnns through negative eigenvalues, 2025. URL https:
+599 //arxiv.org/abs/2411.12537.
+600
+601 Albert Gu and Tri Dao. Mamba: Linear-time sequence modeling with selective state spaces, 2024.
+
+URL https://arxiv.org/abs/2312.00752.
+602
+603 Albert Gu, Karan Goel, and Christopher Ré. Efficiently modeling long sequences with structured
+604 state spaces, 2022a. URL https://arxiv.org/abs/2111.00396.
+605
+606 Albert Gu, Ankit Gupta, Karan Goel, and Christopher Ré. On the parameterization and initialization
+607 of diagonal state space models. arXiv preprint arXiv:2206.11893, 2022b. URL https://
+608 arxiv.org/abs/2206.11893.
+609 Ankit Gupta, Albert Gu, and Jonathan Berant. Diagonal state spaces are as effective as structured
+610 state spaces, 2022. URL https://arxiv.org/abs/2203.14343.
+611
+612 Alex Henry, Prudhvi Raj Dachapally, Shubham Pawar, and Yuxuan Chen. Query-key normalization
+613 for transformers, 2020. URL https://arxiv.org/abs/2010.04245.
+614
+615 Cheng-Ping Hsieh, Simeng Sun, Samuel Kriman, Shantanu Acharya, Dima Rekesh, Fei Jia, Yang
+616 Zhang, and Boris Ginsburg. Ruler: What’s the real context size of your long-context language
+617 models?, 2024. URL https://arxiv.org/abs/2404.06654.
+618 Samy Jelassi, David Brandfonbrener, Sham M. Kakade, and Eran Malach. Repeat after me: Trans-
+619 formers are better than state space models at copying, 2024. URL https://arxiv.org/
+620 abs/2402.01032.
+621
+622 Mandar Joshi, Eunsol Choi, Daniel S. Weld, and Luke Zettlemoyer. Triviaqa: A large scale distantly
+623 supervised challenge dataset for reading comprehension, 2017. URL https://arxiv.org/
+624 abs/1705.03551.
+625 Rudolph Emil Kalman. A new approach to linear filtering and prediction problems. 1960.
+626
+627 Angelos Katharopoulos, Apoorv Vyas, Nikolaos Pappas, and François Fleuret. Transformers are
+628 rnns: Fast autoregressive transformers with linear attention, 2020. URL https://arxiv.
+629 org/abs/2006.16236.
+630
+631 Tom Kwiatkowski, Jennimaria Palomaki, Olivia Redfield, Michael Collins, Ankur Parikh, Chris
+632 Alberti, Danielle Epstein, Illia Polosukhin, Jacob Devlin, Kenton Lee, Kristina Toutanova, Llion
+
+Jones, Matthew Kelcey, Ming-Wei Chang, Andrew M. Dai, Jakob Uszkoreit, Quoc Le, and Slav
+633 Petrov. Natural questions: A benchmark for question answering research. Transactions of the
+634 Association for Computational Linguistics, 7:452–466, 2019. doi: 10.1162/tacl a 00276. URL
+635 https://aclanthology.org/Q19-1026/.
+636
+637 Woosuk Kwon, Zhuohan Li, Siyuan Zhuang, Ying Sheng, Lianmin Zheng, Cody Hao Yu, Joseph E.
+638 Gonzalez, Hao Zhang, and Ion Stoica. Efficient memory management for large language model
+639 serving with pagedattention, 2023. URL https://arxiv.org/abs/2309.06180.
+640
+641 Baolin Li, Yankai Jiang, Vijay Gadepally, and Devesh Tiwari. Llm inference serving: Survey of
+
+recent advances and opportunities, 2024. URL https://arxiv.org/abs/2407.12391.
+642
+643 William Merrill, Jackson Petty, and Ashish Sabharwal. The illusion of state in state-space models,
+644 2025. URL https://arxiv.org/abs/2404.08819.
+645
+646 Todor Mihaylov, Peter Clark, Tushar Khot, and Ashish Sabharwal. Can a suit of armor conduct
+647 electricity? a new dataset for open book question answering, 2018. URL https://arxiv.
+
+org/abs/1809.02789.
+
+12
+
+
+
+Under review as a conference paper at ICLR 2026
+
+648 Team OLMo, Pete Walsh, Luca Soldaini, Dirk Groeneveld, Kyle Lo, Shane Arora, Akshita Bhagia,
+649 Yuling Gu, Shengyi Huang, Matt Jordan, Nathan Lambert, Dustin Schwenk, Oyvind Tafjord,
+650 Taira Anderson, David Atkinson, Faeze Brahman, Christopher Clark, Pradeep Dasigi, Nouha
+651 Dziri, Michal Guerquin, and et. al. 2 olmo 2 furious, 2025. URL https://arxiv.org/
+652 abs/2501.00656.
+653
+654 Antonio Orvieto, Samuel L Smith, Albert Gu, Anushan Fernando, Caglar Gulcehre, Razvan Pas-
+
+canu, and Soham De. Resurrecting recurrent neural networks for long sequences, 2023. URL
+655 https://arxiv.org/abs/2303.06349.
+656
+657 Daniele Paliotta, Junxiong Wang, Matteo Pagliardini, Kevin Y. Li, Aviv Bick, J. Zico Kolter, Albert
+658 Gu, François Fleuret, and Tri Dao. Thinking slow, fast: Scaling inference compute with distilled
+659 reasoners, 2025. URL https://arxiv.org/abs/2502.20339.
+660 Denis Paperno, Germán Kruszewski, Angeliki Lazaridou, Quan Ngoc Pham, Raffaella Bernardi,
+661 Sandro Pezzelle, Marco Baroni, Gemma Boleda, and Raquel Fernández. The lambada dataset:
+662 Word prediction requiring a broad discourse context, 2016. URL https://arxiv.org/
+663 abs/1606.06031.
+664
+665 Jongho Park, Jaeseung Park, Zheyang Xiong, Nayoung Lee, Jaewoong Cho, Samet Oymak, Kang-
+
+wook Lee, and Dimitris Papailiopoulos. Can mamba learn how to learn? a comparative study on
+666 in-context learning tasks, 2024. URL https://arxiv.org/abs/2402.04248.
+667
+668 Guilherme Penedo, Hynek Kydlı́ček, Loubna Ben allal, Anton Lozhkov, Margaret Mitchell, Colin
+669 Raffel, Leandro Von Werra, and Thomas Wolf. The fineweb datasets: Decanting the web for the
+670 finest text data at scale, 2024. URL https://arxiv.org/abs/2406.17557.
+671 Bo Peng, Ruichong Zhang, Daniel Goldstein, Eric Alcaide, Xingjian Du, Haowen Hou, Jiaju Lin,
+672 Jiaxing Liu, Janna Lu, William Merrill, Guangyu Song, Kaifeng Tan, Saiteja Utpala, Nathan
+673 Wilce, Johan S. Wind, Tianyi Wu, Daniel Wuttke, and Christian Zhou-Zheng. Rwkv-7 ”goose”
+674 with expressive dynamic state evolution, 2025. URL https://arxiv.org/abs/2503.
+675 14456.
+676
+677 Pranav Rajpurkar, Jian Zhang, and Percy Liang. Know what you don’t know: Unanswerable ques-
+
+tions for squad. In ACL 2018, 2018.
+678
+679 Yuval Ran-Milo, Eden Lumbroso, Edo Cohen-Karlik, Raja Giryes, Amir Globerson, and Nadav
+680 Cohen. Provable benefits of complex parameterizations for structured state space models, 2024.
+681 URL https://arxiv.org/abs/2410.14067.
+682 Keisuke Sakaguchi, Ronan Le Bras, Chandra Bhagavatula, and Yejin Choi. Winogrande: An adver-
+683 sarial winograd schema challenge at scale, 2019. URL https://arxiv.org/abs/1907.
+684 10641.
+685
+686 Yash Sarrof, Yana Veitsman, and Michael Hahn. The expressive capacity of state space models: A
+687 formal language perspective, 2024. URL https://arxiv.org/abs/2405.17394.
+688 Imanol Schlag, Kazuki Irie, and Jürgen Schmidhuber. Linear transformers are secretly fast weight
+689 programmers, 2021. URL https://arxiv.org/abs/2102.11174.
+690
+691 Julien Siems, Timur Carstensen, Arber Zela, Frank Hutter, Massimiliano Pontil, and Riccardo
+692 Grazzi. Deltaproduct: Improving state-tracking in linear rnns via householder products, 2025.
+
+URL https://arxiv.org/abs/2502.10297.
+693
+694 Jimmy T. H. Smith, Andrew Warrington, and Scott W. Linderman. Simplified state space layers for
+695 sequence modeling, 2023. URL https://arxiv.org/abs/2208.04933.
+696
+
+Charlie Snell, Jaehoon Lee, Kelvin Xu, and Aviral Kumar. Scaling llm test-time compute optimally
+697 can be more effective than scaling model parameters, 2024. URL https://arxiv.org/
+698 abs/2408.03314.
+699
+700 Jianlin Su, Yu Lu, Shengfeng Pan, Ahmed Murtadha, Bo Wen, and Yunfeng Liu. Roformer: En-
+701 hanced transformer with rotary position embedding, 2023. URL https://arxiv.org/abs/
+
+2104.09864.
+
+13
+
+
+
+Under review as a conference paper at ICLR 2026
+
+702 Yutao Sun, Li Dong, Shaohan Huang, Shuming Ma, Yuqing Xia, Jilong Xue, Jianyong Wang, and
+703 Furu Wei. Retentive network: A successor to transformer for large language models, 2023. URL
+704 https://arxiv.org/abs/2307.08621.
+705
+706 Endre Süli and David F. Mayers. An Introduction to Numerical Analysis. Cambridge University
+707 Press, 2003.
+708 Gemma Team, Aishwarya Kamath, Johan Ferret, Shreya Pathak, Nino Vieillard, Ramona Merhej,
+709 Sarah Perrin, Tatiana Matejovicova, Alexandre Ramé, Morgane Rivière, Louis Rouillard, Thomas
+710 Mesnard, Geoffrey Cideron, Jean bastien Grill, Sabela Ramos, Edouard Yvinec, Michelle Casbon,
+711 Etienne Pot, Ivo Penchev, Gaël Liu, and et. al. Gemma 3 technical report, 2025. URL https:
+712 //arxiv.org/abs/2503.19786.
+713
+
+M. Tenenbaum and H. Pollard. Ordinary Differential Equations: An Elementary Textbook for Stu-
+714 dents of Mathematics, Engineering, and the Sciences. Dover Books on Mathematics. Dover Pub-
+715 lications, 1985. ISBN 9780486649405. URL https://books.google.com/books?id=
+716 iU4zDAAAQBAJ.
+717
+718 Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez,
+719 Łukasz Kaiser, and Illia Polosukhin. Attention is all you need. In Advances in neural information
+720 processing systems, pp. 5998–6008, 2017. URL http://arxiv.org/abs/1706.03762.
+721 Johannes von Oswald, Nino Scherrer, Seijin Kobayashi, Luca Versari, Songlin Yang, Maximil-
+722 ian Schlegel, Kaitlin Maile, Yanick Schimpf, Oliver Sieberling, Alexander Meulemans, Rif A.
+723 Saurous, Guillaume Lajoie, Charlotte Frenkel, Razvan Pascanu, Blaise Agüera y Arcas, and João
+724 Sacramento. Mesanet: Sequence modeling by locally optimal test-time training, 2025. URL
+725 https://arxiv.org/abs/2506.05233.
+726
+
+Mitchell Wortsman, Peter J. Liu, Lechao Xiao, Katie Everett, Alex Alemi, Ben Adlam, John D. Co-
+727 Reyes, Izzeddin Gur, Abhishek Kumar, Roman Novak, Jeffrey Pennington, Jascha Sohl-dickstein,
+728 Kelvin Xu, Jaehoon Lee, Justin Gilmer, and Simon Kornblith. Small-scale proxies for large-scale
+729 transformer training instabilities, 2023. URL https://arxiv.org/abs/2309.14322.
+730
+731 Yangzhen Wu, Zhiqing Sun, Shanda Li, Sean Welleck, and Yiming Yang. Inference scaling laws:
+732 An empirical analysis of compute-optimal inference for problem-solving with language models,
+733 2025. URL https://arxiv.org/abs/2408.00724.
+734 Songlin Yang, Jan Kautz, and Ali Hatamizadeh. Gated delta networks: Improving mamba2 with
+735 delta rule, 2025a. URL https://arxiv.org/abs/2412.06464.
+736
+737 Songlin Yang, Bailin Wang, Yu Zhang, Yikang Shen, and Yoon Kim. Parallelizing linear trans-
+738 formers with the delta rule over sequence length, 2025b. URL https://arxiv.org/abs/
+739 2406.06484.
+740 Annan Yu and N. Benjamin Erichson. Block-biased mamba for long-range sequence processing,
+741 2025. URL https://arxiv.org/abs/2505.09022.
+742
+743 Rowan Zellers, Ari Holtzman, Yonatan Bisk, Ali Farhadi, and Yejin Choi. Hellaswag: Can a ma-
+744 chine really finish your sentence?, 2019. URL https://arxiv.org/abs/1905.07830.
+745
+746
+747
+748
+749
+750
+751
+752
+753
+754
+755
+
+14
+
+
+
+Under review as a conference paper at ICLR 2026
+
+756 LLM Usage. We utilized Large Language Models to polish the writing in our submission as well as
+757 generate latex code for formatting tables and figures.
+758
+759 A RELATED WORK
+760 Linear-time sequence mixers. State-space models (SSMs) provide linear-time sequence mixing
+761 through explicit dynamical states and efficient scan/convolution implementations, offering signifi-
+762 cant computational advantages over quadratic-time attention mechanisms (Gu et al., 2022a; Smith
+763 et al., 2023; Gupta et al., 2022). Mamba-1 (Gu & Dao, 2024) introduced input-dependent selectivity
+764 to SSMs, while Mamba-2 (Dao & Gu, 2024) formalized the connection between SSMs and attention
+765 via structured state-space duality (SSD) (Katharopoulos et al., 2020; Choromanski et al., 2022). De-
+766 spite matching transformers on standard language understanding benchmarks, these recurrent mod-
+
+els exhibit limitations on tasks requiring precise algorithmic reasoning. Recent evaluations identified
+767 gaps in capabilities such as associative retrieval (Bick et al., 2025b; Arora et al., 2025a), exact copy-
+768 ing (Jelassi et al., 2024), and in-context learning (Park et al., 2024; Grazzi et al., 2024). To address
+769 these limitations, DeltaNet enhances linear attention by replacing additive updates with delta-rule
+770 recurrence (Schlag et al., 2021), with recent work developing hardware-efficient, sequence-parallel
+771 training algorithms for this architecture (Yang et al., 2025b). This has catalyzed a broader effort
+772 to improve the algorithmic capabilities of linear-time models through architectural innovations in-
+773 cluding gating mechanisms, improved state transition dynamics, and hybrid approaches (Peng et al.,
+774 2025; Siems et al., 2025; Yang et al., 2025a; Paliotta et al., 2025; Bick et al., 2025a).
+775 Expressivity and state tracking in recurrent mixers. Recent work characterizes the types of
+776 state that recurrent, constant-memory mixers can maintain, revealing algorithmic deficiencies in
+777 previous SSM-based models. Merrill et al. (2025) show that under finite precision, practical SSMs
+778 collapse to TC0, leading to failures on tasks like permutation composition over S5 unless the primi-
+779 tive is extended. Similarly, Yu & Erichson (2025) prove that a single-layer Mamba is not a universal
+780 approximator. Several modifications have been proposed to improve expressivity. For instance,
+781 the same work shows that a block-biased variant regains the universal approximation property with
+782 only minor changes, either through block decomposition or a channel-specific bias. Allowing nega-
+783 tive eigenvalues or non-triangular transitions enables linear RNNs—including diagonal and House-
+
+holder/DeltaNet forms—to capture parity and, under mild assumptions, regular languages (Grazzi
+784 et al., 2025). Complex-valued parameterizations provide another avenue for enhanced expressivity.
+785 Diagonal LTI SSMs demonstrate effectiveness for language modeling (Gu et al., 2022b; Orvieto
+786 et al., 2023), with complex variants achieving equivalent functions using smaller, well-conditioned
+787 parameters (Ran-Milo et al., 2024). However, the introduction of selectivity—the central innovation
+788 of modern SSMs (Gu & Dao, 2024)—narrowed the performance gap with Transformers by enabling
+789 input-dependent dynamics and achieving state-of-the-art results on language modeling benchmarks,
+790 leading practitioners to abandon complex states in favor of simpler real-valued architectures. We
+791 extend this line of work by reintroducing complex-valued state evolution that yields a real SSM with
+792 doubled dimensionality and block-diagonal rotations applied to the update rule—analogous through
+793 SSD (Dao & Gu, 2024) to how RoPE (Su et al., 2023) applies complex rotations to queries and
+794 keys in attention. The resulting data-dependent rotational structure expands stable dynamics to in-
+
+clude oscillatory modes, enabling richer states while maintaining constant memory and linear-time
+795 complexity.
+796
+797 B TRAPEZOIDAL DISCRETIZATION
+798 Proposition 5 (Variation of Constants (Tenenbaum & Pollard, 1985)). Consider the linear SSM
+799
+800 ḣ(t) = A(t)h(t) +B(t)x(t),
+801 where h(t) ∈ RN , A(t) ∈ R is a scalar decay, and B(t)x(t) ∈ RN . For ∆t discretized time grid
+802 τt = τt−1 +∆t, the hidden state satisfies
+803 ∫ τt
+804 ht ≈ e∆tAt ht−1 + e(τt−τ)At B(τ)x(τ) dτ. (10)
+805 τt−1
+
+806
+807 Proof. Since A(t) is scalar, the homogeneous system ḣ(t) =(A∫(t)h(t) has
+
+t )solution
+808
+809 h(t) = ϕ(t, s)h(s), ϕ(t, s) = exp A(ξ) dξ .
+
+s
+
+15
+
+
+
+Under review as a conference paper at ICLR 2026
+
+810 The Variation of Constants formula gives us,
+811 ∫ t
+812 h(t) = ϕ(t, s)h(s) + ϕ(t, τ)B(τ)x(τ) dτ.
+813 s
+
+814 ∫
+Setting t
+
+(s, t) = (tk−1, tk) yields the exact ht given ht−1. We approximate A(ξ) dξ by setting
+815 s
+
+A(τ) ≈ Ak over [tk−1, tk], which g(iv∫es us,
+816
+
+t ) (∫ t )
+817 ϕ(tk, tk−1) = exp A(ξ) dξ ≈ exp Ak dξ = e∆kAk ,
+818 s s
+
+819
+Substituting these approximations in the Variat∫ion of Constants integral, we get the approximation
+
+820
+τt
+
+821 ht ≈ e∆tAt ht−1 + e(τt−τ)At B(τ)x(τ) dτ.
+822 τt−1
+
+823
+824
+825 B.1 TRAPEZOID DISCRETIZATION’S MASK MATRIX
+826 Proof. When viewing the tensor contraction form, let us call C = (T,N), B = (S,N), L =
+827 (T, S), X = (S, P ) based on the Mamba-2 paper. With this decomposition of our mask, we can
+828 view L = contract(TZ,ZS → TS)(L1, L2).
+829 The original contraction can be seen as
+830
+831 contract(TN, SN, TS, SP → TP )(C,B,L,X)
+
+832 We can now view it as
+833 contract(TN, SN, TJ, JS, SP → TP )(C,B,L1, L2, X)
+834 This can be broken into the following:
+835
+836 Z = contract(SN, SP → SNP )(B,X)
+837 Z ′ = contract(JS, SNP → JNP )(L2, Z)
+838 H = contract(TJ, JNP → TNP )(L1, Z
+
+′)
+839
+
+Y = contract(TN, TNP → TP )(C,H)
+840
+841 Thus, we can view this step: contract(ZS, SNP → ZNP )(L2, Z) as a conv of size two applied on
+842 Bx with the traditional SSD L = L1 matrix.
+843 B.2 TRAPEZOIDAL DISCRETIZATION ERROR RATE
+844
+845 Standard assumptions. We assume that: A(t),B(t), x(t) are bounded and C2 on each timestep,
+846 so that g(τ) has two bounded derivatives; the map h 7→ A(t)h+B(t)x(t) is Lipschitz in h which
+847 is true for linear systems; λt lies in a bounded interval so that the update is zero-stable.
+848
+
+Proof. Let g(τ) := e(tk−τ)Ak B(τ)x(τ) denote the integrand in the second term of Proposition 5.
+849 Since A(t),B(t), x(t) are C2 on [tk−1, tk], the function g has two bounded derivatives. A second-
+850 order Taylor e∫xpansion of g around tk−1 gives us,
+851
+
+tk
+852 ∆2 ∆3
+
+g(τ) dτ = ∆ t ′
+t g(tk−1) + g (t t ′′
+
+k−1) + g (tk−1) +O(∆4 .
+6 t )
+
+853 t 2
+k−1
+
+854
+855 Recall that the trapezoidal approximatio[n to this integral is given by,]
+856 Qλ = ∆t (1− λt) g(tk−1) + λt g(tk) .
+857
+858
+
+Expanding g(tk) using Taylor expansion: ∆2
+
+g(tk) = g(tk−1) +∆tg
+′(tk−1) + t
+
+2 g′′(tk−1) +O(∆3
+t ).859 Substituting this into Qλ,
+
+860 [ ]
+861 Qλ = ∆t (1− λt)g(tk−1) + λtg(tk)
+862
+863 = ∆tg(tk−1) + λt∆
+
+2
+t g
+
+′ ∆3
+(t t
+
+k−1) + λ ′′
+t g (tk−1) +O(∆4
+
+t ).2
+
+16
+
+
+
+Under review as a conference paper at ICLR 2026
+
+864 Hence, the error is given by:
+865 ∫ tk ( ) ( )
+866 g(τ) dτ −Q 1 ∆2 1 t 3
+
+λ = 2 − λt t g
+′(tk−1) +
+
+λ g′′ +O(∆t ).
+867 6 − 2 ∆t (t 4
+
+k−1)
+tk−1
+
+868 Under the assumption that λ 1
+t =
+
+1
+2 + ct∆t, where ct = O(1), then 2 − λt = −ct∆t = O(∆t) and
+
+869 thus the ∆2
+t term is O(∆3
+
+t ). There∫fore,
+870
+
+tk
+871
+
+g(τ) dτ −Qλ = O(∆3
+t ),872 tk−1
+
+873
+which yields an O(∆3
+
+t ) local truncation error. Since the update h Ak
+k = e∆t hk−1 + Qλ is linear
+
+874 and zero–stable for bounded λt, standard numerical ODE results imply an O(∆2
+t ) global error.
+
+875
+876 B.3 TRAPEZOIDAL PARAMETERIZATION
+877
+878 Parameterization Form of λt ppl ↓
+879 Default σ(ut) 15.72
+880
+
+Fixed 1/2 1 15.76
+881 2
+
+882 No trapezoid (Euler) 1 15.81
+883
+884 Table 5: Ablations on λt parameterization in the trapezoidal update.
+885 Setting: All runs use the Mamba-3 (SISO) 440M model trained at Chinchilla scale, with the other
+886 architectural and optimization hyperparameters being the same as in Table 1.
+887
+888 The default model uses a data-dependent gate λt = σ(ut), where ut is a learned projection of the
+
+current input token. In Table 5, we try different parameterizations for λt and find that the default pa-
+889 rameterization empirically performs the best. Hence we choose the simpler default parameterization
+890 that does not enforce the O( 1 +∆t).
+891 2
+
+892 C COMPLEX SSM PROOFS
+893 C.1 PROOF OF PROPOSITION 2
+894 Proposition 2 (Complex-to-Real S
+
+( (
+SM Equivale)nce). Con(sider a comple)x-valued SSM
+
+895
+896 ḣ(t) = Diag( A(t) + iθ(t))h(t) +) B(t) + iB̂(t) x(t), (6)
+897 ⊤
+
+y(t) = Re C(t) + iĈ(t) h(t) ,
+898
+899 where h(t) ∈ CN/2, θ(t),B(t), B̂(t),C(t), Ĉ(t) ∈ RN/2, and x(t), A(t) ∈ R. Under Euler
+900 discretization, this system is equivalent to a real-valued SSM
+901
+902 h tAt
+
+t = e∆ Rt ht−1 +∆tBtxt, (7)
+903 y ⊤
+
+t = Ct ht,
+904 with state ht ∈ RN , projections
+905 [ ] [ ]
+906 Bt t
+
+Bt = ∈ RN C
+, C = ∈ N ,
+
+907 B̂ t R
+t −Ĉt
+
+908 and a transition matri
+909 (x ) [ ]
+
+N/2 cos(Θ) − sin(Θ)
+910 Rt = Block {R(∆tθt[i])} N×N
+
+i=1 ∈ R , R(Θ) = .
+sin(Θ) cos(Θ)
+
+911
+912 Proof. We first present the derivation for N = 2; the block-diagonal structure for general even N
+913 follows by grouping pairs of coordinates.
+914 Let h
+915 t+iĥt denote the complexified hidden state, with parameters A(t)+iθ(t) and B(t)+iB̂(t) for
+
+the transition and input, respectively. By the variation of constants formula (Proposition 5), applying
+916 zero–order hold and Euler’s rule over a step [tk−1, tk] gives
+917
+
+h t(At+iθt)
+k + iĥk = e∆ (hk−1 + iĥk−1) + ∆t(Bt + iB̂t)xt.
+
+17
+
+
+
+Under review as a conference paper at ICLR 2026
+
+918 Expanding the exponential,
+919 ( )
+920 e∆t(At+iθt) = e∆tAt
+
+[ ] cos(∆tθt) + i sin(∆tθt) ,
+921
+922 h
+923 so in real coordinates t
+
+ht = ∈ R2 the recurrence becomes
+ĥt
+
+924 [ ] [ ]
+925 cos(∆
+
+h tθt) − sin(∆tθt) Bt
+
+926 t = e∆tAt
+
+927 ︸ sin(∆ t
+tθt) ︷︷cos(∆tθt) ︸ht−1 +∆t x .
+
+B̂t
+
+R(∆tθt)
+928
+929 Stacking across N/2 such pairs yields
+930
+931 (the block-diagonal)transition [ ]
+932 ht = e∆tA {R(∆tθt[i])}N/2 B
+
+t t
+Block i=1 ht−1 +∆t x
+
+B̂ t.
+t
+
+933
+934 For the output,
+935 ( ) [ ]⊤
+
+C
+936 t
+
+yt = Re (C ⊤
+t + iĈt) (ht + iĥt) = − h ,
+
+Ĉ t
+937 t
+
+938 which defines the real projection Ct ∈ RN in the proposition. This proves the equivalence between
+939 complex SSM and the real block-diagonal system with rotations.
+940
+941 C.2 PROOF OF PROPOSITION 3
+942 Proposition 3 (Complex SSM, Data-Dependent RoPE Equivalence). Under the notation established
+943 in Proposition 2, consider the real SSM defined in Eq. 7 unrolled for T time-steps. The output of
+944 the above SSM is equivalent to that of a vanilla scalar transition matrix-based SSM (Eq. 2) with a
+945 data-dependent rotary embedding applied on the B,C components of the SSM defined as:
+946 ∏t ( ∏t )⊤
+947 ht = e∆tAtht−1 + ( R⊤
+
+i )Btx
+⊤
+
+t, yt = ( Ri )Ct ht (8)
+948
+
+i=0 i=0
+949 ∏
+950 where the matrix production represents right matrix multiplication, e.g., 1
+
+i=0 Ri = R0R1. We
+951 denote employing the vanilla SSM to compute the Complex SSM as “RoPE trick”.
+952
+953 Proof. Consider the SSM
+954
+955 ht = e∆tAt Rt ht−1 + Btxt, yt = C⊤
+
+t ht, (11)
+956 where (as in Proposition 3) At ∈ R is a scalar (so that e∆tAt is a scalar and commutes with rota-
+957 tions), and Rt is block-diagonal orthogonal/unitary, hence R−1
+
+t = R⊤
+t .
+
+958
+959 Unrolling the recurrence with the convention that an empty product is the identity,
+960 ∑t ( ∏t )
+961 ht = e∆sAsRs Bixi. (12)
+962 i=0 s=i+1
+
+963
+Thus
+
+964
+965 ∑t ( ∏t )
+966 y ⊤
+
+t = C⊤
+t ht = Ct e∆sAsRs Bixi. (13)
+
+967 i=0 s=i+1
+
+968 Using unitarity property,
+969
+970 ∏t (∏t )(∏i )−1 (∏t )(∏i )
+971 Rs = Rs Rs = R ⊤
+
+s Rs .
+s=i+1 s=0 s=0 s=0 s=0
+
+18
+
+
+
+Under review as a conference paper at ICLR 2026
+
+972 Since e∆sAs are scalars,∑they co
+t (m∏mute w
+
+t )it(h ro∏tations; hen
+973
+
+t )c(e ∏i )
+974
+975 yt = C⊤
+
+t Rs e∆sAs R⊤
+s Bixi (14)
+
+976 (i=(0∏ s=0 s=i+1 s=0
+
+t
+
+R⊤) )⊤∑t ( ∏t )(∏i )
+977
+978 = s Ct e∆sAs R⊤
+
+s Bixi. (15)
+s=0 (∏ i=0 s=i+1 s=0
+
+979
+980 t ) (∏
+
+Define the rotated parameters C̄t := s=0 R
+⊤
+s Ct and i
+
+B̄i):= s=0 R
+⊤)
+
+∑( ∏ s Bi. Then
+981
+
+t t
+982 yt = C̄⊤ e∆sAs
+
+t B̄ixi. (16)
+983
+
+i=0 s
+984 (=∏i+1
+
+t )
+985 Equivalently, introducing the rotated state h̃t := s=0 R
+
+⊤
+s ht,
+
+986
+h̃ t t
+t = e∆ A h̃t−1 + B̄txt, yt = C̄⊤
+
+t h̃t, (17)
+987
+988
+989
+
+C.3 PROOF OF PROPOSITION 4
+990
+991 Proposition 4 (Rotary Embedding Equivalence with Trapezoidal Discretization). Discretizing a
+992 complex SSM with the trapezoidal ru(le
+
+t∏(Propo
+− )sition 1) yields the(re∏curren)ce
+
+993 1 t
+
+994 ht = αtht−1 + β R⊤
+t i Bt−1xt−1 + γt R⊤
+
+995 ( ) i Btxt,
+
+(∏ i=0 i=0
+
+996 t ⊤
+
+997 y ⊤
+t = Ri )Ct ht. (9)
+
+998 i=0
+
+999 Here Rt is the block-diagonal rotation matrix defined in Proposition 3.
+1000
+1001 Proof. We begin from the complex SSM (as in Prop. 2)
+1002
+
+ḣ(t) = Dia
+1003 ( ( ) ( )
+
+g A(t) + iθ(t) h(t) + B(t) + iB̂(t) x(t),
+
+1004 y(t) = Re (C(t) + iĈ(t))⊤
+)
+
+h(t) ,
+1005
+1006 where A(t) ∈ R is a scalar and θ(t),B(t), B̂(t),C(t), Ĉ(t) ∈ RN/2.
+1007
+1008 Recall from Prop. 5, ∫
+1009 τt ( )
+
+ht ≈ e∆t(At+iθt) ht−1 + e(τt−τ)(At+iθt) B(τ) + iB̂(τ) x(τ) dτ.
+1010
+
+τt−1
+1011
+
+Applying Prop. 1 to the above integral, we get
+1012 ( ) ( )
+1013 ht = e∆t(At+iθt) ht−1 + βt e
+
+i∆tθt Bt−1 + iB̂t−1 xt−1 + γt Bt + iB̂t xt, (18)
+1014 wherem
+1015 α tA
+
+t := e∆ t , βt := (1− λt)∆te
+∆tAt , γt := λt∆t,
+
+1016
+1017 Since e∆t(At+iθt) = αt e
+
+i∆tθt and as shown in Prop. 2, multiplication by ei∆tθt is a block-diagonal
+1018 rotation in real coordinates, we get the real N -dimensional recurrence
+1019
+1020 ht = αt Rt ht−1 + βt Rt Bt−1 xt−1 + γt Bt xt, (19)
+1021
+1022
+1023 ( yt = C⊤
+
+t ht, ) [ ]
+where[Rt =] Bloc [{R(∆
+
+1024 ]tθt[i])}N/2
+i=1 where cosΘ − sinΘ
+
+k R(Θ) = , and projections
+sinΘ cosΘ
+
+1025 Bt Ct
+Bt = , C
+
+B̂ t = − . Note that R o t
+Ĉ t is r hogonal, so R−1
+
+t = R⊤
+t .
+
+t t
+
+19
+
+
+
+Under review as a conference paper at ICLR 2026
+
+1026
+1027
+1028
+1029
+1030 N
+1031 X X Linear projection
+1032 Y Y
+1033 SSM SSM Sequence transformation
+
+A X B C A X B C
+1034 ! !
+1035 R ! MIMO projection (optional)
+
+oPE
+& Nonlinearity (activation, 
+
+1036 Conv N N normalization, multiplication, etc.)
+1037
+1038
+1039
+1040
+1041 Mamba-2 Block Mamba-3 Block
+1042
+1043 Figure 4: Contrasting Mamba-2 and Mamba-3 Architectures: Key updates include trapezoidal dis-
+1044 cretization, data-dependent RoPE embeddings, MIMO projections, QK normalization, and learnable
+1045 biases.
+1046
+1047
+
+We define the follo(w∏ing,
+1048
+1049 t ) (∏t ) (∏t )
+1050 h̃t := R⊤
+
+s ht, B̄t := R⊤
+s B ⊤
+
+t, C̄t := Rs Ct.
+1051 s=0 ∏ s=0 s=0
+
+1052 Left-multiplying equation 19 by t ⊤
+s=0 Rs and using R⊤
+
+t Rt = I ,
+1053
+1054 h̃t = αt h̃t−1 + βt B̄t−1 xt−1 + γt B̄t xt,
+1055 yt = C̄⊤
+
+t h̃t.
+1056
+1057 This is a vanilla scalar-transition SSM with data-dependent rotary embeddings absorbed into B,C
+
+via cumulative products of R⊤
+1058 s .
+1059 D MIMO FOR MAMBA-3
+1060
+1061 With hindsight from Mamba and with inference in mind, we propose the following MIMO formu-
+1062 lation:
+1063 Mamba with MIMO. With a given batch, head, and sequence position t, consider the input
+1064 Ut ∈ RD. Also denote P,R ∈ N as the head dimension and MIMO rank, respectively. We
+1065 first obtain SSM parameters via a set of projections defined in terms of tensor contraction notation
+1066 as follows:
+1067
+1068
+
+B
+1069 t = contract(DNR,D → NR)(WB,Ut) Ct = contract(DNR,D → NR)(WC,Ut),
+
+1070 X′
+t = contract(PD,D → P )(WX′ ,Ut) Xt = contract(PR,P → PR)(WX,X′
+
+t),
+1071
+1072 where WB,WC,WX′ ,WX are model parameters. Additionally, we obtain the residual term Zt
+1073 in the same manner as Xt with weights WZ′ and WZ. The state update and the SSM output is then
+1074 computed via the following MIMO SSM:
+1075
+1076 Ht = at Ht−1 + BtX
+
+⊤
+t ∈ RN×P , Yt = H⊤
+
+t Ct ∈ RP×R.
+
+1077 The intermediate output Y′
+t is obtained via some residual function ϕ, Y′
+
+t ← ϕ(Yt,Zt). Finally,
+1078 the layer output Ot ∈ RD is computed via the following down projections:
+1079
+
+O′
+t = contract(PR,R→ P )(WO′ ,Y′
+
+t) Ot = contract(P, PD → D)(WO,O′
+t).
+
+20
+
+
+
+Under review as a conference paper at ICLR 2026
+
+1080 This formulation enhances the existing Mamba3 architecture by providing a lightweight parame-
+1081 terization that transforms the set of independent SISO SSMs within each head into a set of MIMO
+1082 SSMs. Here, we note that the hardware-efficient chunking technique employed by Mamba2 for pre-
+1083 training can be applied with little change, as the MIMO dimension r is orthogonal to the sequence
+1084 dimension.
+1085
+1086 E EXPERIMENTAL DETAILS
+1087
+1088 Language Modeling. Our pretraining procedures follow that of Dao & Gu (2024)’s section D.2.
+1089 All models at each scale follow the same procedure and were trained with bfloat16. The Mamba
+1090 family of models were trained using the standard expand factor of 2 and a dstate of 128 and head
+
+dimension of 64. The Transformer baselines follows Dao & Gu (2024), and the Gated DeltaNet
+1091 baselines follow (Yang et al., 2025a). We utilize the Llama-3.1 tokenizer (Grattafiori et al., 2024)
+1092 for all models.
+1093
+1094
+1095 We utilize LM Evaluation Harness (Gao et al., 2024) to test the zero-shot languag modeling ca-
+
+pabilities of our pretrained model on LAMBADA (OpenAI version) (Paperno et al., 2016), Hel-
+1096 laSwag (Zellers et al., 2019), PIQA (Bisk et al., 2019), Arc-Easy/Arc-Challenge (Clark et al., 2018),
+1097 WinoGrande (Sakaguchi et al., 2019), and OpenBookQA(Mihaylov et al., 2018).
+1098
+1099
+1100 Real-World and Synthetic Retrieval. For our real-world retrieval tasks, we evaluate on the com-
+1101 mon suite consisting of SWDE (Arora et al., 2025b), SQUAD (Rajpurkar et al., 2018), FDA (Arora
+
+et al., 2025b), TriviaQA (Joshi et al., 2017), NQ (Kwiatkowski et al., 2019), and DROP (Dua et al.,
+1102 2019). We utilize the cloze-formatted version of the aforementioned tasks provided by Arora et al.
+1103 (2025b; 2024), as the original datasets are in a question-answering format, making it challenge for
+1104 solely pretrained models. All tasks were truncated to match the training context length. The syn-
+1105 thetic NIAH tasks (Hsieh et al., 2024) were also run with LM Evaluation Harness.
+1106
+1107 State-Tracking Synthetics. Training follows a sequence length curriculum that progresses from 3
+1108 -40 to 160, evaluated at 256. Each curriculum runs for 104 steps with batch size 256. We use 1 layer
+1109 models for Parity and 3 layer models for Modular-arithmetic tasks. The state size is chosen to be
+1110 64, and we sweep dmodel ∈ {32, 64} and 8 learning rates logarithmically spaced between 10−4 and
+1111 10−2, reporting the best validation accuracy.
+1112
+1113 F ADDITIONAL EXPERIMENTAL RESULTS
+1114
+1115
+1116 Context Length Extrapolation
+1117 Train length = 2K
+1118 10.8 Gated DeltaNet
+1119 Mamba-2
+1120 Mamba-3
+
+10.6
+1121
+1122
+1123 10.4
+1124
+1125 10.2
+1126
+1127 10.0
+1128
+1129 1K 2K 4K 8K 16K 32K
+
+Context length
+1130
+1131
+1132 Figure 5: Pretrained 1.5B models’ performance on the held-out FineWeb-Edu test set at varying
+1133 context lengths. Mamba-3 exhibits strong length extrapolation while Mamba-2 falters at longer
+
+contexts.
+
+21
+
+Perplexity
+
+
+
+Under review as a conference paper at ICLR 2026
+
+1134 Table 6: Downstream language modeling evaluations on parameter-matched pretrained models, in-
+1135 cluding Mamba-3 MIMO. Mamba-3 MIMO’s average accuracy on all tasks is more than 1 percent-
+1136 age point better than the next best (Mamba-3 SISO).
+1137
+1138 Model FW-Edu LAMB. LAMB. HellaS. PIQA Arc-E Arc-C WinoGr. OBQA Average
+
+ppl ↓ ppl ↓ acc ↑ acc n ↑ acc ↑ acc ↑ acc n ↑ acc ↑ acc ↑ acc ↑
+1139
+
+Transformer-440M 13.03 21.2 41.7 50.5 69.9 67.6 34.6 56.7 26.0 49.6
+1140 Gated DeltaNet-440M 13.12 19.0 40.4 50.5 70.5 67.5 34.0 55.3 25.8 49.1
+1141 Mamba-2-440M 13.00 19.6 40.8 51.7 70.6 68.8 35.0 54.1 26.0 49.6
+
+Mamba-3-440M 12.87 19.6 40.2 51.7 71.9 68.9 34.4 55.8 26.0 49.8
+1142 Mamba-3-MIMO-440M 12.72 17.1 43.4 52.8 70.8 69.6 35.6 56.3 28.4 51.0
+1143 Transformer-880M 11.42 15.0 44.7 57.2 72.6 71.6 39.2 57.7 26.8 52.8
+1144 Gated DeltaNet-880M 11.39 12.7 47.1 57.5 72.6 72.5 38.8 57.9 30.6 53.9
+
+1145 Mamba-2-880M 11.35 13.8 45.0 58.1 72.5 72.3 38.7 56.8 30.2 53.4
+Mamba-3-880M 11.23 12.9 47.2 58.8 73.6 72.7 40.2 58.4 30.0 54.4
+
+1146 Mamba-3-MIMO-880M 11.11 11.8 49.5 59.2 73.7 74.7 41.2 59.9 28.6 55.3
+
+1147
+1148
+1149
+1150
+1151 Mamba-3 Validation Perplexity
+1152 16.0
+
+Mamba-3 MIMO
+1153 Mamba-3 SISO
+1154 15.5 Llama
+1155 GatedDeltaNet
+
+Mamba-2
+1156 15.0
+1157
+1158
+1159 14.5
+
+1160
+1161 14.0
+1162
+1163 13.5
+1164
+1165
+
+13.0
+1166
+1167
+1168 12.5
+
+1169
+1170 12.0
+
+0 25000 50000 75000 100000 125000 150000 175000
+1171 Global Step
+1172
+1173 Figure 6: Mamba-3 demonstrates superior performance compared to strong baselines like Mamba-2,
+1174 Llama, and Gated Deltanet. These are 440M models, trained and evaluated on FineWeb-Edu.
+1175
+1176
+1177
+1178
+1179
+1180
+1181
+1182 We also compare the effectiveness of state size usage of Mamba variants to a Gated DeltaNet base-
+1183 line in Figure 7. We highlight the difficulty of directly comparing GDN versus Mamba-style models
+1184 due to the differing head structure, multi-head compared to multi-value respectively. Our experi-
+1185 ments hold GDN’s v expand to 2 and decrease the head dimension accordingly to vary the relative
+1186 total state size. Similar to Figure 3, we train 440M models to 2× Chinchilla tokens and sweep
+1187 across dstate = {32, 64, 128} for the Mamba models and dhead dim = {32, 64, 128} for GDN. We
+
+parameter match all models.
+
+22
+
+Perplexity
+
+
+
+Under review as a conference paper at ICLR 2026
+
+1188
+1189 Relative Total State Size vs Pretraining Perplexity
+1190 15.0
+1191 Mamba-2
+
+14.9 Mamba-3 
+1192 Mamba-3 MIMO
+1193 14.8 Gated DeltaNet
+1194 14.7
+1195
+1196 14.6
+1197 14.5
+1198 105
+1199 Relative Total State Size
+1200
+1201 Figure 7: Exploration of state size (inference speed proxy) versus pretraining perplexity (perfor-
+1202 mance proxy). Mamba-3 and Mamba-3 MIMO continue set the Pareto frontier.
+1203
+1204
+1205 G ARCHITECTURE ABLATIONS
+1206 We explore our model architecture’s ablation in this section. All models are trained at the 440M
+1207 scale to Chinchilla optimal number of tokens (20× tokens to parameters) with the same experimental
+1208 procedures as our pretrained models as covered in Appendix E unless otherwise stated.
+1209 B,C Bias Parameterization. The Mamba-3 model’s separate B and C biases are head-specific and
+1210 channel-wise and added to both B and C after the QK-Norm. While the biases in the final Mamba-3
+1211 model are trainable, data-independent parameters and initialized to all ones, we explore various bias
+1212 parameterizations in Table 7a. We find our models are not very sensitive to the initialization of the
+1213 biases as long as they are positive. We choose the all-ones initialization due to it’s simplicity.
+1214
+
+We also explore the impact removing the B or C bias on performance in Table 7b (bias is initialized
+1215 with our default parameterization when utilized). Unlike in Yu & Erichson (2025), which finds that
+1216 B bias by itself is able to improve performance on Mamba-1, our experiments find that only having
+1217 B bias hurts performance slightly and that B and C biases have synergetic properties.
+1218
+1219 Bias Init. Trainable ppl ↓
+1220 B Bias C Bias ppl ↓
+
+1.0 ✓ 15.72
+1221 0.0 ✓ 16.57 × × 16.52
+1222 1.0 × 15.80 ✓ × 16.68
+
+× ✓ 15.98
+1223 U(0, 1) ✓ 15.76 ✓ ✓ 15.69
+1224 U(−1, 1) ✓ 16.07
+1225 (a) Effect of parameterization of the B and C bias (b) Applying a bias to both B and C leads to the
+1226 on model performance, measured by pretraining best performance. Only applying B bias (Block-
+
+Biased (Yu & Erichson, 2025) Mamba-3 variant)
+1227 perplexity. We find our default initialization of all-
+1228 ones (first row) provides the best performance, but does not provide significant gains over the no-bias
+
+performance is not sensitive as long as biases are baseline.
+1229 positive.
+1230
+1231 Table 7: Ablations on B,C bias initialization (left) and presence (right) for Mamba-3.
+1232
+1233 H INFERENCE KERNEL LATENCY ANALYSIS
+1234
+
+H.1 KERNEL IMPLEMENTATIONS AND FUSION STRUCTURE
+1235
+1236 In Table 3, we detail the DSL (Triton, CuTe, PyTorch) and the fusion level of the kernels used in our
+1237 latency analysis. For Mamba-2 and Gated DeltaNet (GDN), we directly use the publicly released
+1238 Triton kernels from the respective authors. For Mamba-3, we implement new inference kernels with
+
+a comparable fusion structure: the forward uses a Triton kernel fused with rotary position embed-
+1239 dings, while the decode path uses a CuTe kernel fused with gating and MIMO projection.
+1240
+1241 In Tables 8 and 9, we abbreviate IP = input projection, Conv = 1D convolution, Gate = gating, OP =
+
+output projection. Colors indicate implementation backend (Torch, Triton, CuTe).
+
+23
+
+Pretraining Perplexity

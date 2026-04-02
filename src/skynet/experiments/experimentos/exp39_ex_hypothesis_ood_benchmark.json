@@ -1,0 +1,88 @@
+{
+  "protocol": "ex_hypothesis_protocol_v1",
+  "baseline": {
+    "hypothesis_id": "gru_baseline",
+    "family": "baseline",
+    "task_id": "exp39_ood_long_context_plus_periodic_regime",
+    "capability": {
+      "test_accuracy": 1.0,
+      "epochs_to_80": 1.5,
+      "area_under_curve": 0.9801897321428571,
+      "param_count": 14930,
+      "wall_time_ms": 3445.4841029946692
+    },
+    "adaptation": null,
+    "retention": {
+      "task_a_after_a": 0.98828125,
+      "task_a_after_b": 0.58984375,
+      "forgetting": 0.3984375
+    },
+    "elasticity": null,
+    "internal": null,
+    "notes": "{\"long_context\": {\"acc_id\": 1.0, \"acc_ood\": 1.0, \"epochs_to_80\": 1, \"auc\": 0.9909784226190476, \"wall_time_ms\": 1833.3752869948512}, \"periodic_regime\": {\"acc_id\": 1.0, \"acc_ood\": 1.0, \"epochs_to_80\": 2, \"auc\": 0.9694010416666666, \"wall_time_ms\": 1612.108815999818}}"
+  },
+  "candidates": [
+    {
+      "run": {
+        "hypothesis_id": "gru_adaptive_decay",
+        "family": "adaptive_decay",
+        "task_id": "exp39_ood_long_context_plus_periodic_regime",
+        "capability": {
+          "test_accuracy": 1.0,
+          "epochs_to_80": 4.5,
+          "area_under_curve": 0.8897414434523809,
+          "param_count": 14932,
+          "wall_time_ms": 6555.5557110055815
+        },
+        "adaptation": null,
+        "retention": {
+          "task_a_after_a": 0.984375,
+          "task_a_after_b": 0.75,
+          "forgetting": 0.234375
+        },
+        "elasticity": null,
+        "internal": null,
+        "notes": "{\"long_context\": {\"acc_id\": 1.0, \"acc_ood\": 1.0, \"epochs_to_80\": 2, \"auc\": 0.9662388392857143, \"wall_time_ms\": 2452.177034007036}, \"periodic_regime\": {\"acc_id\": 1.0, \"acc_ood\": 1.0, \"epochs_to_80\": 7, \"auc\": 0.8132440476190476, \"wall_time_ms\": 4103.378676998545}}"
+      },
+      "vs_baseline": {
+        "accuracy_delta": 0.0,
+        "sample_efficiency_delta": -3.0,
+        "forgetting_delta": 0.1640625,
+        "recovery_delta": null,
+        "elasticity_gain_delta": null
+      },
+      "promotion_reasons": ["wins_retention"]
+    },
+    {
+      "run": {
+        "hypothesis_id": "gru_spectral_memory",
+        "family": "spectral_memory",
+        "task_id": "exp39_ood_long_context_plus_periodic_regime",
+        "capability": {
+          "test_accuracy": 0.689453125,
+          "epochs_to_80": 1.5,
+          "area_under_curve": 0.9867001488095238,
+          "param_count": 24434,
+          "wall_time_ms": 10992.927284009056
+        },
+        "adaptation": null,
+        "retention": {
+          "task_a_after_a": 0.96484375,
+          "task_a_after_b": 0.4296875,
+          "forgetting": 0.53515625
+        },
+        "elasticity": null,
+        "internal": null,
+        "notes": "{\"long_context\": {\"acc_id\": 1.0, \"acc_ood\": 1.0, \"epochs_to_80\": 1, \"auc\": 0.9964657738095238, \"wall_time_ms\": 5355.891783998231}, \"periodic_regime\": {\"acc_id\": 1.0, \"acc_ood\": 0.37890625, \"epochs_to_80\": 2, \"auc\": 0.9769345238095238, \"wall_time_ms\": 5637.035500010825}}"
+      },
+      "vs_baseline": {
+        "accuracy_delta": -0.310546875,
+        "sample_efficiency_delta": 0.0,
+        "forgetting_delta": -0.13671875,
+        "recovery_delta": null,
+        "elasticity_gain_delta": null
+      },
+      "promotion_reasons": []
+    }
+  ]
+}

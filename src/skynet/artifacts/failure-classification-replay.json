@@ -1,0 +1,43 @@
+{
+  "observedEvents": 33,
+  "lifecycleErrors": 1,
+  "classifiedLifecycleErrors": 1,
+  "toolErrors": 2,
+  "classifiedToolErrors": 2,
+  "classificationCoverage": 1,
+  "failureCountsByDomain": {
+    "environmental": 1,
+    "mixed": 2
+  },
+  "failureCountsByClass": {
+    "provider_rate_limit": 1,
+    "unknown_error": 2
+  },
+  "recentFailures": [
+    {
+      "id": "f92e5896-7e73-4759-927f-0f794eec112c:1775107262069:0:unknown_error",
+      "recordedAt": 1775107262069,
+      "sessionKey": "agent:autonomy:main",
+      "runId": "f92e5896-7e73-4759-927f-0f794eec112c",
+      "failureDomain": "mixed",
+      "failureClass": "unknown_error"
+    },
+    {
+      "id": "3583b9c0-639a-451f-b6f4-c53172b9e794:1775107262068:1:provider_rate_limit",
+      "recordedAt": 1775107262068,
+      "sessionKey": "agent:autonomy:main",
+      "runId": "3583b9c0-639a-451f-b6f4-c53172b9e794",
+      "failureDomain": "environmental",
+      "failureClass": "provider_rate_limit",
+      "textPreview": "⚠️ API rate limit reached. Please try again later."
+    },
+    {
+      "id": "3cc5316a-7098-4e0f-a0e6-6a56d998ec17:1775107262068:2:unknown_error",
+      "recordedAt": 1775107262068,
+      "sessionKey": "agent:autonomy:main",
+      "runId": "3cc5316a-7098-4e0f-a0e6-6a56d998ec17",
+      "failureDomain": "mixed",
+      "failureClass": "unknown_error"
+    }
+  ]
+}

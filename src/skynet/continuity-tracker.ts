@@ -16,12 +16,12 @@ export type SkynetContinuityState = {
   continuityScore: number;
 };
 
-function sanitizeSessionKey(sessionKey: string): string {
-  return (sessionKey.trim() || "main").replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 64) || "main";
-}
-
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
+}
+
+function sanitizeSessionKey(sessionKey: string): string {
+  return (sessionKey.trim() || "main").replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 64) || "main";
 }
 
 function resolveContinuityJsonPath(params: { workspaceRoot: string; sessionKey: string }): string {
