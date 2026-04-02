@@ -49,6 +49,24 @@ El benchmark práctico es este:
 
 El trabajo reciente también movió piezas no críticas o demasiado teóricas fuera del hot path hacia [`src/omega/experimental`](./src/omega/experimental), dejando el runtime más claro que en iteraciones anteriores.
 
+## Para Qué Existe `src/skynet/experiments`
+
+[`src/skynet/experiments`](./src/skynet/experiments) es el laboratorio activo de **Skynet Brain Lab**.
+
+Su propósito no es llenar la plataforma de código especulativo. Existe para:
+
+- probar nuevos sustratos cognitivos, arquitecturas no tradicionales e hipótesis físicas/geométricas fuera del runtime estable
+- correr benchmarks falsables antes de promover cualquier mecanismo a `OpenSkyNet` u `Omega`
+- conservar líneas históricas de arquitectura como `V28`, `V67`, `V77` y otros prototipos sin forzarlas a producción
+- separar con claridad dos preguntas:
+  - "¿esta idea crea un mejor cerebro?"
+  - "¿esta idea mejora el runtime productivo?"
+
+Regla práctica:
+
+- si un experimento sigue en `src/skynet/experiments`, todavía es investigación
+- si un mecanismo sobrevive revisión empírica y análisis explícito de costo/beneficio, recién entonces debería transferirse a la plataforma
+
 ## Qué Lo Diferencia de OpenClaw
 
 OpenClaw sigue siendo la plataforma base y aporta mucho del plumbing esencial. OpenSkyNet se distancia del padre en estas zonas:
