@@ -65,7 +65,7 @@ There is also a configurable autonomous benchmark workload defined by [`INTERNAL
 Practical rule:
 
 - if the goal is runtime quality, autonomy quality, recovery, observability, or lower waste, work in `OpenSkyNet`
-- if the goal is a new brain, new substrate, geometric quantization, bifasic/cyborg cognition, or a generalist architecture beyond the current stack, work in `Skynet Brain Lab`
+- if the goal is a new brain, new substrate, geometric quantization, biphasic/cyborg cognition, or a generalist architecture beyond the current stack, work in `Skynet Brain Lab`
 - only promote mechanisms from the lab into the platform after empirical validation and explicit cost/benefit review
 
 Current repo priority:
@@ -122,33 +122,45 @@ OpenClaw is the parent platform and still provides essential plumbing. OpenSkyNe
 - **Runtime sovereignty**: `heartbeat`, `omega_work`, and autonomous execution are moving toward a shared runtime authority instead of rebuilding context independently.
 - **Decision + recovery emphasis**: Omega explicitly models recovery paths, routing preferences, world state, and maintenance pressure.
 - **Concrete Omega spine**: living memory, world model, wake policy, drive resolution, metabolism, corrective control, and executive recovery are now implemented as explicit modules rather than one large conversational blob.
-- **Bifurcation Engine + Research Harvesting**: Skynet now employs parallel decision paths (bifurcation) and autonomous artifact collection (harvesting) to ensure research continuity even across model failures.
+- **Internal project research line**: the `Skynet` benchmark/lab line includes bifurcation-style probes, causal episode harvesting, and other experimental loops without making them mandatory for the core platform runtime.
 - **Internal benchmark workload**: the system can work on a configurable internal project during free cycles, and that workload doubles as an empirical benchmark of autonomy quality.
 - **Empirical posture**: the repo tries to keep architecture tied to tests, state snapshots, logs, and benchmarkable behavior rather than pure narrative.
 
 ## Architecture Snapshot
 
-This is a simplified map of the current runtime shape. It is a guide, not a legal source of truth. For exact behavior, inspect [`src/omega`](./src/omega), [`src/skynet`](./src/skynet), tests, and `docs/architecture/`.
+This is a simplified map of the current runtime shape. It is a guide, not a legal source of truth. The important correction versus older diagrams is that `Omega` is no longer just "Decision Context -> World Model -> Execution". The practical spine now runs through `runtime-authority`, `decision-context`, `policy`, `living-memory`, `world-model`, `execution-controller`, and `heartbeat-core`.
+
+For exact behavior, inspect [`src/omega`](./src/omega), [`src/skynet`](./src/skynet), tests, and `docs/architecture/`.
 
 ```mermaid
 graph TD
     User[User / Cron / Channel Event] --> Gateway[Gateway]
     Gateway --> Agent[Standard Agent Flow]
-    Gateway --> Omega[Omega Runtime Spine]
+    Gateway --> Authority[Omega Runtime Authority]
 
     subgraph Omega Runtime
-        Omega --> Session[Session Authority]
-        Session --> Decision[Decision Context]
-        Session --> World[World Model]
-        Session --> Living[Living Memory]
+        Authority --> Project[Internal Project Profile]
+        Authority --> Decision[Decision Context]
+        Authority --> Living[Living Memory]
+        Authority --> Observer[Runtime Observer / Cognitive Kernel]
 
-        Decision --> Executive[Executive State + Execution Controller]
-        World --> Executive
-        Living --> Executive
+        Decision --> Session[Session Context + Self-Time Kernel]
+        Decision --> Policy[Policy + Wake Policy + Drives]
+        Decision --> Controller[Execution Controller]
+        Controller --> World[World Model]
 
+        Session --> Heartbeat[Heartbeat Core]
+        Policy --> Heartbeat
+        Controller --> Heartbeat
+        World --> Heartbeat
+        Living --> Heartbeat
+        Observer --> Heartbeat
+        Project --> Heartbeat
+
+        Heartbeat --> Executive[Executive / Recovery / Autonomous Executor]
         Executive --> Route[Routing / Recovery / Validation]
         Route --> Work[Tools / Sessions / Subagents]
-        Work --> Metrics[Empirical Metrics + Durable Memory]
+        Work --> Metrics[Operational + Empirical + Durable Memory]
         Metrics --> World
         Metrics --> Living
     end
