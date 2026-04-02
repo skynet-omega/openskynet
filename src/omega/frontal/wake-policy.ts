@@ -1,13 +1,13 @@
 import {
-  deriveFocusedActiveTargets,
-  deriveShadowedGoalTasks,
-  deriveSupersededGoalTasks,
-} from "../session-context.js";
-import {
   deriveOmegaInterruptedGoalRecovery,
   OMEGA_AUTONOMOUS_RECOVERY_MAX_FAILURE_STREAK,
 } from "../recovery.js";
 import type { OmegaSelfTimeKernelState } from "../self-time-kernel.js";
+import {
+  deriveFocusedActiveTargets,
+  deriveShadowedGoalTasks,
+  deriveSupersededGoalTasks,
+} from "../session-context.js";
 
 export type OmegaWakeAction =
   | {
@@ -67,15 +67,6 @@ export function decideOmegaWakeAction(params: {
     return {
       kind: "heartbeat_ok",
       reason: "no_kernel_state",
-    };
-  }
-
-  const staleGoals = kernel.goals.filter((goal) => goal.status === "stale");
-  if (staleGoals.length > 0) {
-    return {
-      kind: "prune_stale_goals",
-      reason: "stale_goal_gc_due",
-      goalTasks: staleGoals.map((goal) => goal.task),
     };
   }
 
@@ -143,6 +134,15 @@ export function decideOmegaWakeAction(params: {
         goalTask: activeGoal.task,
       };
     }
+  }
+
+  const staleGoals = kernel.goals.filter((goal) => goal.status === "stale");
+  if (staleGoals.length > 0) {
+    return {
+      kind: "prune_stale_goals",
+      reason: "stale_goal_gc_due",
+      goalTasks: staleGoals.map((goal) => goal.task),
+    };
   }
 
   return {

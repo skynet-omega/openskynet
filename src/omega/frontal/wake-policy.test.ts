@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { decideOmegaWakeAction } from "./wake-policy.js";
 import type { OmegaSelfTimeKernelState } from "../self-time-kernel.js";
+import { decideOmegaWakeAction } from "./wake-policy.js";
 
 function makeKernel(overrides?: Partial<OmegaSelfTimeKernelState>): OmegaSelfTimeKernelState {
   return {
@@ -154,6 +154,73 @@ describe("omega wake policy", () => {
       kind: "prune_stale_goals",
       reason: "stale_goal_gc_due",
       goalTasks: ["obsolete probe"],
+    });
+  });
+
+  it("prioritizes interrupted-goal recovery over stale-goal garbage collection", () => {
+    const action = decideOmegaWakeAction({
+      kernel: makeKernel({
+        activeGoalId: "goal-1",
+        goals: [
+          makeKernel().goals[0],
+          {
+            ...makeKernel().goals[0],
+            id: "goal-stale",
+            task: "old cleanup",
+            status: "stale",
+            targets: ["workspace/old.py"],
+          },
+        ],
+        tension: {
+          openGoalCount: 1,
+          staleGoalCount: 1,
+          failureStreak: 1,
+          repeatedFailureKinds: ["target_not_touched"],
+          pendingCorrection: true,
+        },
+      }),
+    });
+
+    expect(action).toEqual({
+      kind: "resume_interrupted_goal",
+      reason: "verified_write_failure_after_restart",
+      goalTask: "patch target file",
+      goalTargets: ["workspace/file.py"],
+      failureStreak: 1,
+      suggestedRoute: "sessions_spawn",
+      errorKind: "target_not_touched",
+    });
+  });
+
+  it("prioritizes active-goal review over stale-goal garbage collection", () => {
+    const action = decideOmegaWakeAction({
+      kernel: makeKernel({
+        goals: [
+          {
+            ...makeKernel().goals[0],
+            task: "investigate flaky behavior",
+            targets: [],
+            lastErrorKind: undefined,
+          },
+          {
+            ...makeKernel().goals[0],
+            id: "goal-stale",
+            task: "old cleanup",
+            status: "stale",
+            targets: ["workspace/old.py"],
+          },
+        ],
+        world: {
+          ...makeKernel().world,
+          lastErrorKind: undefined,
+        },
+      }),
+    });
+
+    expect(action).toEqual({
+      kind: "review_active_goal",
+      reason: "verified_failure_requires_followup",
+      goalTask: "investigate flaky behavior",
     });
   });
 
