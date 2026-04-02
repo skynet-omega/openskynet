@@ -5,8 +5,9 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { evaluateInnerDrives } from "./drives.js";
+import type { OmegaWorldStatePersistent } from "../omega-wsp.js";
 import type { OmegaSelfTimeKernelState } from "../self-time-kernel.js";
+import { evaluateInnerDrives, evaluateInnerDrivesFromWSP } from "./drives.js";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -42,6 +43,54 @@ function makeKernel(overrides: Partial<OmegaSelfTimeKernelState> = {}): OmegaSel
       edges: [],
     },
     updatedAt: NOW - 35 * 1000,
+    ...overrides,
+  };
+}
+
+function makeWsp(overrides: Partial<OmegaWorldStatePersistent> = {}): OmegaWorldStatePersistent {
+  return {
+    version: 1,
+    sessionKey: "agent:main:main",
+    createdAt: NOW - 60_000,
+    updatedAt: NOW - 1_000,
+    updateCount: 4,
+    beliefs: [],
+    drives: [
+      {
+        name: "curiosity",
+        setpoint: 0.6,
+        currentLevel: 0.05,
+        error: 0.55,
+        decayRate: 0.02,
+        lastSatisfiedAt: NOW - 60_000,
+      },
+      {
+        name: "integrity",
+        setpoint: 0.8,
+        currentLevel: 0.8,
+        error: 0,
+        decayRate: 0.005,
+        lastSatisfiedAt: NOW - 60_000,
+      },
+      {
+        name: "competence",
+        setpoint: 0.7,
+        currentLevel: 0.4,
+        error: 0.3,
+        decayRate: 0.01,
+        lastSatisfiedAt: NOW - 60_000,
+      },
+      {
+        name: "homeostasis",
+        setpoint: 0.9,
+        currentLevel: 0.5,
+        error: 0.4,
+        decayRate: 0.03,
+        lastSatisfiedAt: NOW - 60_000,
+      },
+    ],
+    tensions: [],
+    causalEdges: [],
     ...overrides,
   };
 }
@@ -345,5 +394,133 @@ describe("evaluateInnerDrives — prioridad de drives", () => {
     const signal = evaluateInnerDrives({ kernel, nowMs: NOW });
     // Homeostasis siempre primero
     expect(signal.kind).toBe("homeostasis");
+  });
+});
+
+describe("evaluateInnerDrivesFromWSP — contextual selection", () => {
+  it("no deja que curiosity tape homeostasis cuando hay activeGoalId", () => {
+    const kernel = makeKernel({
+      activeGoalId: "g1",
+      identity: {
+        continuityId: "x",
+        firstSeenAt: NOW - 45_000,
+        lastSeenAt: NOW - 45_000,
+      },
+    });
+    const signal = evaluateInnerDrivesFromWSP({
+      wsp: makeWsp(),
+      kernel,
+      nowMs: NOW,
+      memoryCandidates: ["memory/ideas.md"],
+    });
+
+    expect(signal.kind).toBe("homeostasis");
+  });
+
+  it("no devuelve idle si la top drive no aplica pero competence sí", () => {
+    const kernel = makeKernel({
+      identity: {
+        continuityId: "x",
+        firstSeenAt: NOW - 20_000,
+        lastSeenAt: NOW - 20_000,
+      },
+    });
+    const signal = evaluateInnerDrivesFromWSP({
+      wsp: makeWsp({
+        drives: [
+          {
+            name: "curiosity",
+            setpoint: 0.6,
+            currentLevel: 0.05,
+            error: 0.55,
+            decayRate: 0.02,
+            lastSatisfiedAt: NOW - 60_000,
+          },
+          {
+            name: "integrity",
+            setpoint: 0.8,
+            currentLevel: 0.8,
+            error: 0,
+            decayRate: 0.005,
+            lastSatisfiedAt: NOW - 60_000,
+          },
+          {
+            name: "competence",
+            setpoint: 0.7,
+            currentLevel: 0.35,
+            error: 0.35,
+            decayRate: 0.01,
+            lastSatisfiedAt: NOW - 60_000,
+          },
+          {
+            name: "homeostasis",
+            setpoint: 0.9,
+            currentLevel: 0.9,
+            error: 0,
+            decayRate: 0.03,
+            lastSatisfiedAt: NOW - 60_000,
+          },
+        ],
+      }),
+      kernel,
+      nowMs: NOW,
+      memoryCandidates: ["memory/ideas.md"],
+    });
+
+    expect(signal.kind).toBe("competence_drive");
+  });
+
+  it("respeta entropy_alert sólo cuando el silencio ya es real", () => {
+    const kernel = makeKernel({
+      activeGoalId: undefined,
+      identity: {
+        continuityId: "x",
+        firstSeenAt: NOW - 40_000,
+        lastSeenAt: NOW - 40_000,
+      },
+    });
+    const signal = evaluateInnerDrivesFromWSP({
+      wsp: makeWsp({
+        drives: [
+          {
+            name: "curiosity",
+            setpoint: 0.6,
+            currentLevel: 0.55,
+            error: 0.05,
+            decayRate: 0.02,
+            lastSatisfiedAt: NOW - 60_000,
+          },
+          {
+            name: "integrity",
+            setpoint: 0.8,
+            currentLevel: 0.1,
+            error: 0.7,
+            decayRate: 0.005,
+            lastSatisfiedAt: NOW - 60_000,
+          },
+          {
+            name: "competence",
+            setpoint: 0.7,
+            currentLevel: 0.7,
+            error: 0,
+            decayRate: 0.01,
+            lastSatisfiedAt: NOW - 60_000,
+          },
+          {
+            name: "homeostasis",
+            setpoint: 0.9,
+            currentLevel: 0.9,
+            error: 0,
+            decayRate: 0.03,
+            lastSatisfiedAt: NOW - 60_000,
+          },
+        ],
+      }),
+      kernel,
+      nowMs: NOW,
+      memoryCandidates: ["memory/ideas.md"],
+    });
+
+    expect(signal.kind).toBe("idle");
   });
 });
