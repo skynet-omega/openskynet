@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { readLatestAssistantReply } from "../agents/tools/agent-step.js";
 import { callGateway } from "../gateway/call.js";
+import { classifyOpenSkynetRuntimeFailure } from "../infra/runtime-failure.js";
 import { collectObservedWriteChanges, createObservedWriteBaseline } from "./observed-write.js";
 import {
   recordOmegaSessionOutcome,
@@ -46,7 +47,8 @@ async function startOmegaAgentRun(params: {
   sendParams: Record<string, unknown>;
   sessionKey: string;
 }): Promise<
-  { ok: true; runId: string } | { ok: false; status: "error"; runId: string; error: string }
+  | { ok: true; runId: string }
+  | { ok: false; status: "error"; runId: string; error: string; errorKind?: string }
 > {
   try {
     const response = await callGateway<{ runId?: string }>({
@@ -59,11 +61,19 @@ async function startOmegaAgentRun(params: {
       runId: typeof response?.runId === "string" && response.runId ? response.runId : params.runId,
     };
   } catch (err) {
+    const error = err instanceof Error ? err.message : typeof err === "string" ? err : "error";
+    const classified = classifyOpenSkynetRuntimeFailure({
+      status: "error",
+      errorText: error,
+    });
     return {
       ok: false,
       status: "error",
       runId: params.runId,
-      error: err instanceof Error ? err.message : typeof err === "string" ? err : "error",
+      error,
+      ...(classified.failureClass !== "unknown_error" && classified.failureClass !== "none"
+        ? { errorKind: classified.failureClass }
+        : {}),
     };
   }
 }
@@ -172,6 +182,7 @@ export async function awaitValidatedOmegaSessionRun(params: {
       : null;
   let terminalFailureStatus: "error" | "timeout" | undefined;
   let terminalFailureError: string | undefined;
+  let terminalFailureErrorKind: string | undefined;
 
   try {
     const wait = await callGateway<{ status?: string; error?: string }>({
@@ -192,10 +203,26 @@ export async function awaitValidatedOmegaSessionRun(params: {
       terminalFailureStatus = "error";
       terminalFailureError = waitError ?? "agent error";
     }
+    if (terminalFailureStatus) {
+      const classified = classifyOpenSkynetRuntimeFailure({
+        status: terminalFailureStatus,
+        errorText: terminalFailureError,
+      });
+      if (classified.failureClass !== "unknown_error" && classified.failureClass !== "none") {
+        terminalFailureErrorKind = classified.failureClass;
+      }
+    }
   } catch (err) {
     terminalFailureError =
       err instanceof Error ? err.message : typeof err === "string" ? err : "agent wait error";
     terminalFailureStatus = terminalFailureError.includes("gateway timeout") ? "timeout" : "error";
+    const classified = classifyOpenSkynetRuntimeFailure({
+      status: terminalFailureStatus,
+      errorText: terminalFailureError,
+    });
+    if (classified.failureClass !== "unknown_error" && classified.failureClass !== "none") {
+      terminalFailureErrorKind = classified.failureClass;
+    }
   }
 
   const { reply, observedChangedFiles, validation, structuredFailure, writeFailure } =
@@ -234,7 +261,8 @@ export async function awaitValidatedOmegaSessionRun(params: {
         ...(validation.structured || validation.write ? { validation } : {}),
       };
     }
-    const failureErrorKind = writeFailure?.errorKind ?? structuredFailure?.errorKind;
+    const failureErrorKind =
+      writeFailure?.errorKind ?? structuredFailure?.errorKind ?? terminalFailureErrorKind;
     await recordOmegaSessionOutcome({
       workspaceRoot: params.workspaceRoot,
       sessionKey: params.sessionKey,
@@ -377,6 +405,7 @@ export async function runValidatedOmegaSessionTask(params: {
       validation: validationSnapshot,
       outcome: {
         status: "error",
+        ...(started.errorKind ? { errorKind: started.errorKind } : {}),
       },
       execution: {
         ...params.execution,

@@ -711,6 +711,53 @@ describe("agent event handler", () => {
     );
   });
 
+  it("preserves an error preview for session.tool result events when verbose is off", () => {
+    const { broadcastToConnIds, sessionEventSubscribers, handler } = createHarness({
+      resolveSessionKeyForRun: () => "session-tool-error",
+    });
+
+    sessionEventSubscribers.subscribe("conn-session");
+
+    handler({
+      runId: "run-session-tool-error",
+      seq: 1,
+      stream: "tool",
+      ts: 1_235,
+      data: {
+        phase: "result",
+        name: "read",
+        toolCallId: "tool-session-error-1",
+        isError: true,
+        result: {
+          details: {
+            status: "error",
+            error: "ENOENT: no such file or directory, access '/missing.txt'",
+          },
+        },
+      },
+    });
+
+    expect(broadcastToConnIds).toHaveBeenCalledTimes(1);
+    expect(broadcastToConnIds).toHaveBeenCalledWith(
+      "session.tool",
+      expect.objectContaining({
+        runId: "run-session-tool-error",
+        sessionKey: "session-tool-error",
+        stream: "tool",
+        ts: 1_235,
+        data: expect.objectContaining({
+          phase: "result",
+          name: "read",
+          toolCallId: "tool-session-error-1",
+          isError: true,
+          error: "ENOENT: no such file or directory, access '/missing.txt'",
+        }),
+      }),
+      new Set(["conn-session"]),
+      { dropIfSlow: true },
+    );
+  });
+
   it("broadcasts fallback events to agent subscribers and node session", () => {
     const { broadcast, broadcastToConnIds, nodeSendToSession, handler } = createHarness({
       resolveSessionKeyForRun: () => "session-fallback",

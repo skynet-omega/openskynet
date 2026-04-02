@@ -71,7 +71,38 @@ describe("runValidatedOmegaSessionTask", () => {
       ok: false,
       status: "timeout",
       error: "timed out",
+      errorKind: "provider_timeout",
       runId: "run-timeout",
+    });
+  });
+
+  it("classifies session lock waits as environmental instead of opaque errors", async () => {
+    callGatewayMock.mockImplementation(async (opts: unknown) => {
+      const request = opts as { method?: string };
+      if (request.method === "agent") {
+        return { runId: "run-locked", status: "accepted" };
+      }
+      if (request.method === "agent.wait") {
+        return { status: "error", error: "session file locked (timeout 30000ms): main lock" };
+      }
+      if (request.method === "chat.history") {
+        return { messages: [] };
+      }
+      throw new Error(`unexpected method: ${String(request.method)}`);
+    });
+
+    const result = await runValidatedOmegaSessionTask({
+      sendParams: { message: "x", sessionKey: "main" },
+      sessionKey: "main",
+      timeoutMs: 1_000,
+      workspaceRoot,
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      status: "error",
+      errorKind: "session_lock",
+      runId: "run-locked",
     });
   });
 

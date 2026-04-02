@@ -108,6 +108,28 @@ function appendUniqueSuffix(base: string, suffix: string): string {
   return base + suffix;
 }
 
+function extractToolErrorPreview(result: unknown): string | undefined {
+  if (!result || typeof result !== "object") {
+    return undefined;
+  }
+  const record = result as Record<string, unknown>;
+  const details =
+    record.details && typeof record.details === "object" && !Array.isArray(record.details)
+      ? (record.details as Record<string, unknown>)
+      : undefined;
+  const candidates = [details?.error, details?.message, record.error, record.message];
+  for (const candidate of candidates) {
+    if (typeof candidate !== "string") {
+      continue;
+    }
+    const normalized = candidate.replace(/\s+/g, " ").trim();
+    if (normalized) {
+      return normalized.length > 240 ? `${normalized.slice(0, 239)}…` : normalized;
+    }
+  }
+  return undefined;
+}
+
 function resolveMergedAssistantText(params: {
   previousText: string;
   nextText: string;
@@ -663,8 +685,15 @@ export function createAgentEventHandler({
       isToolEvent && toolVerbose !== "full"
         ? (() => {
             const data = evt.data ? { ...evt.data } : {};
+            const errorPreview =
+              typeof data.error === "string" && data.error.trim()
+                ? data.error.trim()
+                : extractToolErrorPreview(data.result);
             delete data.result;
             delete data.partialResult;
+            if (errorPreview && typeof data.error !== "string") {
+              data.error = errorPreview;
+            }
             return sessionKey
               ? { ...eventForClients, sessionKey, data }
               : { ...eventForClients, data };
