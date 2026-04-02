@@ -9,9 +9,18 @@ type MockRegistryToolEntry = {
 };
 
 const loadOpenClawPluginsMock = vi.fn();
+const getActivePluginRegistryMock = vi.fn();
+const getActivePluginRegistryKeyMock = vi.fn();
 
 vi.mock("./loader.js", () => ({
+  buildPluginRegistryCacheKey: ({ workspaceDir }: { workspaceDir?: string }) =>
+    `cache:${workspaceDir ?? ""}`,
   loadOpenClawPlugins: (params: unknown) => loadOpenClawPluginsMock(params),
+}));
+
+vi.mock("./runtime.js", () => ({
+  getActivePluginRegistry: () => getActivePluginRegistryMock(),
+  getActivePluginRegistryKey: () => getActivePluginRegistryKeyMock(),
 }));
 
 function makeTool(name: string) {
@@ -92,6 +101,10 @@ function resolveOptionalDemoTools(toolAllowlist?: string[]) {
 describe("resolvePluginTools optional tools", () => {
   beforeEach(() => {
     loadOpenClawPluginsMock.mockClear();
+    getActivePluginRegistryMock.mockReset();
+    getActivePluginRegistryKeyMock.mockReset();
+    getActivePluginRegistryMock.mockReturnValue(null);
+    getActivePluginRegistryKeyMock.mockReturnValue(null);
   });
 
   it("skips optional tools without explicit allowlist", () => {
@@ -169,5 +182,33 @@ describe("resolvePluginTools optional tools", () => {
         env,
       }),
     );
+  });
+
+  it("reuses the active plugin registry when the cache key matches", () => {
+    const registry = {
+      tools: [
+        {
+          pluginId: "optional-demo",
+          optional: false,
+          source: "/tmp/optional-demo.js",
+          factory: () => makeTool("optional_tool"),
+        },
+      ],
+      diagnostics: [] as Array<{
+        level: string;
+        pluginId: string;
+        source: string;
+        message: string;
+      }>,
+    };
+    getActivePluginRegistryKeyMock.mockReturnValue("cache:/tmp");
+    getActivePluginRegistryMock.mockReturnValue(registry);
+
+    const tools = resolvePluginTools({
+      context: createContext() as never,
+    });
+
+    expect(tools.map((tool) => tool.name)).toEqual(["optional_tool"]);
+    expect(loadOpenClawPluginsMock).not.toHaveBeenCalled();
   });
 });

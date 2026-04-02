@@ -1399,6 +1399,7 @@ export async function runEmbeddedAttempt(
   let restoreSkillEnv: (() => void) | undefined;
   process.chdir(effectiveWorkspace);
   try {
+    const promptPreparationStartedAt = Date.now();
     const { shouldLoadSkillEntries, skillEntries } = resolveEmbeddedRunSkillEntries({
       workspaceDir: effectiveWorkspace,
       config: params.config,
@@ -1414,14 +1415,17 @@ export async function runEmbeddedAttempt(
           config: params.config,
         });
 
+    const skillsStartedAt = Date.now();
     const skillsPrompt = resolveSkillsPromptForRun({
       skillsSnapshot: params.skillsSnapshot,
       entries: shouldLoadSkillEntries ? skillEntries : undefined,
       config: params.config,
       workspaceDir: effectiveWorkspace,
     });
+    const skillsMs = Date.now() - skillsStartedAt;
 
     const sessionLabel = params.sessionKey ?? params.sessionId;
+    const bootstrapStartedAt = Date.now();
     const { bootstrapFiles: hookAdjustedBootstrapFiles, contextFiles } =
       await resolveBootstrapContextForRun({
         workspaceDir: effectiveWorkspace,
@@ -1454,6 +1458,7 @@ export async function runEmbeddedAttempt(
     )
       ? ["Reminder: commit your changes in this workspace after edits."]
       : undefined;
+    const bootstrapMs = Date.now() - bootstrapStartedAt;
 
     const agentDir = params.agentDir ?? resolveOpenClawAgentDir();
 
@@ -1475,6 +1480,7 @@ export async function runEmbeddedAttempt(
     let yieldAbortSettled: Promise<void> | null = null;
     // Check if the model supports native image input
     const modelHasVision = params.model.input?.includes("image") ?? false;
+    const toolsStartedAt = Date.now();
     const toolsRaw = params.disableTools
       ? []
       : createOpenClawCodingTools({
@@ -1534,6 +1540,7 @@ export async function runEmbeddedAttempt(
       tools: toolsEnabled ? toolsRaw : [],
       provider: params.provider,
     });
+    const toolsMs = Date.now() - toolsStartedAt;
     const clientTools = toolsEnabled ? params.clientTools : undefined;
     const allowedToolNames = collectAllowedToolNames({
       tools,
@@ -1610,6 +1617,7 @@ export async function runEmbeddedAttempt(
       agentId: sessionAgentId,
     });
     const defaultModelLabel = `${defaultModelRef.provider}/${defaultModelRef.model}`;
+    const runtimeInfoStartedAt = Date.now();
     const { runtimeInfo, userTimezone, userTime, userTimeFormat } = buildSystemPromptParams({
       config: params.config,
       agentId: sessionAgentId,
@@ -1628,17 +1636,21 @@ export async function runEmbeddedAttempt(
         channelActions,
       },
     });
+    const runtimeInfoMs = Date.now() - runtimeInfoStartedAt;
     const isDefaultAgent = sessionAgentId === defaultAgentId;
     const promptMode = resolvePromptModeForSession(params.sessionKey);
+    const docsPathStartedAt = Date.now();
     const docsPath = await resolveOpenClawDocsPath({
       workspaceDir: effectiveWorkspace,
       argv1: process.argv[1],
       cwd: process.cwd(),
       moduleUrl: import.meta.url,
     });
+    const docsPathMs = Date.now() - docsPathStartedAt;
     const ttsHint = params.config ? buildTtsSystemPromptHint(params.config) : undefined;
     const ownerDisplay = resolveOwnerDisplaySetting(params.config);
 
+    const systemPromptBuildStartedAt = Date.now();
     const appendPrompt = buildEmbeddedSystemPrompt({
       workspaceDir: effectiveWorkspace,
       defaultThinkLevel: params.thinkLevel,
@@ -1670,6 +1682,7 @@ export async function runEmbeddedAttempt(
       bootstrapTruncationWarningLines: bootstrapPromptWarning.lines,
       memoryCitationsMode: params.config?.memory?.citations,
     });
+    const systemPromptBuildMs = Date.now() - systemPromptBuildStartedAt;
     const systemPromptReport = buildSystemPromptReport({
       source: "run",
       generatedAt: Date.now(),
@@ -1692,6 +1705,15 @@ export async function runEmbeddedAttempt(
         });
         return { mode: runtime.mode, sandboxed: runtime.sandboxed };
       })(),
+      preparation: {
+        totalMs: Date.now() - promptPreparationStartedAt,
+        skillsMs,
+        bootstrapMs,
+        toolsMs,
+        runtimeInfoMs,
+        docsPathMs,
+        systemPromptBuildMs,
+      },
       systemPrompt: appendPrompt,
       bootstrapFiles: hookAdjustedBootstrapFiles,
       injectedFiles: contextFiles,

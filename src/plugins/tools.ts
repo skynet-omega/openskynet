@@ -2,8 +2,9 @@ import { normalizeToolName } from "../agents/tool-policy.js";
 import type { AnyAgentTool } from "../agents/tools/common.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { applyTestPluginDefaults, normalizePluginsConfig } from "./config-state.js";
-import { loadOpenClawPlugins } from "./loader.js";
+import { buildPluginRegistryCacheKey, loadOpenClawPlugins } from "./loader.js";
 import { createPluginLoaderLogger } from "./logger.js";
+import { getActivePluginRegistry, getActivePluginRegistryKey } from "./runtime.js";
 import type { OpenClawPluginToolContext } from "./types.js";
 
 const log = createSubsystemLogger("plugins");
@@ -58,12 +59,21 @@ export function resolvePluginTools(params: {
     return [];
   }
 
-  const registry = loadOpenClawPlugins({
+  const expectedRegistryKey = buildPluginRegistryCacheKey({
     config: effectiveConfig,
     workspaceDir: params.context.workspaceDir,
     env,
-    logger: createPluginLoaderLogger(log),
   });
+  const activeRegistry =
+    getActivePluginRegistryKey() === expectedRegistryKey ? getActivePluginRegistry() : null;
+  const registry =
+    activeRegistry ??
+    loadOpenClawPlugins({
+      config: effectiveConfig,
+      workspaceDir: params.context.workspaceDir,
+      env,
+      logger: createPluginLoaderLogger(log),
+    });
 
   const tools: AnyAgentTool[] = [];
   const existing = params.existingToolNames ?? new Set<string>();

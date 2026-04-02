@@ -22,18 +22,30 @@ export type CommandsSystemPromptBundle = {
   bootstrapFiles: WorkspaceBootstrapFile[];
   injectedFiles: EmbeddedContextFile[];
   sandboxRuntime: ReturnType<typeof resolveSandboxRuntimeStatus>;
+  preparation: {
+    totalMs: number;
+    skillsMs?: number;
+    bootstrapMs?: number;
+    toolsMs?: number;
+    runtimeInfoMs?: number;
+    systemPromptBuildMs?: number;
+  };
 };
 
 export async function resolveCommandsSystemPromptBundle(
   params: HandleCommandsParams,
 ): Promise<CommandsSystemPromptBundle> {
   const workspaceDir = params.workspaceDir;
+  const preparationStartedAt = Date.now();
+  const bootstrapStartedAt = Date.now();
   const { bootstrapFiles, contextFiles: injectedFiles } = await resolveBootstrapContextForRun({
     workspaceDir,
     config: params.cfg,
     sessionKey: params.sessionKey,
     sessionId: params.sessionEntry?.sessionId,
   });
+  const bootstrapMs = Date.now() - bootstrapStartedAt;
+  const skillsStartedAt = Date.now();
   const skillsSnapshot = (() => {
     try {
       return buildWorkspaceSkillSnapshot(workspaceDir, {
@@ -45,11 +57,13 @@ export async function resolveCommandsSystemPromptBundle(
       return { prompt: "", skills: [], resolvedSkills: [] };
     }
   })();
+  const skillsMs = Date.now() - skillsStartedAt;
   const skillsPrompt = skillsSnapshot.prompt ?? "";
   const sandboxRuntime = resolveSandboxRuntimeStatus({
     cfg: params.cfg,
     sessionKey: params.ctx.SessionKey ?? params.sessionKey,
   });
+  const toolsStartedAt = Date.now();
   const tools = (() => {
     try {
       return createOpenClawCodingTools({
@@ -70,6 +84,7 @@ export async function resolveCommandsSystemPromptBundle(
       return [];
     }
   })();
+  const toolsMs = Date.now() - toolsStartedAt;
   const toolSummaries = buildToolSummaryMap(tools);
   const toolNames = tools.map((t) => t.name);
   const { sessionAgentId } = resolveSessionAgentIds({
@@ -82,6 +97,7 @@ export async function resolveCommandsSystemPromptBundle(
     agentId: sessionAgentId,
   });
   const defaultModelLabel = `${defaultModelRef.provider}/${defaultModelRef.model}`;
+  const runtimeInfoStartedAt = Date.now();
   const { runtimeInfo, userTimezone, userTime, userTimeFormat } = buildSystemPromptParams({
     config: params.cfg,
     agentId: sessionAgentId,
@@ -96,6 +112,7 @@ export async function resolveCommandsSystemPromptBundle(
       defaultModel: defaultModelLabel,
     },
   });
+  const runtimeInfoMs = Date.now() - runtimeInfoStartedAt;
   const sandboxInfo = sandboxRuntime.sandboxed
     ? {
         enabled: true,
@@ -109,6 +126,7 @@ export async function resolveCommandsSystemPromptBundle(
     : { enabled: false };
   const ttsHint = params.cfg ? buildTtsSystemPromptHint(params.cfg) : undefined;
 
+  const systemPromptBuildStartedAt = Date.now();
   const systemPrompt = buildAgentSystemPrompt({
     workspaceDir,
     defaultThinkLevel: params.resolvedThinkLevel,
@@ -131,6 +149,22 @@ export async function resolveCommandsSystemPromptBundle(
     sandboxInfo,
     memoryCitationsMode: params.cfg?.memory?.citations,
   });
+  const systemPromptBuildMs = Date.now() - systemPromptBuildStartedAt;
 
-  return { systemPrompt, tools, skillsPrompt, bootstrapFiles, injectedFiles, sandboxRuntime };
+  return {
+    systemPrompt,
+    tools,
+    skillsPrompt,
+    bootstrapFiles,
+    injectedFiles,
+    sandboxRuntime,
+    preparation: {
+      totalMs: Date.now() - preparationStartedAt,
+      skillsMs,
+      bootstrapMs,
+      toolsMs,
+      runtimeInfoMs,
+      systemPromptBuildMs,
+    },
+  };
 }

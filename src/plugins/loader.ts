@@ -236,6 +236,22 @@ function buildCacheKey(params: {
   })}`;
 }
 
+export function buildPluginRegistryCacheKey(params: {
+  config?: OpenClawConfig;
+  workspaceDir?: string;
+  env?: NodeJS.ProcessEnv;
+}): string {
+  const env = params.env ?? process.env;
+  const cfg = applyTestPluginDefaults(params.config ?? {}, env);
+  const normalized = normalizePluginsConfig(cfg.plugins);
+  return buildCacheKey({
+    workspaceDir: params.workspaceDir,
+    plugins: normalized,
+    installs: cfg.plugins?.installs,
+    env,
+  });
+}
+
 function validatePluginConfig(params: {
   schema?: Record<string, unknown>;
   cacheKey?: string;

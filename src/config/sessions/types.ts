@@ -384,6 +384,15 @@ export type SessionSystemPromptReport = {
     mode?: string;
     sandboxed?: boolean;
   };
+  preparation?: {
+    totalMs: number;
+    skillsMs?: number;
+    bootstrapMs?: number;
+    toolsMs?: number;
+    runtimeInfoMs?: number;
+    docsPathMs?: number;
+    systemPromptBuildMs?: number;
+  };
   systemPrompt: {
     chars: number;
     projectContextChars: number;

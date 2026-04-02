@@ -82,6 +82,39 @@ describe("buildSystemPromptReport", () => {
     expect(report.bootstrapTotalMaxChars).toBe(22_222);
   });
 
+  it("includes prompt preparation timings when provided", () => {
+    const file = makeBootstrapFile({ path: "/tmp/workspace/policies/AGENTS.md" });
+    const report = buildSystemPromptReport({
+      source: "run",
+      generatedAt: 0,
+      bootstrapMaxChars: 20_000,
+      systemPrompt: "system",
+      bootstrapFiles: [file],
+      injectedFiles: [{ path: "AGENTS.md", content: "trimmed" }],
+      skillsPrompt: "",
+      tools: [],
+      preparation: {
+        totalMs: 321,
+        skillsMs: 12,
+        bootstrapMs: 34,
+        toolsMs: 56,
+        runtimeInfoMs: 7,
+        docsPathMs: 8,
+        systemPromptBuildMs: 9,
+      },
+    });
+
+    expect(report.preparation).toEqual({
+      totalMs: 321,
+      skillsMs: 12,
+      bootstrapMs: 34,
+      toolsMs: 56,
+      runtimeInfoMs: 7,
+      docsPathMs: 8,
+      systemPromptBuildMs: 9,
+    });
+  });
+
   it("reports injectedChars=0 when injected file does not match by path or basename", () => {
     const file = makeBootstrapFile({ path: "/tmp/workspace/policies/AGENTS.md" });
     const report = makeReport({

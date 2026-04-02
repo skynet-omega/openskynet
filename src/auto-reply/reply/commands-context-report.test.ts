@@ -32,6 +32,15 @@ function makeParams(
         bootstrapMaxChars: options?.omitBootstrapLimits ? undefined : 20_000,
         bootstrapTotalMaxChars: options?.omitBootstrapLimits ? undefined : 150_000,
         sandbox: { mode: "off", sandboxed: false },
+        preparation: {
+          totalMs: 123,
+          skillsMs: 11,
+          bootstrapMs: 22,
+          toolsMs: 33,
+          runtimeInfoMs: 4,
+          docsPathMs: 5,
+          systemPromptBuildMs: 6,
+        },
         systemPrompt: {
           chars: 1_000,
           projectContextChars: 500,
@@ -88,5 +97,12 @@ describe("buildContextReply", () => {
     expect(result.text).toContain("Bootstrap max/file: 20,000 chars");
     expect(result.text).toContain("Bootstrap max/total: 150,000 chars");
     expect(result.text).not.toContain("Bootstrap max/file: ? chars");
+  });
+
+  it("shows prompt preparation timings in detail mode when available", async () => {
+    const result = await buildContextReply(makeParams("/context detail", false));
+    expect(result.text).toContain("Prompt prep total: 123 ms");
+    expect(result.text).toContain("- bootstrap/context: 22 ms");
+    expect(result.text).toContain("- system prompt build: 6 ms");
   });
 });

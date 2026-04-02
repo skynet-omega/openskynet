@@ -21,6 +21,10 @@ function formatCharsAndTokens(chars: number): string {
   return `${formatInt(chars)} chars (~${formatInt(estimateTokensFromChars(chars))} tok)`;
 }
 
+function formatDurationMs(ms: number): string {
+  return `${formatInt(ms)} ms`;
+}
+
 function parseContextArgs(commandBodyNormalized: string): string {
   if (commandBodyNormalized === "/context") {
     return "";
@@ -52,8 +56,15 @@ async function resolveContextReport(
 
   const bootstrapMaxChars = resolveBootstrapMaxChars(params.cfg);
   const bootstrapTotalMaxChars = resolveBootstrapTotalMaxChars(params.cfg);
-  const { systemPrompt, tools, skillsPrompt, bootstrapFiles, injectedFiles, sandboxRuntime } =
-    await resolveCommandsSystemPromptBundle(params);
+  const {
+    systemPrompt,
+    tools,
+    skillsPrompt,
+    bootstrapFiles,
+    injectedFiles,
+    sandboxRuntime,
+    preparation,
+  } = await resolveCommandsSystemPromptBundle(params);
 
   return buildSystemPromptReport({
     source: "estimate",
@@ -66,6 +77,7 @@ async function resolveContextReport(
     bootstrapMaxChars,
     bootstrapTotalMaxChars,
     sandbox: { mode: sandboxRuntime.mode, sandboxed: sandboxRuntime.sandboxed },
+    preparation,
     systemPrompt,
     bootstrapFiles,
     injectedFiles,
@@ -141,6 +153,18 @@ export async function buildContextReply(params: HandleCommandsParams): Promise<R
     ? `Tools: ${formatNameList(toolNames, 30)}`
     : "Tools: (none)";
   const systemPromptLine = `System prompt (${report.source}): ${formatCharsAndTokens(report.systemPrompt.chars)} (Project Context ${formatCharsAndTokens(report.systemPrompt.projectContextChars)})`;
+  const preparation = report.preparation;
+  const prepLines = preparation
+    ? [
+        `Prompt prep total: ${formatDurationMs(preparation.totalMs)}`,
+        `- skills: ${formatDurationMs(preparation.skillsMs ?? 0)}`,
+        `- bootstrap/context: ${formatDurationMs(preparation.bootstrapMs ?? 0)}`,
+        `- tools: ${formatDurationMs(preparation.toolsMs ?? 0)}`,
+        `- runtime info: ${formatDurationMs(preparation.runtimeInfoMs ?? 0)}`,
+        `- docs path: ${formatDurationMs(preparation.docsPathMs ?? 0)}`,
+        `- system prompt build: ${formatDurationMs(preparation.systemPromptBuildMs ?? 0)}`,
+      ]
+    : [];
   const workspaceLabel = report.workspaceDir ?? params.workspaceDir;
   const bootstrapMaxChars =
     typeof report.bootstrapMaxChars === "number" &&
@@ -200,6 +224,7 @@ export async function buildContextReply(params: HandleCommandsParams): Promise<R
     `Bootstrap max/total: ${bootstrapTotalLabel}`,
     sandboxLine,
     systemPromptLine,
+    ...(prepLines.length ? ["", ...prepLines] : []),
     ...(bootstrapWarningLines.length ? ["", ...bootstrapWarningLines] : []),
     "",
     "Injected workspace files:",
