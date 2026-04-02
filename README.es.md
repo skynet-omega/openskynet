@@ -41,24 +41,17 @@ Mirrors públicos y contacto:
 
 ## Dirección Actual
 
-OpenSkyNet debe leerse hoy como dos líneas explícitas de trabajo:
+OpenSkyNet hoy tiene tres capas separadas con bastante más claridad:
 
-- **OpenSkyNet**: la plataforma misma. Incluye gateway, sesiones, herramientas, canales, cron, UI y el spine runtime de `Omega` para memoria, routing, recuperación y control ejecutivo.
-- **Skynet Brain Lab**: la línea de investigación separada en [`src/skynet`](./src/skynet) para buscar un sustrato cognitivo nuevo más allá del agente centrado en LLM.
+- **Gateway / plataforma agente**: canales, sesiones, herramientas, cron, UI y la base operativa heredada de OpenClaw.
+- **Runtime Omega**: el spine experimental principal para contexto de decisión, recuperación, routing, despacho ejecutivo, world model y memoria estructurada.
+- **Proyecto interno benchmark**: una carga de trabajo autónoma configurable mediante [`INTERNAL_PROJECT.json`](./INTERNAL_PROJECT.json). Por defecto ese proyecto es `Skynet`, pero no es la identidad de OpenSkyNet y puede reemplazarse por otro dominio.
 
-También existe una carga de trabajo autónoma configurable mediante [`INTERNAL_PROJECT.json`](./INTERNAL_PROJECT.json). Por defecto ese proyecto es `Skynet`, pero ese archivo define un benchmark interno de la plataforma, no la identidad completa del repositorio.
+Operativamente, el repo igual se trabaja con una directiva de dos líneas:
 
-Regla práctica:
-
-- si la meta es calidad del runtime, autonomía, recuperación, observabilidad o menor desperdicio, el trabajo va en `OpenSkyNet`
-- si la meta es un cerebro nuevo, un sustrato nuevo, cuantización geométrica, cognición bifásica/cyborg o una arquitectura generalista distinta al stack actual, el trabajo va en `Skynet Brain Lab`
+- `OpenSkyNet` = plataforma/runtime/tooling
+- `Skynet Brain Lab` = la línea de investigación separada en [`src/skynet`](./src/skynet) para buscar un sustrato cognitivo nuevo más allá del agente centrado en LLM
 - sólo deben promoverse mecanismos del lab a la plataforma después de validación empírica y revisión explícita de costo/beneficio
-
-Prioridad actual del repo:
-
-- `OpenSkyNet` ya está lo bastante estable como para pausar casi todo el trabajo arquitectónico ahí
-- sólo bugs operativos o de continuidad justifican tocar la plataforma ahora
-- la exploración activa debe moverse a `Skynet Brain Lab`
 
 El benchmark práctico es este:
 
