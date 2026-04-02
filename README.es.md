@@ -8,6 +8,26 @@ _Lee la versión por defecto en [English](README.md)._
 
 No está planteado como otro contenedor de "chat con herramientas". La meta central es convertir el runtime del asistente en algo más sólido entre sesiones: mejor continuidad de estado, mejor recuperación tras fallos, mejor routing y mejor trabajo autónomo de largo plazo.
 
+## Estado Experimental
+
+Este repositorio es **experimental**.
+
+Está pensado para:
+
+- funcionalidad de frontera
+- investigación en autonomía
+- experimentación sobre el runtime
+- exploración de Brain Lab en [`src/skynet`](./src/skynet)
+
+No está planteado como objetivo de despliegue productivo.
+
+Expectativa práctica:
+
+- la funcionalidad y la iteración empírica tienen prioridad sobre el hardening productivo
+- la arquitectura puede cambiar de forma agresiva
+- los subsistemas experimentales pueden estar incompletos, ser inestables o seguir deliberadamente ásperos
+- si alguien lo despliega en un entorno sensible, esa decisión corre por su cuenta, no por una promesa del proyecto
+
 ## Repositorio
 
 El desarrollo activo ocurre en:

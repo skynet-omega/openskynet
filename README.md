@@ -22,6 +22,26 @@ _Read this in [Spanish (Español)](README.es.md)._
 
 It is not positioned as a generic "chat with tools" shell. The core goal is to turn an assistant runtime into something more robust across sessions: better state continuity, better recovery after failure, better routing, and better long-horizon autonomous work.
 
+## Experimental Status
+
+This repository is **experimental**.
+
+It is intended for:
+
+- frontier functionality
+- autonomy research
+- runtime experimentation
+- Brain Lab exploration under [`src/skynet`](./src/skynet)
+
+It is **not** positioned as a production deployment target.
+
+Practical expectation:
+
+- functionality and empirical iteration take priority over production hardening
+- architecture may change aggressively
+- experimental subsystems may be incomplete, unstable, or intentionally rough around the edges
+- if you deploy it in a sensitive environment, that is your responsibility, not a promise of the project
+
 ## Repository
 
 Active development happens at:
