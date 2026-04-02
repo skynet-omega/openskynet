@@ -13,18 +13,54 @@ It is not positioned as a generic "chat with tools" shell. The core goal is to t
 Active development happens at:
 [github.com/skynet-omega/openskynet](https://github.com/skynet-omega/openskynet)
 
+Public mirrors and contact:
+
+- GitHub: [github.com/skynet-omega/openskynet](https://github.com/skynet-omega/openskynet)
+- Hugging Face mirror: [huggingface.co/Darochin/openskynet](https://huggingface.co/Darochin/openskynet)
+- Contact: [gonzalo_daroch@hotmail.com](mailto:gonzalo_daroch@hotmail.com)
+
 ## Current Direction
 
-OpenSkyNet now has three clearly separated layers:
+OpenSkyNet should be read as two explicit lines of work:
 
-- **Gateway / agent platform**: channels, sessions, tools, cron, UI, and the operational shell inherited from OpenClaw.
-- **Omega runtime**: the main experimental spine for decision context, recovery, routing, executive dispatch, world modeling, and structured memory.
-- **Internal project benchmark**: a configurable autonomous background project defined by [`INTERNAL_PROJECT.json`](./INTERNAL_PROJECT.json). By default that project is `Skynet`, but it is not the identity of OpenSkyNet and can be replaced by another domain.
+- **OpenSkyNet**: the platform itself. This includes the gateway, sessions, tools, channels, cron, UI, and the `Omega` runtime spine for memory, routing, recovery, and executive control.
+- **Skynet Brain Lab**: the separate research line under [`src/skynet`](./src/skynet) for searching a new cognitive substrate beyond a plain LLM-centric agent.
+
+There is also a configurable autonomous benchmark workload defined by [`INTERNAL_PROJECT.json`](./INTERNAL_PROJECT.json). By default that workload is `Skynet`, but that file is a benchmark target for the platform, not the identity of the whole repository.
+
+Practical rule:
+
+- if the goal is runtime quality, autonomy quality, recovery, observability, or lower waste, work in `OpenSkyNet`
+- if the goal is a new brain, new substrate, geometric quantization, bifasic/cyborg cognition, or a generalist architecture beyond the current stack, work in `Skynet Brain Lab`
+- only promote mechanisms from the lab into the platform after empirical validation and explicit cost/benefit review
+
+Current repo priority:
+
+- `OpenSkyNet` is stable enough that new architectural work should mostly pause there
+- only operational continuity / reliability bugs should justify touching the platform now
+- active exploration should move to `Skynet Brain Lab`
 
 The practical benchmark is simple:
 
 - if OpenSkyNet can sustain useful autonomous work on an internal project over time, it is becoming a better agent than the parent runtime
 - if it cannot, the architecture still needs work
+
+## Omega Today
+
+`Omega` is no longer just a name for vague cognition experiments. It already has concrete runtime responsibilities under [`src/omega`](./src/omega):
+
+- [`runtime-authority.ts`](./src/omega/runtime-authority.ts): merges present-state signals into a shared runtime authority used by heartbeat, executive work, and autonomy.
+- [`living-memory.ts`](./src/omega/living-memory.ts) and [`living-memory-events.ts`](./src/omega/living-memory-events.ts): maintain structured present state plus a durable event history under `.openskynet/living-memory/`.
+- [`world-model.ts`](./src/omega/world-model.ts): derives routing pressure, locality, recovery preference, internal-project pressure, and executive context from current runtime state.
+- [`session-context.ts`](./src/omega/session-context.ts): keeps timeline, validation, self-time kernel, and session outcome state coherent across turns.
+- [`execution-controller.ts`](./src/omega/execution-controller.ts): chooses corrective control and recovery posture instead of leaving failure handling as ad hoc prompt glue.
+- [`heartbeat-core.ts`](./src/omega/heartbeat-core.ts): centralizes wake reasoning, runtime authority loading, corrective framing, and executive wake logic.
+- [`frontal/wake-policy.ts`](./src/omega/frontal/wake-policy.ts): prioritizes interrupted or active work above stale-goal cleanup.
+- [`inner-life/drives.ts`](./src/omega/inner-life/drives.ts): resolves persistent motivational pressure with contextual drive selection instead of raw error ranking.
+- [`sparse-metabolism.ts`](./src/omega/sparse-metabolism.ts) and [`jepa-drive-enhancement.ts`](./src/omega/jepa-drive-enhancement.ts): add lighter-weight surprise-aware gating so expensive components wake up more selectively.
+- [`cognitive-kernel.ts`](./src/omega/cognitive-kernel.ts): loads a lab artifact only as a gated soft prior, not as a sovereign replacement for the runtime.
+
+Recent work also pushed non-critical or still-theoretical pieces out of the hot path into [`src/omega/experimental`](./src/omega/experimental), so the platform runtime is clearer than earlier iterations.
 
 ## What Is Different From OpenClaw
 
@@ -33,6 +69,7 @@ OpenClaw is the parent platform and still provides essential plumbing. OpenSkyNe
 - **Structured living memory**: present state is no longer supposed to come from plain text diaries alone. Runtime state lives in `.openskynet/living-memory/` and related structured stores.
 - **Runtime sovereignty**: `heartbeat`, `omega_work`, and autonomous execution are moving toward a shared runtime authority instead of rebuilding context independently.
 - **Decision + recovery emphasis**: Omega explicitly models recovery paths, routing preferences, world state, and maintenance pressure.
+- **Concrete Omega spine**: living memory, world model, wake policy, drive resolution, metabolism, corrective control, and executive recovery are now implemented as explicit modules rather than one large conversational blob.
 - **Bifurcation Engine + Research Harvesting**: Skynet now employs parallel decision paths (bifurcation) and autonomous artifact collection (harvesting) to ensure research continuity even across model failures.
 - **Internal benchmark workload**: the system can work on a configurable internal project during free cycles, and that workload doubles as an empirical benchmark of autonomy quality.
 - **Empirical posture**: the repo tries to keep architecture tied to tests, state snapshots, logs, and benchmarkable behavior rather than pure narrative.
@@ -75,8 +112,19 @@ Requirements:
 - Node.js `22+`
 - `pnpm`
 
+Clone from GitHub:
+
 ```bash
 git clone https://github.com/skynet-omega/openskynet.git
+cd openskynet
+pnpm install
+pnpm build
+```
+
+Or clone from the Hugging Face mirror:
+
+```bash
+git clone https://huggingface.co/Darochin/openskynet
 cd openskynet
 pnpm install
 pnpm build
@@ -85,6 +133,7 @@ pnpm build
 Notes:
 
 - A clean install works on Node `22.22.1+` and `pnpm 10.23.0+`.
+- The GitHub repository is the primary development remote. The Hugging Face repository is a public mirror for download and backup.
 - Some optional native integrations use `pnpm approve-builds` on fresh installs. If you plan to use GPU TensorFlow, native audio, or other native add-ons, run:
 
 ```bash
@@ -148,6 +197,7 @@ That project can be:
 - any other long-running workload the user wants
 
 By default this repository uses `Skynet` as that benchmark project, but the platform should not depend on that name to remain useful.
+The benchmark can help measure whether the platform is getting better, but it should not collapse the distinction between `OpenSkyNet` and `Skynet Brain Lab`.
 
 ## Observability
 
@@ -183,6 +233,20 @@ OpenSkyNet is shareable now, but it is still a technical project:
 - Experimental `Omega` and `Skynet` subsystems are included, but you can use the platform without enabling every experimental path.
 
 If your goal is to evaluate the platform, start with the gateway, dashboard, TUI, and one channel. Add GPU, TTS, browser control, or experimental cognition only when you actually need them.
+
+## Support And Mirrors
+
+If you want the canonical development history, issues, and code review flow, use GitHub:
+
+- [github.com/skynet-omega/openskynet](https://github.com/skynet-omega/openskynet)
+
+If you want a public mirror for direct download or archival, use Hugging Face:
+
+- [huggingface.co/Darochin/openskynet](https://huggingface.co/Darochin/openskynet)
+
+For direct contact:
+
+- [gonzalo_daroch@hotmail.com](mailto:gonzalo_daroch@hotmail.com)
 
 ## Acknowledgments
 

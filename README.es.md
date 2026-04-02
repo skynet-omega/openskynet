@@ -13,6 +13,12 @@ No está planteado como otro contenedor de "chat con herramientas". La meta cent
 El desarrollo activo ocurre en:
 [github.com/skynet-omega/openskynet](https://github.com/skynet-omega/openskynet)
 
+Mirrors públicos y contacto:
+
+- GitHub: [github.com/skynet-omega/openskynet](https://github.com/skynet-omega/openskynet)
+- Mirror en Hugging Face: [huggingface.co/Darochin/openskynet](https://huggingface.co/Darochin/openskynet)
+- Contacto: [gonzalo_daroch@hotmail.com](mailto:gonzalo_daroch@hotmail.com)
+
 ## Dirección Actual
 
 OpenSkyNet hoy tiene tres capas separadas con bastante más claridad:
@@ -26,6 +32,23 @@ El benchmark práctico es este:
 - si OpenSkyNet puede sostener trabajo autónomo útil sobre un proyecto interno a lo largo del tiempo, entonces está mejorando como agente frente al runtime padre
 - si no puede, todavía le falta arquitectura
 
+## Omega Hoy
+
+`Omega` ya no es sólo un nombre para experimentos vagos de cognición. Hoy tiene responsabilidades concretas del runtime en [`src/omega`](./src/omega):
+
+- [`runtime-authority.ts`](./src/omega/runtime-authority.ts): fusiona señales de estado presente en una autoridad común usada por heartbeat, trabajo ejecutivo y autonomía.
+- [`living-memory.ts`](./src/omega/living-memory.ts) y [`living-memory-events.ts`](./src/omega/living-memory-events.ts): mantienen estado presente estructurado e historial durable de eventos en `.openskynet/living-memory/`.
+- [`world-model.ts`](./src/omega/world-model.ts): deriva presión de routing, localidad, preferencia de recuperación, presión del proyecto interno y contexto ejecutivo desde el estado actual.
+- [`session-context.ts`](./src/omega/session-context.ts): mantiene coherentes timeline, validación, self-time kernel y outcomes de sesión entre turnos.
+- [`execution-controller.ts`](./src/omega/execution-controller.ts): decide control correctivo y postura de recuperación en vez de dejar el manejo de fallos como pegamento de prompts.
+- [`heartbeat-core.ts`](./src/omega/heartbeat-core.ts): centraliza razonamiento de wake, carga de autoridad runtime, framing correctivo y lógica ejecutiva de heartbeat.
+- [`frontal/wake-policy.ts`](./src/omega/frontal/wake-policy.ts): prioriza trabajo interrumpido o activo por encima de limpieza de goals stale.
+- [`inner-life/drives.ts`](./src/omega/inner-life/drives.ts): resuelve presión motivacional persistente con selección contextual de drives en vez de ranking bruto por error.
+- [`sparse-metabolism.ts`](./src/omega/sparse-metabolism.ts) y [`jepa-drive-enhancement.ts`](./src/omega/jepa-drive-enhancement.ts): añaden gating más liviano y sensible a sorpresa para despertar componentes caros sólo cuando conviene.
+- [`cognitive-kernel.ts`](./src/omega/cognitive-kernel.ts): carga artefactos del lab sólo como `soft prior` con compuertas explícitas, no como reemplazo soberano del runtime.
+
+El trabajo reciente también movió piezas no críticas o demasiado teóricas fuera del hot path hacia [`src/omega/experimental`](./src/omega/experimental), dejando el runtime más claro que en iteraciones anteriores.
+
 ## Qué Lo Diferencia de OpenClaw
 
 OpenClaw sigue siendo la plataforma base y aporta mucho del plumbing esencial. OpenSkyNet se distancia del padre en estas zonas:
@@ -33,6 +56,7 @@ OpenClaw sigue siendo la plataforma base y aporta mucho del plumbing esencial. O
 - **Memoria viva estructurada**: el estado presente ya no debería salir solo de diarios planos. El runtime vive en `.openskynet/living-memory/` y stores estructurados relacionados.
 - **Soberanía de runtime**: `heartbeat`, `omega_work` y la ejecución autónoma están convergiendo hacia una autoridad común en vez de reconstruir contexto por separado.
 - **Énfasis en decisión y recuperación**: Omega modela de forma explícita recuperación, preferencias de routing, world state y presión de mantenimiento.
+- **Spine Omega concreto**: memoria viva, world model, wake policy, selección de drives, metabolismo, control correctivo y recuperación ejecutiva ya existen como módulos explícitos, no como una sola masa conversacional.
 - **Motor de Bifurcación y Cosecha de Investigación**: Skynet emplea ahora rutas paralelas de decisión (bifurcación) y recolección autónoma de artefactos (cosecha) para asegurar la continuidad de la investigación incluso ante fallos de modelos.
 - **Proyecto interno benchmark**: el sistema puede trabajar en un proyecto configurable durante ciclos libres, y ese proyecto funciona además como benchmark empírico de autonomía.
 - **Postura empírica**: la arquitectura intenta mantenerse atada a tests, snapshots de estado, logs y comportamiento medible, no solo a narrativa.
@@ -75,8 +99,19 @@ Requisitos:
 - Node.js `22+`
 - `pnpm`
 
+Clonar desde GitHub:
+
 ```bash
 git clone https://github.com/skynet-omega/openskynet.git
+cd openskynet
+pnpm install
+pnpm build
+```
+
+O clonar desde el mirror en Hugging Face:
+
+```bash
+git clone https://huggingface.co/Darochin/openskynet
 cd openskynet
 pnpm install
 pnpm build
@@ -85,6 +120,7 @@ pnpm build
 Notas:
 
 - Una instalación limpia funciona con Node `22.22.1+` y `pnpm 10.23.0+`.
+- GitHub es el remoto principal de desarrollo. El repo en Hugging Face funciona como mirror público para descarga y respaldo.
 - Algunas integraciones nativas opcionales usan `pnpm approve-builds` en instalaciones nuevas. Si piensas usar TensorFlow con GPU, audio nativo u otros add-ons nativos, ejecuta:
 
 ```bash
@@ -183,6 +219,20 @@ OpenSkyNet ya se puede compartir, pero sigue siendo un proyecto técnico:
 - Los subsistemas experimentales `Omega` y `Skynet` vienen incluidos, pero la plataforma se puede usar sin activar todas las rutas experimentales.
 
 Si tu meta es evaluarlo, empieza por gateway, dashboard, TUI y un solo canal. Agrega GPU, TTS, browser control o cognición experimental solo cuando realmente lo necesites.
+
+## Mirrors Y Soporte
+
+Si quieres el historial canónico de desarrollo, issues y flujo de revisión, usa GitHub:
+
+- [github.com/skynet-omega/openskynet](https://github.com/skynet-omega/openskynet)
+
+Si quieres un mirror público para descarga directa o respaldo, usa Hugging Face:
+
+- [huggingface.co/Darochin/openskynet](https://huggingface.co/Darochin/openskynet)
+
+Para contacto directo:
+
+- [gonzalo_daroch@hotmail.com](mailto:gonzalo_daroch@hotmail.com)
 
 ## Agradecimientos
 
