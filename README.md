@@ -16,11 +16,43 @@ tags:
 
 ![Banner](assets/banner.png)
 
+[![GitHub](https://img.shields.io/badge/GitHub-skynet--omega%2Fopenskynet-181717?logo=github)](https://github.com/skynet-omega/openskynet)
+[![Hugging Face](https://img.shields.io/badge/Hugging%20Face-Darochin%2Fopenskynet-ffcc4d?logo=huggingface&logoColor=black)](https://huggingface.co/Darochin/openskynet)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Status](https://img.shields.io/badge/status-experimental-orange)](#experimental-status)
+
 _Read this in [Spanish (Español)](README.es.md)._
 
 **OpenSkyNet** is an empirical, autonomy-focused evolution of [OpenClaw](https://github.com/openclaw/openclaw).
 
 It is not positioned as a generic "chat with tools" shell. The core goal is to turn an assistant runtime into something more robust across sessions: better state continuity, better recovery after failure, better routing, and better long-horizon autonomous work.
+
+## Why Look At This Repo
+
+OpenSkyNet is trying to push beyond the usual "LLM with tools" pattern in two directions at once:
+
+- a stronger agent runtime with memory, recovery, routing, executive control, and autonomy
+- a separate Brain Lab under [`src/skynet`](./src/skynet) for exploring new cognitive substrates beyond a plain LLM-centric stack
+
+If you care about agents, continuity across sessions, autonomy, executive runtimes, or experimental brain architectures, this repository is worth reading.
+
+## Start Here
+
+If you are visiting for the first time, use this path:
+
+1. Read this README for the platform overview.
+2. Open [`src/omega`](./src/omega) to see the concrete runtime spine.
+3. Open [`src/skynet`](./src/skynet) to see the Brain Lab and experiments.
+4. Use [`docs/start/QUICKSTART.md`](./docs/start/QUICKSTART.md) if you want to run it locally.
+
+Quick links:
+
+- Platform + runtime: [`src/omega`](./src/omega)
+- Brain Lab: [`src/skynet`](./src/skynet)
+- Experimental architectures: [`src/skynet/experiments`](./src/skynet/experiments)
+- Start guide: [`docs/start/QUICKSTART.md`](./docs/start/QUICKSTART.md)
+- GitHub: [github.com/skynet-omega/openskynet](https://github.com/skynet-omega/openskynet)
+- Hugging Face mirror: [huggingface.co/Darochin/openskynet](https://huggingface.co/Darochin/openskynet)
 
 ## Experimental Status
 
