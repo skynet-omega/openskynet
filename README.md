@@ -1,3 +1,17 @@
+---
+license: mit
+language:
+  - en
+  - es
+tags:
+  - agent
+  - autonomy
+  - research
+  - typescript
+  - nodejs
+  - llm
+---
+
 # OpenSkyNet
 
 ![Banner](assets/banner.png)
