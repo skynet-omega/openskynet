@@ -57,9 +57,9 @@ describe("omega state authority", () => {
   it("does not treat a fresh WSP as active drive authority", () => {
     const wsp = makeWsp();
 
-    expect(hasActiveOmegaWspDriveAuthority(wsp)).toBe(false);
+    expect(hasActiveOmegaWspDriveAuthority(wsp, 2)).toBe(false);
 
-    const snapshot = deriveOmegaStateAuthoritySnapshot({ wsp });
+    const snapshot = deriveOmegaStateAuthoritySnapshot({ wsp, nowMs: 2 });
     expect(snapshot.drives).toMatchObject({
       source: "kernel-fallback",
       status: "experimental",
@@ -67,19 +67,63 @@ describe("omega state authority", () => {
   });
 
   it("promotes WSP to authoritative drive state after calibration", () => {
+    const nowMs = 10_000;
     const wsp = makeWsp({
+      updatedAt: nowMs - 1_000,
       updateCount: 3,
       drives: makeWsp().drives.map((drive, index) =>
         index === 0 ? { ...drive, currentLevel: 0.2, error: 0.4 } : drive,
       ),
     });
 
-    expect(hasActiveOmegaWspDriveAuthority(wsp)).toBe(true);
+    expect(hasActiveOmegaWspDriveAuthority(wsp, nowMs)).toBe(true);
 
-    const snapshot = deriveOmegaStateAuthoritySnapshot({ wsp });
+    const snapshot = deriveOmegaStateAuthoritySnapshot({ wsp, nowMs });
     expect(snapshot.drives).toMatchObject({
       source: "omega-wsp",
       status: "authoritative",
+    });
+  });
+
+  it("demotes stale WSP drive state back to fallback even if it was previously calibrated", () => {
+    const nowMs = 10 * 60 * 60 * 1000;
+    const wsp = makeWsp({
+      updatedAt: nowMs - 7 * 60 * 60 * 1000,
+      updateCount: 3,
+      drives: makeWsp().drives.map((drive, index) =>
+        index === 0 ? { ...drive, currentLevel: 0.2, error: 0.4 } : drive,
+      ),
+    });
+
+    expect(hasActiveOmegaWspDriveAuthority(wsp, nowMs)).toBe(false);
+
+    const snapshot = deriveOmegaStateAuthoritySnapshot({ wsp, nowMs });
+    expect(snapshot.drives).toMatchObject({
+      source: "omega-wsp",
+      status: "fallback",
+      reason: "persistent_drive_state_stale",
+    });
+  });
+
+  it("demotes stale operational memory from authority to fallback", () => {
+    const snapshot = deriveOmegaStateAuthoritySnapshot({
+      operationalSummary: {
+        recentTurnCount: 3,
+        recentStalledTurns: 2,
+        recentResolvedTurns: 1,
+        latestTurnHealth: "stalled",
+        latestRecordedAt: 1_000,
+        ageMs: 3 * 60 * 60 * 1000,
+        freshness: "stale",
+        averageCausalImpact: 0.2,
+        latestCausalImpact: 0,
+      },
+    });
+
+    expect(snapshot.operationalHealth).toMatchObject({
+      source: "operational-memory",
+      status: "fallback",
+      reason: "recent_turn_health_stale",
     });
   });
 });

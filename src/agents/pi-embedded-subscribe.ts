@@ -339,14 +339,16 @@ export function subscribeEmbeddedPiSession(params: SubscribeEmbeddedPiSessionPar
     if (!cleanedText && filteredMediaUrls.length === 0) {
       return;
     }
-    try {
-      void params.onToolResult({
-        text: cleanedText,
-        mediaUrls: filteredMediaUrls.length ? filteredMediaUrls : undefined,
+    void Promise.resolve()
+      .then(() =>
+        params.onToolResult?.({
+          text: cleanedText,
+          mediaUrls: filteredMediaUrls.length ? filteredMediaUrls : undefined,
+        }),
+      )
+      .catch((err) => {
+        log.warn(`tool result callback failed: ${String(err)}`);
       });
-    } catch {
-      // ignore tool result delivery failures
-    }
   };
   const emitToolSummary = (toolName?: string, meta?: string) => {
     const agg = formatToolAggregate(toolName, meta ? [meta] : undefined, {

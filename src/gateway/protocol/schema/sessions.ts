@@ -34,6 +34,20 @@ export const SessionsPreviewParamsSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const SessionsMessagesSubscribeParamsSchema = Type.Object(
+  {
+    key: NonEmptyString,
+  },
+  { additionalProperties: false },
+);
+
+export const SessionsMessagesUnsubscribeParamsSchema = Type.Object(
+  {
+    key: NonEmptyString,
+  },
+  { additionalProperties: false },
+);
+
 export const SessionsResolveParamsSchema = Type.Object(
   {
     key: Type.Optional(NonEmptyString),

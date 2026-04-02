@@ -28,6 +28,12 @@ const hoisted = vi.hoisted(() => {
   const resolveSandboxContextMock = vi.fn();
   const subscribeEmbeddedPiSessionMock = vi.fn();
   const acquireSessionWriteLockMock = vi.fn();
+  const hookRunner = {
+    hasHooks: vi.fn((_: string) => false),
+    runBeforePromptBuild: vi.fn(async () => undefined),
+    runBeforeAgentStart: vi.fn(async () => undefined),
+    runAgentEnd: vi.fn(async () => undefined),
+  };
   const sessionManager = {
     getLeafEntry: vi.fn(() => null),
     branch: vi.fn(),
@@ -42,6 +48,7 @@ const hoisted = vi.hoisted(() => {
     resolveSandboxContextMock,
     subscribeEmbeddedPiSessionMock,
     acquireSessionWriteLockMock,
+    hookRunner,
     sessionManager,
   };
 });
@@ -80,7 +87,7 @@ vi.mock("../../pi-embedded-subscribe.js", () => ({
 }));
 
 vi.mock("../../../plugins/hook-runner-global.js", () => ({
-  getGlobalHookRunner: () => undefined,
+  getGlobalHookRunner: () => hoisted.hookRunner,
 }));
 
 vi.mock("../../../infra/machine-name.js", () => ({
@@ -269,6 +276,10 @@ function resetEmbeddedAttemptHarness(
   hoisted.acquireSessionWriteLockMock.mockReset().mockResolvedValue({
     release: async () => {},
   });
+  hoisted.hookRunner.hasHooks.mockReset().mockReturnValue(false);
+  hoisted.hookRunner.runBeforePromptBuild.mockReset().mockResolvedValue(undefined);
+  hoisted.hookRunner.runBeforeAgentStart.mockReset().mockResolvedValue(undefined);
+  hoisted.hookRunner.runAgentEnd.mockReset().mockResolvedValue(undefined);
   hoisted.sessionManager.getLeafEntry.mockReset().mockReturnValue(null);
   hoisted.sessionManager.branch.mockReset();
   hoisted.sessionManager.resetLeaf.mockReset();
@@ -713,5 +724,79 @@ describe("runEmbeddedAttempt context engine sessionKey forwarding", () => {
         return params.sessionKey === sessionKey;
       }),
     ).toBe(true);
+  });
+});
+
+describe("runEmbeddedAttempt agent_end hook outcome", () => {
+  const tempPaths: string[] = [];
+
+  beforeEach(() => {
+    resetEmbeddedAttemptHarness({
+      subscribeImpl: createSubscriptionMock,
+    });
+  });
+
+  afterEach(async () => {
+    await cleanupTempPaths(tempPaths);
+  });
+
+  it("reports failure to agent_end hooks when the assistant ends with stopReason=error", async () => {
+    const workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-agent-end-workspace-"));
+    const agentDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-agent-end-agent-"));
+    const sessionFile = path.join(workspaceDir, "session.jsonl");
+    tempPaths.push(workspaceDir, agentDir);
+    await fs.writeFile(sessionFile, "", "utf8");
+
+    hoisted.hookRunner.hasHooks.mockImplementation((hookName?: string) => hookName === "agent_end");
+
+    hoisted.createAgentSessionMock.mockImplementation(async () => ({
+      session: createDefaultEmbeddedSession({
+        prompt: async (session) => {
+          session.messages = [
+            ...session.messages,
+            {
+              role: "assistant",
+              content: "model failed",
+              stopReason: "error",
+              errorMessage: "provider exploded",
+              timestamp: 2,
+            },
+          ];
+        },
+      }),
+    }));
+
+    const result = await runEmbeddedAttempt({
+      sessionId: "embedded-session",
+      sessionKey: "agent:main:test-agent-end",
+      sessionFile,
+      workspaceDir,
+      agentDir,
+      config: {},
+      prompt: "hello",
+      timeoutMs: 10_000,
+      runId: "run-agent-end-error",
+      provider: "openai",
+      modelId: "gpt-test",
+      model: testModel,
+      authStorage: {} as AuthStorage,
+      modelRegistry: {} as ModelRegistry,
+      thinkLevel: "off",
+      senderIsOwner: true,
+      disableMessageTool: true,
+    });
+
+    expect(result.promptError).toBeNull();
+    await vi.waitFor(() => {
+      expect(hoisted.hookRunner.runAgentEnd).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: "provider exploded",
+        }),
+        expect.objectContaining({
+          sessionKey: "agent:main:test-agent-end",
+        }),
+      );
+    });
   });
 });

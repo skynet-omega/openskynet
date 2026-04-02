@@ -1,4 +1,5 @@
 import { emitAgentEvent } from "../infra/agent-events.js";
+import { classifyOpenSkynetRuntimeFailure } from "../infra/runtime-failure.js";
 import { createInlineCodeState } from "../markdown/code-spans.js";
 import {
   buildApiErrorObservationFields,
@@ -45,6 +46,10 @@ export function handleAgentEnd(ctx: EmbeddedPiSubscribeContext) {
     const failoverReason = classifyFailoverReason(rawError ?? "");
     const errorText = (friendlyError || lastAssistant.errorMessage || "LLM request failed.").trim();
     const observedError = buildApiErrorObservationFields(rawError);
+    const runtimeFailure = classifyOpenSkynetRuntimeFailure({
+      status: "error",
+      errorText: `${rawError ?? ""}\n${errorText}`.trim(),
+    });
     const safeErrorText =
       buildTextObservationFields(errorText).textPreview ?? "LLM request failed.";
     const safeRunId = sanitizeForConsole(ctx.params.runId) ?? "-";
@@ -68,6 +73,8 @@ export function handleAgentEnd(ctx: EmbeddedPiSubscribeContext) {
       data: {
         phase: "error",
         error: safeErrorText,
+        failureDomain: runtimeFailure.failureDomain,
+        failureClass: runtimeFailure.failureClass,
         endedAt: Date.now(),
       },
     });
@@ -76,6 +83,8 @@ export function handleAgentEnd(ctx: EmbeddedPiSubscribeContext) {
       data: {
         phase: "error",
         error: safeErrorText,
+        failureDomain: runtimeFailure.failureDomain,
+        failureClass: runtimeFailure.failureClass,
       },
     });
   } else {

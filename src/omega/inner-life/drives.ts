@@ -19,10 +19,7 @@
  * Estas funciones no llaman al LLM. No tocan disco directamente.
  */
 
-import type {
-  OmegaWorldStatePersistent,
-  WspDriveState,
-} from "../omega-wsp.js";
+import type { OmegaWorldStatePersistent, WspDriveState } from "../omega-wsp.js";
 import type { OmegaSelfTimeKernelState } from "../self-time-kernel.js";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -76,6 +73,8 @@ const DRIVE_ACTIVATION_THRESHOLD = 0.15;
  * Tiempo mínimo en ms desde última actividad antes de considerar drives de silencio.
  */
 const MIN_IDLE_MS_BEFORE_DRIVE = 30 * 1000;
+const ENTROPY_SILENCE_THRESHOLD_MS = 1 * 60 * 1000;
+const CURIOSITY_THRESHOLD_TURNS = 8;
 
 // ── Derivación desde WSP (fuente de verdad principal) ─────────────────────────
 
@@ -103,8 +102,12 @@ export function evaluateInnerDrivesFromWSP(params: {
     return { kind: "idle" };
   }
 
-  const topDrive = activeDrives[0];
-  return driveStateToSignal(topDrive, { kernel, nowMs, memoryCandidates });
+  const activeSignals = activeDrives
+    .map((drive) => driveStateToSignal(drive, { kernel, nowMs, memoryCandidates }))
+    .filter((signal) => signal.kind !== "idle")
+    .sort(compareDriveSignals);
+
+  return activeSignals[0] ?? { kind: "idle" };
 }
 
 /**
@@ -119,6 +122,20 @@ function driveStateToSignal(
   },
 ): InnerDriveSignal {
   const urgency = Math.min(0.95, drive.error);
+  const silentMs = ctx.nowMs - ctx.kernel.identity.lastSeenAt;
+  const recentlyTouched = new Set(
+    ctx.kernel.causalGraph.files
+      .filter(
+        (f) =>
+          typeof f.lastWriteTurn === "number" &&
+          ctx.kernel.turnCount - f.lastWriteTurn < CURIOSITY_THRESHOLD_TURNS,
+      )
+      .map((f) => f.path),
+  );
+  const recentCompleted = ctx.kernel.goals.filter(
+    (g) =>
+      g.status === "completed" && ctx.kernel.turnCount - g.updatedTurn < CURIOSITY_THRESHOLD_TURNS,
+  );
 
   switch (drive.name) {
     case "homeostasis": {
@@ -133,20 +150,13 @@ function driveStateToSignal(
     }
 
     case "curiosity": {
-      const silentMs = ctx.nowMs - ctx.kernel.identity.lastSeenAt;
-      if (silentMs < MIN_IDLE_MS_BEFORE_DRIVE) {
+      if (
+        ctx.kernel.activeGoalId ||
+        silentMs < MIN_IDLE_MS_BEFORE_DRIVE ||
+        recentCompleted.length > 0
+      ) {
         return { kind: "idle" };
       }
-      // Seleccionar target de memoria más antiguo sin explorar
-      const recentlyTouched = new Set(
-        ctx.kernel.causalGraph.files
-          .filter(
-            (f) =>
-              typeof f.lastWriteTurn === "number" &&
-              ctx.kernel.turnCount - f.lastWriteTurn < 8,
-          )
-          .map((f) => f.path),
-      );
       const target =
         ctx.memoryCandidates.find((c) => !recentlyTouched.has(c)) ??
         ctx.kernel.goals
@@ -162,7 +172,9 @@ function driveStateToSignal(
     }
 
     case "integrity": {
-      const silentMs = ctx.nowMs - ctx.kernel.identity.lastSeenAt;
+      if (ctx.kernel.activeGoalId || silentMs < ENTROPY_SILENCE_THRESHOLD_MS) {
+        return { kind: "idle" };
+      }
       return {
         kind: "entropy_alert",
         silentMs,
@@ -182,6 +194,32 @@ function driveStateToSignal(
     default:
       return { kind: "idle" };
   }
+}
+
+function driveSignalPriority(signal: InnerDriveSignal): number {
+  switch (signal.kind) {
+    case "homeostasis":
+      return 4;
+    case "entropy_alert":
+      return 3;
+    case "competence_drive":
+      return 2;
+    case "curiosity":
+      return 1;
+    case "idle":
+      return 0;
+  }
+}
+
+function compareDriveSignals(a: InnerDriveSignal, b: InnerDriveSignal): number {
+  const priorityDelta = driveSignalPriority(b) - driveSignalPriority(a);
+  if (priorityDelta !== 0) {
+    return priorityDelta;
+  }
+
+  const urgencyA = "urgency" in a ? a.urgency : 0;
+  const urgencyB = "urgency" in b ? b.urgency : 0;
+  return urgencyB - urgencyA;
 }
 
 // ── Fallback: evaluación clásica sin WSP ──────────────────────────────────────
@@ -230,7 +268,6 @@ export function evaluateInnerDrives(params: {
   }
 
   // Prioridad 2: Entropía — silencio prolongado
-  const ENTROPY_SILENCE_THRESHOLD_MS = 1 * 60 * 1000;
   if (!kernel.activeGoalId && silentMs >= ENTROPY_SILENCE_THRESHOLD_MS) {
     const hoursOfSilence = silentMs / (60 * 60 * 1000);
     const urgency = Math.min(0.85, 0.5 + hoursOfSilence * 0.05);
@@ -244,11 +281,9 @@ export function evaluateInnerDrives(params: {
 
   // Prioridad 3: Curiosidad — exploración epistémica
   if (!kernel.activeGoalId) {
-    const CURIOSITY_THRESHOLD_TURNS = 8;
     const recentCompleted = kernel.goals.filter(
       (g) =>
-        g.status === "completed" &&
-        kernel.turnCount - g.updatedTurn < CURIOSITY_THRESHOLD_TURNS,
+        g.status === "completed" && kernel.turnCount - g.updatedTurn < CURIOSITY_THRESHOLD_TURNS,
     );
     if (recentCompleted.length === 0) {
       const recentlyTouched = new Set(

@@ -230,6 +230,8 @@ export type ExecToolConfig = {
   host?: "sandbox" | "gateway" | "node";
   /** Exec security mode (default: deny). */
   security?: "deny" | "allowlist" | "full";
+  /** Require stricter interpreter allowlist hardening for inline-eval style runtimes. */
+  strictInlineEval?: boolean;
   /** Exec ask mode (default: on-miss). */
   ask?: "off" | "on-miss" | "always";
   /** Default node binding for exec.host=node (node id/name). */

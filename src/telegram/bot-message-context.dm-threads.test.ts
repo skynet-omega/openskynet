@@ -104,6 +104,26 @@ describe("buildTelegramMessageContext group sessions without forum", () => {
     expect(ctx?.ctxPayload?.SessionKey).toBe("agent:main:telegram:group:-1001234567890:topic:99");
     expect(ctx?.ctxPayload?.MessageThreadId).toBe(99);
   });
+
+  it("recovers forum sessions via getChat when Telegram omits is_forum", async () => {
+    const ctx = await buildTelegramMessageContextForTest({
+      message: {
+        message_id: 1,
+        chat: { id: -1001234567890, type: "supergroup", title: "Test Forum" },
+        date: 1700000000,
+        text: "@bot hello",
+        message_thread_id: 99,
+        from: { id: 42, first_name: "Alice" },
+      },
+      getChat: async () => ({ id: -1001234567890, type: "supergroup", is_forum: true }),
+      options: { forceWasMentioned: true },
+      resolveGroupActivation: () => true,
+    });
+
+    expect(ctx).not.toBeNull();
+    expect(ctx?.ctxPayload?.SessionKey).toBe("agent:main:telegram:group:-1001234567890:topic:99");
+    expect(ctx?.ctxPayload?.MessageThreadId).toBe(99);
+  });
 });
 
 describe("buildTelegramMessageContext direct peer routing", () => {

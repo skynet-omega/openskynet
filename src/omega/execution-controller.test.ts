@@ -100,6 +100,7 @@ describe("omega execution controller", () => {
           recentStalledTurns: 2,
           recentResolvedTurns: 0,
           latestTurnHealth: "stalled",
+          freshness: "fresh",
           averageCausalImpact: 0.1,
           latestCausalImpact: 0,
         },

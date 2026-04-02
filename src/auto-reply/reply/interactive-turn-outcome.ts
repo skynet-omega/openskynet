@@ -28,36 +28,44 @@ export type ResolveInteractiveTurnOutcomeParams = {
   hasActiveBackgroundTask?: boolean;
 };
 
-export function buildMissingFinalReplyDegradedPayload(): ReplyPayload {
+function buildSystemContinuityPayload(text: string): ReplyPayload {
   return {
-    text:
-      "The agent started working but did not finish a final reply. " +
-      "I closed the turn visibly to preserve continuity. Please retry.",
+    text,
+    channelData: {
+      openclaw: {
+        suppressAutoTts: true,
+        continuityNotice: true,
+      },
+    },
   };
+}
+
+export function buildMissingFinalReplyDegradedPayload(): ReplyPayload {
+  return buildSystemContinuityPayload(
+    "The agent started working but did not finish a final reply. " +
+      "I closed the turn visibly to preserve continuity. Please retry.",
+  );
 }
 
 export function buildMissingFinalReplyAutoResumePayload(): ReplyPayload {
-  return {
-    text:
-      "The agent started working but did not finish a final reply. " +
+  return buildSystemContinuityPayload(
+    "The agent started working but did not finish a final reply. " +
       "I preserved continuity and queued an automatic retry.",
-  };
+  );
 }
 
 export function buildBackgroundTaskStillRunningPayload(): ReplyPayload {
-  return {
-    text:
-      "The agent started a long-running task and it is still active in the background. " +
+  return buildSystemContinuityPayload(
+    "The agent started a long-running task and it is still active in the background. " +
       "I preserved continuity, but there is no finished result yet.",
-  };
+  );
 }
 
 export function buildBackgroundTaskStillRunningAutoResumePayload(): ReplyPayload {
-  return {
-    text:
-      "The agent started a long-running task and it is still active in the background. " +
+  return buildSystemContinuityPayload(
+    "The agent started a long-running task and it is still active in the background. " +
       "I preserved continuity and queued a follow-up check.",
-  };
+  );
 }
 
 export function resolveInteractiveTurnOutcome(

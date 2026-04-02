@@ -198,7 +198,7 @@ export class NeuralLogicEngine {
         }
         const ruleOutput = this.multiplyMatrix(weights, currentState);
         const ruleEffect = ruleOutput.map(
-          (v, i) => v * activation * 0.1, // Pequeño factor para no saturar
+          (v, i) => (rule.consequent[i] - v) * activation * 0.1, // Converge hacia consecuente
         );
 
         logicalDelta = logicalDelta.map((v, i) => v + ruleEffect[i]);

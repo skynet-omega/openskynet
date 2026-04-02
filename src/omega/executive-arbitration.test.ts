@@ -1,15 +1,21 @@
 import { describe, expect, it } from "vitest";
 import { observeOmegaExecutiveState } from "./executive-arbitration.js";
 import type { OmegaMemoryOrchestratorSummary } from "./memory-orchestrator.js";
+import type { OmegaSessionAuthority } from "./session-context.js";
 import type { OmegaWorldModelSnapshot } from "./world-model.js";
 
 function makeSnapshot(overrides: Partial<OmegaWorldModelSnapshot> = {}): OmegaWorldModelSnapshot {
   return {
     sessionKey: "agent:test:main",
+    sessionAuthority: {
+      timeline: [],
+      transactions: [],
+    } satisfies OmegaSessionAuthority,
     timelineLength: 0,
     relevantMemories: [],
     operationalSignals: [],
     problemAgenda: [],
+    degradedComponents: [],
     ...overrides,
   };
 }

@@ -116,6 +116,9 @@ describe("agentCliCommand", () => {
 
       expect(callGateway).toHaveBeenCalledTimes(1);
       expect(agentCommand).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(agentCommand).mock.calls[0]?.[0]).toEqual(
+        expect.objectContaining({ workspaceDir: process.cwd() }),
+      );
       expect(runtime.log).toHaveBeenCalledWith("local");
     });
   });
@@ -135,6 +138,9 @@ describe("agentCliCommand", () => {
 
       expect(callGateway).not.toHaveBeenCalled();
       expect(agentCommand).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(agentCommand).mock.calls[0]?.[0]).toEqual(
+        expect.objectContaining({ workspaceDir: process.cwd() }),
+      );
       expect(runtime.log).toHaveBeenCalledWith("local");
     });
   });

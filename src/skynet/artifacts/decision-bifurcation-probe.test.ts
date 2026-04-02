@@ -25,6 +25,7 @@ describe("skynet decision bifurcation probe", () => {
       continuity: {
         sessionKey: "agent:openskynet:main",
         updatedAt: 1,
+        projectName: "Skynet",
         cycleCount: 2,
         currentFocusKey: "decision_bifurcation",
         currentMode: "reframe",
@@ -61,6 +62,7 @@ describe("skynet decision bifurcation probe", () => {
       commitment: {
         sessionKey: "agent:openskynet:main",
         updatedAt: 1,
+        projectName: "Skynet",
         kind: "reframe",
         artifactKind: "note",
         targetFocusKey: "decision_bifurcation",
@@ -73,6 +75,7 @@ describe("skynet decision bifurcation probe", () => {
       experiment: {
         sessionKey: "agent:openskynet:main",
         updatedAt: 1,
+        projectName: "Skynet",
         focusKey: "decision_bifurcation",
         mode: "reframe",
         hypothesis: "Need branch.",
@@ -84,6 +87,7 @@ describe("skynet decision bifurcation probe", () => {
       program: {
         sessionKey: "agent:openskynet:main",
         updatedAt: 1,
+        projectName: "Skynet",
         focusKey: "decision_bifurcation",
         mode: "reframe",
         items: [

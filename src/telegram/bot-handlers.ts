@@ -176,6 +176,7 @@ export const registerTelegramHandlers = ({
     debounceKey: string | null;
     debounceLane: TelegramDebounceLane;
     botUsername?: string;
+    receivedAtMs: number;
   };
   const resolveTelegramDebounceLane = (msg: Message): TelegramDebounceLane => {
     const forwardMeta = msg as {
@@ -246,7 +247,16 @@ export const registerTelegramHandlers = ({
       }
       if (entries.length === 1) {
         const replyMedia = await resolveReplyMediaForMessage(last.ctx, last.msg);
-        await processMessage(last.ctx, last.allMedia, last.storeAllowFrom, undefined, replyMedia);
+        await processMessage(
+          last.ctx,
+          last.allMedia,
+          last.storeAllowFrom,
+          {
+            receivedAtMs: last.receivedAtMs,
+            ingressBuffer: "inbound-debounce",
+          },
+          replyMedia,
+        );
         return;
       }
       const combinedText = entries
@@ -271,7 +281,11 @@ export const registerTelegramHandlers = ({
         syntheticCtx,
         combinedMedia,
         first.storeAllowFrom,
-        messageIdOverride ? { messageIdOverride } : undefined,
+        {
+          ...(messageIdOverride ? { messageIdOverride } : {}),
+          receivedAtMs: first.receivedAtMs,
+          ingressBuffer: "inbound-debounce",
+        },
         replyMedia,
       );
     },
@@ -432,6 +446,8 @@ export const registerTelegramHandlers = ({
 
       await processMessage(buildSyntheticContext(baseCtx, syntheticMessage), [], storeAllowFrom, {
         messageIdOverride: String(last.msg.message_id),
+        receivedAtMs: first.receivedAtMs,
+        ingressBuffer: "text-fragment",
       });
     } catch (err) {
       runtime.error?.(danger(`text fragment handler failed: ${String(err)}`));
@@ -1056,6 +1072,7 @@ export const registerTelegramHandlers = ({
       debounceKey,
       debounceLane,
       botUsername: ctx.me?.username,
+      receivedAtMs: Date.now(),
     });
   };
   bot.on("callback_query", async (ctx) => {

@@ -163,7 +163,7 @@ export function deriveOmegaHeartbeatContinuationDelay(params: {
     return 2_000; // 2s: hay progreso, seguir rápido
   }
   if (params.terminationReason === "continue") {
-    return 7_500; // 7.5s: sin progreso, backoff
+    return 10_000; // 10s: Backoff por falta de progreso o Rate Limit
   }
   return 0;
 }

@@ -2,12 +2,19 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { movePathToTrash } from "../browser/trash.js";
 import { writeJsonAtomic } from "../infra/json-files.js";
-import type { SkynetCommitmentDecision } from "../skynet/commitment-engine.js";
-import type { SkynetExperimentPlan } from "../skynet/experiment-cycle.js";
+import type { SkynetCommitmentDecision, SkynetExperimentPlan } from "./internal-project-lab.js";
 import {
   loadOpenSkynetInternalProjectProfile,
   type OpenSkynetInternalProjectProfile,
 } from "./internal-project.js";
+import {
+  appendOpenSkynetLivingMemoryEvents,
+  deriveOpenSkynetLivingMemoryEvents,
+} from "./living-memory-events.js";
+import {
+  loadOmegaOperationalMemorySummary,
+  type OmegaOperationalMemorySummary,
+} from "./operational-memory.js";
 import { resolveOmegaStateDir } from "./paths.js";
 import type { OmegaWorldModelSnapshot } from "./world-model.js";
 
@@ -33,6 +40,8 @@ export type OpenSkynetLivingState = {
       separatePlatformFromInternalProject: true;
       maintenanceIsNotProjectProgress: true;
       internalProjectActsAsAgenticBenchmark: true;
+      internalProjectFindingsMustTransferToKernel: true;
+      internalProjectMustNotBeKernelDependency: true;
       avoidAnthropomorphicClaimsWithoutEvidence: true;
       authoritativeStateSources: string[];
     };
@@ -43,6 +52,13 @@ export type OpenSkynetLivingState = {
     activeGoalTask: string | null;
     lastOutcomeStatus: string | null;
     failureStreak: number;
+  };
+  authority: {
+    worldModelStatus: "healthy" | "degraded";
+    kernelStatus: "available" | "missing";
+    degradedComponents: string[];
+    operationalMemoryStatus: "fresh" | "aging" | "stale" | "missing";
+    operationalMemoryLatestAt: number | null;
   };
   omega: {
     timelineLength: number;
@@ -84,7 +100,7 @@ export type OpenSkynetLivingState = {
   };
   /** @deprecated compatibility alias; prefer internalProjectState */
   skynet: {
-    name: "Skynet";
+    name: string;
     focusKey: string | null;
     focusTitle: string | null;
     mode: string | null;
@@ -120,17 +136,45 @@ export type OpenSkynetLivingMemoryEvent = {
   payload: Record<string, unknown>;
 };
 
-type LegacyComparableProjectState = {
-  focusKey: string | null;
-  mode: string | null;
-  continuityScore: number | null;
-  commitment: {
-    kind: string;
-    artifactKind: string;
-    confidence: number;
-    executableTask: string;
-  } | null;
-};
+type OpenSkynetLivingProjectState = OpenSkynetLivingState["internalProjectState"];
+
+const STRUCTURED_MEMORY_SUBDIRS = [
+  "living-memory/state",
+  "skynet-nucleus",
+  "skynet-study-program",
+  "skynet-continuity",
+  "skynet-commitment",
+  "skynet-experiments",
+  "skynet-artifacts",
+  "internal-project-benchmark",
+  "omega-study-supervisor",
+  "omega-executive-state",
+  "omega-problem-agenda",
+] as const;
+
+const PREFERRED_HUMAN_MEMORY_FILES = [
+  "SCIENCE_BASE.md",
+  "MEMORY.md",
+  "memory/SKYNET_PULSE.md",
+  "memory/SKYNET_CONTINUITY.md",
+  "memory/SKYNET_COMMITMENT.md",
+  "memory/SKYNET_ACTIVE_EXPERIMENT.md",
+  "memory/OMEGA_STUDY_QUEUE.md",
+] as const;
+
+const HUMAN_READABLE_RESET_FILES = [
+  "memory/SKYNET_PULSE.md",
+  "memory/SKYNET_CONTINUITY.md",
+  "memory/SKYNET_COMMITMENT.md",
+  "memory/SKYNET_ACTIVE_EXPERIMENT.md",
+  "memory/SKYNET_EXPERIMENT_AUTONOMY_PULSE_01.md",
+  "memory/SKYNET_DECISION_BIFURCATION_PROBE.md",
+  "memory/SKYNET_FOCAL_POINT.md",
+  "memory/SKYNET_BENCHMARK_HARDENING.md",
+  "memory/SKYNET_RESEARCH_HARVEST.md",
+  "memory/SKYNET_CONTEXT_BASE.md",
+  "memory/OMEGA_STUDY_QUEUE.md",
+] as const;
 
 function sanitizeSessionKey(sessionKey: string): string {
   return (sessionKey.trim() || "main").replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 64) || "main";
@@ -190,19 +234,10 @@ async function collectRelativeFiles(params: {
 }
 
 export async function collectOpenSkynetMemoryCandidates(workspaceRoot: string): Promise<string[]> {
-  const structuredDirs = [
-    path.join(resolveOmegaStateDir(workspaceRoot), "living-memory", "state"),
-    path.join(resolveOmegaStateDir(workspaceRoot), "skynet-nucleus"),
-    path.join(resolveOmegaStateDir(workspaceRoot), "skynet-study-program"),
-    path.join(resolveOmegaStateDir(workspaceRoot), "skynet-continuity"),
-    path.join(resolveOmegaStateDir(workspaceRoot), "skynet-commitment"),
-    path.join(resolveOmegaStateDir(workspaceRoot), "skynet-experiments"),
-    path.join(resolveOmegaStateDir(workspaceRoot), "skynet-artifacts"),
-    path.join(resolveOmegaStateDir(workspaceRoot), "internal-project-benchmark"),
-    path.join(resolveOmegaStateDir(workspaceRoot), "omega-study-supervisor"),
-    path.join(resolveOmegaStateDir(workspaceRoot), "omega-executive-state"),
-    path.join(resolveOmegaStateDir(workspaceRoot), "omega-problem-agenda"),
-  ];
+  const omegaStateDir = resolveOmegaStateDir(workspaceRoot);
+  const structuredDirs = STRUCTURED_MEMORY_SUBDIRS.map((subdir) =>
+    path.join(omegaStateDir, ...subdir.split("/")),
+  );
 
   const candidates: string[] = [];
   for (const dir of structuredDirs) {
@@ -220,16 +255,7 @@ export async function collectOpenSkynetMemoryCandidates(workspaceRoot: string): 
     candidates.push(toWorkspaceRelative(workspaceRoot, livingHistory));
   }
 
-  const preferredHumanFiles = [
-    "SCIENCE_BASE.md",
-    "MEMORY.md",
-    "memory/SKYNET_PULSE.md",
-    "memory/SKYNET_CONTINUITY.md",
-    "memory/SKYNET_COMMITMENT.md",
-    "memory/SKYNET_ACTIVE_EXPERIMENT.md",
-    "memory/OMEGA_STUDY_QUEUE.md",
-  ];
-  for (const rel of preferredHumanFiles) {
+  for (const rel of PREFERRED_HUMAN_MEMORY_FILES) {
     if (await pathExists(path.join(workspaceRoot, rel))) {
       candidates.push(rel);
     }
@@ -258,65 +284,145 @@ function deriveLocalityPreference(snapshot: OmegaWorldModelSnapshot): string | n
   return null;
 }
 
-function deriveLivingState(params: {
+function deriveBenchmarkScore(params: {
+  continuityScore: number | null;
+  hasRunnableExperiment: boolean;
+  hasExplicitCommitment: boolean;
+  hasRecommendedAction: boolean;
+  degradedComponentCount: number;
+}): number {
+  const authorityPenalty = params.degradedComponentCount > 0 ? 0.75 : 1;
+  return Math.max(
+    0,
+    Math.min(
+      1,
+      ((typeof params.continuityScore === "number" ? params.continuityScore * 0.45 : 0) +
+        (params.hasRunnableExperiment ? 0.2 : 0) +
+        (params.hasExplicitCommitment ? 0.2 : 0) +
+        (params.hasRecommendedAction ? 0.15 : 0)) *
+        authorityPenalty,
+    ),
+  );
+}
+
+function buildLivingProjectState(params: {
   project: OpenSkynetInternalProjectProfile;
-  sessionKey: string;
   snapshot: OmegaWorldModelSnapshot;
   recommendedAction?: string;
   commitment?: SkynetCommitmentDecision;
   experiment?: SkynetExperimentPlan;
+}): OpenSkynetLivingProjectState {
+  return {
+    name: params.project.name,
+    focusKey:
+      params.snapshot.internalProjectStudyProgram?.focusKey ?? params.experiment?.focusKey ?? null,
+    focusTitle: params.snapshot.studySupervisor?.focus.title ?? null,
+    mode: params.snapshot.internalProjectNucleus?.mode ?? null,
+    continuityScore: params.snapshot.internalProjectContinuity?.continuityScore ?? null,
+    topWorkItem: params.snapshot.internalProjectStudyProgram?.items[0]?.title ?? null,
+    recommendedAction: params.recommendedAction ?? null,
+    commitment: params.commitment
+      ? {
+          kind: params.commitment.kind,
+          artifactKind: params.commitment.artifactKind,
+          confidence: params.commitment.confidence,
+          executableTask: params.commitment.executableTask,
+        }
+      : null,
+    experiment: params.experiment
+      ? {
+          focusKey: params.experiment.focusKey,
+          mode: params.experiment.mode,
+          deliverable: params.experiment.deliverable,
+          killCriteria: params.experiment.killCriteria,
+          benchmarkHook: params.experiment.benchmarkHook,
+        }
+      : null,
+  };
+}
+
+function buildLivingSelfModel(
+  project: OpenSkynetInternalProjectProfile,
+): OpenSkynetLivingState["selfModel"] {
+  return {
+    platform: {
+      name: "OpenSkyNet",
+      role: "Primary agent platform responsible for memory, tooling, evaluation, gateway, integration, and autonomous execution quality.",
+      priority: "primary",
+    },
+    internalProject: {
+      key: project.key,
+      name: project.name,
+      role: project.role,
+      mission: project.mission,
+      benchmarkPurpose: project.benchmarkPurpose,
+      successCriteria: project.successCriteria,
+      priority: "secondary",
+    },
+    reporting: {
+      separatePlatformFromInternalProject: true,
+      maintenanceIsNotProjectProgress: true,
+      internalProjectActsAsAgenticBenchmark: true,
+      internalProjectFindingsMustTransferToKernel: true,
+      internalProjectMustNotBeKernelDependency: true,
+      avoidAnthropomorphicClaimsWithoutEvidence: true,
+      authoritativeStateSources: [
+        ".openskynet/living-memory/state/*.json",
+        ".openskynet/living-memory/history.jsonl",
+        ".openskynet/skynet-*/*.json",
+      ],
+    },
+  };
+}
+
+function deriveLivingState(params: {
+  project: OpenSkynetInternalProjectProfile;
+  sessionKey: string;
+  snapshot: OmegaWorldModelSnapshot;
+  operationalSummary?: OmegaOperationalMemorySummary;
+  recommendedAction?: string;
+  commitment?: SkynetCommitmentDecision;
+  experiment?: SkynetExperimentPlan;
 }): OpenSkynetLivingState {
-  const continuityScore = params.snapshot.skynetContinuity?.continuityScore ?? null;
+  const continuityScore = params.snapshot.internalProjectContinuity?.continuityScore ?? null;
   const hasRunnableExperiment = Boolean(params.experiment);
   const hasExplicitCommitment = Boolean(params.commitment?.executableTask);
   const hasRecommendedAction = Boolean(params.recommendedAction);
-  const benchmarkScore = Math.max(
-    0,
-    Math.min(
-      1,
-      (typeof continuityScore === "number" ? continuityScore * 0.45 : 0) +
-        (hasRunnableExperiment ? 0.2 : 0) +
-        (hasExplicitCommitment ? 0.2 : 0) +
-        (hasRecommendedAction ? 0.15 : 0),
-    ),
-  );
+  const degradedComponents = params.snapshot.degradedComponents.map((entry) => entry.component);
+  const operationalMemoryStatus = params.operationalSummary?.freshness ?? "missing";
+  const operationalMemoryLatestAt = params.operationalSummary?.latestRecordedAt ?? null;
+  const benchmarkScore = deriveBenchmarkScore({
+    continuityScore,
+    hasRunnableExperiment,
+    hasExplicitCommitment,
+    hasRecommendedAction,
+    degradedComponentCount: degradedComponents.length,
+  });
+  const internalProjectState = buildLivingProjectState({
+    project: params.project,
+    snapshot: params.snapshot,
+    recommendedAction: params.recommendedAction,
+    commitment: params.commitment,
+    experiment: params.experiment,
+  });
 
   return {
     sessionKey: params.sessionKey,
     updatedAt: Date.now(),
-    selfModel: {
-      platform: {
-        name: "OpenSkyNet",
-        role: "Primary agent platform responsible for memory, tooling, evaluation, gateway, integration, and autonomous execution quality.",
-        priority: "primary",
-      },
-      internalProject: {
-        key: params.project.key,
-        name: params.project.name,
-        role: params.project.role,
-        mission: params.project.mission,
-        benchmarkPurpose: params.project.benchmarkPurpose,
-        successCriteria: params.project.successCriteria,
-        priority: "secondary",
-      },
-      reporting: {
-        separatePlatformFromInternalProject: true,
-        maintenanceIsNotProjectProgress: true,
-        internalProjectActsAsAgenticBenchmark: true,
-        avoidAnthropomorphicClaimsWithoutEvidence: true,
-        authoritativeStateSources: [
-          ".openskynet/living-memory/state/*.json",
-          ".openskynet/living-memory/history.jsonl",
-          ".openskynet/skynet-*/*.json",
-        ],
-      },
-    },
+    selfModel: buildLivingSelfModel(params.project),
     identity: {
       continuityId: params.snapshot.kernel?.identity.continuityId ?? null,
       turnCount: params.snapshot.kernel?.turnCount ?? 0,
       activeGoalTask: params.snapshot.activeGoalTask ?? null,
       lastOutcomeStatus: params.snapshot.kernel?.world.lastOutcomeStatus ?? null,
       failureStreak: params.snapshot.kernel?.tension.failureStreak ?? 0,
+    },
+    authority: {
+      worldModelStatus: degradedComponents.length > 0 ? "degraded" : "healthy",
+      kernelStatus: params.snapshot.kernel ? "available" : "missing",
+      degradedComponents,
+      operationalMemoryStatus,
+      operationalMemoryLatestAt,
     },
     omega: {
       timelineLength: params.snapshot.timelineLength,
@@ -334,58 +440,8 @@ function deriveLivingState(params: {
       hasRecommendedAction,
       benchmarkScore,
     },
-    internalProjectState: {
-      name: params.project.name,
-      focusKey: params.snapshot.skynetStudyProgram?.focusKey ?? params.experiment?.focusKey ?? null,
-      focusTitle: params.snapshot.studySupervisor?.focus.title ?? null,
-      mode: params.snapshot.skynetNucleus?.mode ?? null,
-      continuityScore: params.snapshot.skynetContinuity?.continuityScore ?? null,
-      topWorkItem: params.snapshot.skynetStudyProgram?.items[0]?.title ?? null,
-      recommendedAction: params.recommendedAction ?? null,
-      commitment: params.commitment
-        ? {
-            kind: params.commitment.kind,
-            artifactKind: params.commitment.artifactKind,
-            confidence: params.commitment.confidence,
-            executableTask: params.commitment.executableTask,
-          }
-        : null,
-      experiment: params.experiment
-        ? {
-            focusKey: params.experiment.focusKey,
-            mode: params.experiment.mode,
-            deliverable: params.experiment.deliverable,
-            killCriteria: params.experiment.killCriteria,
-            benchmarkHook: params.experiment.benchmarkHook,
-          }
-        : null,
-    },
-    skynet: {
-      name: "Skynet",
-      focusKey: params.snapshot.skynetStudyProgram?.focusKey ?? params.experiment?.focusKey ?? null,
-      focusTitle: params.snapshot.studySupervisor?.focus.title ?? null,
-      mode: params.snapshot.skynetNucleus?.mode ?? null,
-      continuityScore: params.snapshot.skynetContinuity?.continuityScore ?? null,
-      topWorkItem: params.snapshot.skynetStudyProgram?.items[0]?.title ?? null,
-      recommendedAction: params.recommendedAction ?? null,
-      commitment: params.commitment
-        ? {
-            kind: params.commitment.kind,
-            artifactKind: params.commitment.artifactKind,
-            confidence: params.commitment.confidence,
-            executableTask: params.commitment.executableTask,
-          }
-        : null,
-      experiment: params.experiment
-        ? {
-            focusKey: params.experiment.focusKey,
-            mode: params.experiment.mode,
-            deliverable: params.experiment.deliverable,
-            killCriteria: params.experiment.killCriteria,
-            benchmarkHook: params.experiment.benchmarkHook,
-          }
-        : null,
-    },
+    internalProjectState,
+    skynet: { ...internalProjectState },
   };
 }
 
@@ -401,147 +457,34 @@ export async function loadOpenSkynetLivingState(params: {
   }
 }
 
-function getComparableInternalProjectState(
-  state: Partial<OpenSkynetLivingState> | undefined,
-): LegacyComparableProjectState {
-  const nextLike = state?.internalProjectState;
-  if (nextLike) {
-    return {
-      focusKey: nextLike.focusKey ?? null,
-      mode: nextLike.mode ?? null,
-      continuityScore:
-        typeof nextLike.continuityScore === "number" ? nextLike.continuityScore : null,
-      commitment: nextLike.commitment ?? null,
-    };
-  }
-
-  const legacy = state?.skynet;
-  return {
-    focusKey: legacy?.focusKey ?? null,
-    mode: legacy?.mode ?? null,
-    continuityScore: typeof legacy?.continuityScore === "number" ? legacy.continuityScore : null,
-    commitment: legacy?.commitment ?? null,
-  };
-}
-
-function deriveEvents(params: {
-  sessionKey: string;
-  prior?: OpenSkynetLivingState;
-  next: OpenSkynetLivingState;
-}): OpenSkynetLivingMemoryEvent[] {
-  const ts = params.next.updatedAt;
-  const events: OpenSkynetLivingMemoryEvent[] = [];
-  if (!params.prior) {
-    const nextProject = getComparableInternalProjectState(params.next);
-    events.push({
-      ts,
-      sessionKey: params.sessionKey,
-      kind: "runtime_initialized",
-      payload: {
-        focusKey: nextProject.focusKey,
-        mode: nextProject.mode,
-      },
-    });
-    return events;
-  }
-
-  const priorProject = getComparableInternalProjectState(params.prior);
-  const nextProject = getComparableInternalProjectState(params.next);
-
-  if (priorProject.focusKey !== nextProject.focusKey) {
-    events.push({
-      ts,
-      sessionKey: params.sessionKey,
-      kind: "skynet_focus_changed",
-      payload: {
-        previous: priorProject.focusKey,
-        next: nextProject.focusKey,
-      },
-    });
-  }
-  if (priorProject.mode !== nextProject.mode) {
-    events.push({
-      ts,
-      sessionKey: params.sessionKey,
-      kind: "skynet_mode_changed",
-      payload: {
-        previous: priorProject.mode,
-        next: nextProject.mode,
-      },
-    });
-  }
-  if (
-    priorProject.commitment?.kind !== nextProject.commitment?.kind ||
-    priorProject.commitment?.artifactKind !== nextProject.commitment?.artifactKind
-  ) {
-    events.push({
-      ts,
-      sessionKey: params.sessionKey,
-      kind: "skynet_commitment_changed",
-      payload: {
-        previous: priorProject.commitment ?? null,
-        next: nextProject.commitment ?? null,
-      },
-    });
-  }
-  if (params.prior.identity.activeGoalTask !== params.next.identity.activeGoalTask) {
-    events.push({
-      ts,
-      sessionKey: params.sessionKey,
-      kind: "omega_active_goal_changed",
-      payload: {
-        previous: params.prior.identity.activeGoalTask,
-        next: params.next.identity.activeGoalTask,
-      },
-    });
-  }
-  const priorContinuity = priorProject.continuityScore;
-  const nextContinuity = nextProject.continuityScore;
-  if (
-    typeof priorContinuity === "number" &&
-    typeof nextContinuity === "number" &&
-    Math.abs(priorContinuity - nextContinuity) >= 0.1
-  ) {
-    events.push({
-      ts,
-      sessionKey: params.sessionKey,
-      kind: "skynet_continuity_shift",
-      payload: {
-        previous: priorContinuity,
-        next: nextContinuity,
-      },
-    });
-  }
-  return events;
-}
-
-async function appendEvents(workspaceRoot: string, events: OpenSkynetLivingMemoryEvent[]) {
-  if (events.length === 0) {
-    return;
-  }
-  const historyPath = resolveOpenSkynetLivingHistoryFile(workspaceRoot);
-  await fs.mkdir(path.dirname(historyPath), { recursive: true });
-  const lines = events.map((event) => JSON.stringify(event)).join("\n") + "\n";
-  await fs.appendFile(historyPath, lines, "utf-8");
-}
-
 export async function syncOpenSkynetLivingMemory(params: {
   workspaceRoot: string;
   sessionKey: string;
   snapshot: OmegaWorldModelSnapshot;
+  operationalSummary?: OmegaOperationalMemorySummary;
   recommendedAction?: string;
   commitment?: SkynetCommitmentDecision;
   experiment?: SkynetExperimentPlan;
 }): Promise<OpenSkynetLivingState> {
   const prior = await loadOpenSkynetLivingState(params);
   const project = await loadOpenSkynetInternalProjectProfile(params.workspaceRoot);
-  const next = deriveLivingState({ ...params, project });
+  const operationalSummary =
+    params.operationalSummary ??
+    (await loadOmegaOperationalMemorySummary({
+      workspaceRoot: params.workspaceRoot,
+      sessionKey: params.sessionKey,
+    }).catch(() => undefined));
+  const next = deriveLivingState({ ...params, project, operationalSummary });
   const statePath = resolveOpenSkynetLivingStateFile(params);
   await writeJsonAtomic(statePath, next, { trailingNewline: true });
-  await appendEvents(
-    params.workspaceRoot,
-    deriveEvents({ sessionKey: params.sessionKey, prior, next }),
-  );
+  await appendOpenSkynetLivingMemoryEvents({
+    historyPath: resolveOpenSkynetLivingHistoryFile(params.workspaceRoot),
+    events: deriveOpenSkynetLivingMemoryEvents({
+      sessionKey: params.sessionKey,
+      prior,
+      next,
+    }),
+  });
   return next;
 }
 
@@ -549,35 +492,24 @@ export async function planOpenSkynetMemoryReset(params: {
   workspaceRoot: string;
   includeHumanReadable?: boolean;
 }): Promise<string[]> {
+  const omegaStateDir = resolveOmegaStateDir(params.workspaceRoot);
   const targets = [
-    path.join(resolveOmegaStateDir(params.workspaceRoot), "living-memory"),
-    path.join(resolveOmegaStateDir(params.workspaceRoot), "skynet-nucleus"),
-    path.join(resolveOmegaStateDir(params.workspaceRoot), "skynet-study-program"),
-    path.join(resolveOmegaStateDir(params.workspaceRoot), "skynet-continuity"),
-    path.join(resolveOmegaStateDir(params.workspaceRoot), "skynet-commitment"),
-    path.join(resolveOmegaStateDir(params.workspaceRoot), "skynet-experiments"),
-    path.join(resolveOmegaStateDir(params.workspaceRoot), "skynet-artifacts"),
-    path.join(resolveOmegaStateDir(params.workspaceRoot), "omega-study-supervisor"),
-    path.join(resolveOmegaStateDir(params.workspaceRoot), "omega-executive-state"),
-    path.join(resolveOmegaStateDir(params.workspaceRoot), "omega-problem-agenda"),
-    path.join(resolveOmegaStateDir(params.workspaceRoot), "holographic-memory.json"),
-    path.join(resolveOmegaStateDir(params.workspaceRoot), "omega-empirical-metrics.json"),
-    path.join(resolveOmegaStateDir(params.workspaceRoot), "heartbeat.log"),
+    path.join(omegaStateDir, "living-memory"),
+    path.join(omegaStateDir, "skynet-nucleus"),
+    path.join(omegaStateDir, "skynet-study-program"),
+    path.join(omegaStateDir, "skynet-continuity"),
+    path.join(omegaStateDir, "skynet-commitment"),
+    path.join(omegaStateDir, "skynet-experiments"),
+    path.join(omegaStateDir, "skynet-artifacts"),
+    path.join(omegaStateDir, "omega-study-supervisor"),
+    path.join(omegaStateDir, "omega-executive-state"),
+    path.join(omegaStateDir, "omega-problem-agenda"),
+    path.join(omegaStateDir, "holographic-memory.json"),
+    path.join(omegaStateDir, "omega-empirical-metrics.json"),
+    path.join(omegaStateDir, "heartbeat.log"),
   ];
   if (params.includeHumanReadable) {
-    targets.push(
-      path.join(params.workspaceRoot, "memory", "SKYNET_PULSE.md"),
-      path.join(params.workspaceRoot, "memory", "SKYNET_CONTINUITY.md"),
-      path.join(params.workspaceRoot, "memory", "SKYNET_COMMITMENT.md"),
-      path.join(params.workspaceRoot, "memory", "SKYNET_ACTIVE_EXPERIMENT.md"),
-      path.join(params.workspaceRoot, "memory", "SKYNET_EXPERIMENT_AUTONOMY_PULSE_01.md"),
-      path.join(params.workspaceRoot, "memory", "SKYNET_DECISION_BIFURCATION_PROBE.md"),
-      path.join(params.workspaceRoot, "memory", "SKYNET_FOCAL_POINT.md"),
-      path.join(params.workspaceRoot, "memory", "SKYNET_BENCHMARK_HARDENING.md"),
-      path.join(params.workspaceRoot, "memory", "SKYNET_RESEARCH_HARVEST.md"),
-      path.join(params.workspaceRoot, "memory", "SKYNET_CONTEXT_BASE.md"),
-      path.join(params.workspaceRoot, "memory", "OMEGA_STUDY_QUEUE.md"),
-    );
+    targets.push(...HUMAN_READABLE_RESET_FILES.map((rel) => path.join(params.workspaceRoot, rel)));
   }
   const existing = await Promise.all(
     targets.map(async (target) => ((await pathExists(target)) ? target : undefined)),

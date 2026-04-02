@@ -287,6 +287,43 @@ describe("gateway server chat", () => {
     });
   });
 
+  test("chat.history drops oversized textSignature metadata while preserving visible text", async () => {
+    await withGatewayChatHarness(async ({ ws, createSessionDir }) => {
+      const historyMaxBytes = 64 * 1024;
+      const sessionDir = await prepareMainHistoryHarness({
+        ws,
+        createSessionDir,
+        historyMaxBytes,
+      });
+
+      await writeMainSessionTranscript(sessionDir, [
+        JSON.stringify({
+          message: {
+            role: "assistant",
+            timestamp: Date.now(),
+            content: [
+              {
+                type: "text",
+                text: "respuesta visible",
+                textSignature: "s".repeat(180_000),
+              },
+            ],
+          },
+        }),
+      ]);
+
+      const messages = await fetchHistoryMessages(ws);
+      expect(messages).toHaveLength(1);
+
+      const serialized = JSON.stringify(messages);
+      const bytes = Buffer.byteLength(serialized, "utf8");
+      expect(bytes).toBeLessThanOrEqual(historyMaxBytes);
+      expect(serialized).toContain("respuesta visible");
+      expect(serialized).not.toContain("[chat.history omitted: message too large]");
+      expect(serialized).not.toContain('"textSignature"');
+    });
+  });
+
   test("chat.history preserves usage and cost metadata for assistant messages", async () => {
     await withGatewayChatHarness(async ({ ws, createSessionDir }) => {
       await connectOk(ws);

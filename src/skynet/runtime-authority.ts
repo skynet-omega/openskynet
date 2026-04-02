@@ -18,7 +18,27 @@ export type OpenSkynetRuntimeAuthority = {
   experimentPlan?: SkynetExperimentPlan;
   commitment?: SkynetCommitmentDecision;
   livingState: OpenSkynetLivingState;
+  degradedComponents: Array<{
+    component: string;
+    reason: string;
+  }>;
 };
+
+async function captureRuntimeComponent<T>(
+  component: string,
+  degradedComponents: OpenSkynetRuntimeAuthority["degradedComponents"],
+  operation: () => Promise<T>,
+): Promise<T | undefined> {
+  try {
+    return await operation();
+  } catch (error) {
+    degradedComponents.push({
+      component,
+      reason: error instanceof Error ? error.message : String(error),
+    });
+    return undefined;
+  }
+}
 
 export function deriveOpenSkynetRecommendedAction(params: {
   focusTitle?: string;
@@ -56,34 +76,42 @@ export async function syncOpenSkynetRuntimeAuthority(params: {
     expectedPaths: params.expectedPaths,
     watchedPaths: params.watchedPaths,
   });
+  const degradedComponents = [...snapshot.degradedComponents];
 
+  const nucleus = snapshot.internalProjectNucleus;
+  const program = snapshot.internalProjectStudyProgram;
+  const continuity = snapshot.internalProjectContinuity;
   const experimentPlan =
-    snapshot.skynetNucleus && snapshot.skynetStudyProgram
-      ? await syncSkynetExperimentPlan({
-          workspaceRoot: params.workspaceRoot,
-          sessionKey: params.sessionKey,
-          nucleus: snapshot.skynetNucleus,
-          program: snapshot.skynetStudyProgram,
-          continuity: snapshot.skynetContinuity,
-        }).catch(() => undefined)
+    nucleus && program
+      ? await captureRuntimeComponent("skynet_experiment_plan", degradedComponents, () =>
+          syncSkynetExperimentPlan({
+            workspaceRoot: params.workspaceRoot,
+            sessionKey: params.sessionKey,
+            nucleus,
+            program,
+            continuity,
+          }),
+        )
       : undefined;
   const commitment =
-    snapshot.skynetNucleus && snapshot.skynetStudyProgram && experimentPlan
-      ? await syncSkynetCommitmentDecision({
-          workspaceRoot: params.workspaceRoot,
-          sessionKey: params.sessionKey,
-          nucleus: snapshot.skynetNucleus,
-          program: snapshot.skynetStudyProgram,
-          experiment: experimentPlan,
-          continuity: snapshot.skynetContinuity,
-        }).catch(() => undefined)
+    experimentPlan && nucleus && program
+      ? await captureRuntimeComponent("skynet_commitment", degradedComponents, () =>
+          syncSkynetCommitmentDecision({
+            workspaceRoot: params.workspaceRoot,
+            sessionKey: params.sessionKey,
+            nucleus,
+            program,
+            experiment: experimentPlan,
+            continuity,
+          }),
+        )
       : undefined;
 
   const recommendedAction = deriveOpenSkynetRecommendedAction({
     focusTitle: snapshot.studySupervisor?.focus.title,
-    nucleusMode: snapshot.skynetNucleus?.mode,
-    continuityScore: snapshot.skynetContinuity?.continuityScore,
-    topWorkItem: snapshot.skynetStudyProgram?.items[0]?.title,
+    nucleusMode: snapshot.internalProjectNucleus?.mode,
+    continuityScore: snapshot.internalProjectContinuity?.continuityScore,
+    topWorkItem: snapshot.internalProjectStudyProgram?.items[0]?.title,
   });
   const livingState = await syncOpenSkynetLivingMemory({
     workspaceRoot: params.workspaceRoot,
@@ -102,5 +130,6 @@ export async function syncOpenSkynetRuntimeAuthority(params: {
     experimentPlan,
     commitment,
     livingState,
+    degradedComponents,
   };
 }

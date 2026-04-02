@@ -7,6 +7,7 @@ import {
   loadOmegaOperationalMemorySummary,
   recordOmegaOperationalTurnMemory,
   resolveOmegaOperationalMemoryFile,
+  summarizeOmegaOperationalMemory,
 } from "./operational-memory.js";
 
 describe("omega operational memory", () => {
@@ -134,7 +135,39 @@ describe("omega operational memory", () => {
       recentStalledTurns: 1,
       recentResolvedTurns: 1,
       latestTurnHealth: "resolved",
+      freshness: "fresh",
     });
+  });
+
+  it("marks operational memory as stale when the latest turn is too old", () => {
+    const summary = summarizeOmegaOperationalMemory(
+      [
+        {
+          id: "old-turn",
+          recordedAt: 1_000,
+          iteration: 1,
+          terminationReason: "continue",
+          turnHealth: "stalled",
+          progressObserved: false,
+          timelineDelta: 0,
+          kernelUpdated: false,
+          latencyBreakdown: {
+            sendAgentTurnMs: 1,
+            loadSnapshotMs: 1,
+            readLatestReplyMs: 0,
+            totalMs: 2,
+          },
+          causalImpact: 0,
+        },
+      ],
+      1_000 + 3 * 60 * 60 * 1000,
+    );
+
+    expect(summary).toMatchObject({
+      latestRecordedAt: 1_000,
+      freshness: "stale",
+    });
+    expect((summary.ageMs ?? 0) >= 3 * 60 * 60 * 1000).toBe(true);
   });
 
   it("preserves concurrent operational turn writes for the same session", async () => {

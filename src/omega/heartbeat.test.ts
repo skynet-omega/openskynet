@@ -15,6 +15,7 @@ import {
   type OmegaHeartbeatRuntimeSnapshot,
 } from "./heartbeat.js";
 import { recordOmegaOperationalTurnMemory } from "./operational-memory.js";
+import * as runtimeAuthority from "./runtime-authority.js";
 import type { OmegaSelfTimeKernelState } from "./self-time-kernel.js";
 import { recordOmegaSessionOutcome } from "./session-context.js";
 
@@ -695,6 +696,377 @@ describe("omega heartbeat", () => {
     });
 
     expect(prompt).toBeUndefined();
+  });
+
+  it("emits a conservative degraded prompt instead of silence when Omega state authority is degraded", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    vi.spyOn(runtimeAuthority, "loadOpenSkynetOmegaRuntimeAuthority").mockResolvedValue({
+      workspaceRoot,
+      sessionKey: "main",
+      project: {
+        key: "skynet",
+        name: "Skynet",
+        role: "lab",
+        mission: "benchmark",
+        benchmarkPurpose: "benchmark",
+        successCriteria: [],
+      },
+      memoryCandidates: [],
+      decisionContext: {
+        timeline: [],
+        sessionState: undefined,
+        kernel: undefined,
+        wsp: undefined,
+        controllerState: undefined,
+        operationalSummary: {
+          recentTurnCount: 0,
+          recentResolvedTurns: 0,
+          recentStalledTurns: 0,
+          latestTurnHealth: undefined,
+          freshness: "missing",
+          averageCausalImpact: 0,
+          latestCausalImpact: 0,
+        },
+        stateAuthority: {
+          continuity: {
+            source: "session-context",
+            status: "fallback",
+            reason: "kernel_unavailable",
+          },
+          executive: {
+            source: "kernel-fallback",
+            status: "fallback",
+            reason: "no_executive_snapshot_loaded",
+          },
+          operationalHealth: {
+            source: "operational-memory",
+            status: "fallback",
+            reason: "operational_summary_unavailable",
+          },
+          worldObservation: {
+            source: "kernel-fallback",
+            status: "fallback",
+            reason: "world_snapshot_not_requested_or_unavailable",
+          },
+          drives: {
+            source: "kernel-fallback",
+            status: "fallback",
+            reason: "no_persistent_drive_state_loaded",
+          },
+        },
+        policy: {
+          wakeAction: { kind: "heartbeat_ok", reason: "none" },
+          driveSignal: { kind: "idle" },
+          driveSignalSource: "kernel",
+          shouldRunAutonomy: false,
+          needsRecoveryAttention: false,
+        },
+        shouldDispatchHeartbeatPrompt: false,
+        degradedComponents: [
+          { component: "controller_state", reason: "controller exploded" },
+          { component: "omega_wsp", reason: "wsp unavailable" },
+        ],
+      },
+      worldSnapshot: undefined,
+      livingState: undefined,
+    } as any);
+
+    const prompt = await buildOmegaHeartbeatPrompt({
+      workspaceRoot,
+      sessionKey: "main",
+    });
+
+    expect(prompt).toContain("[OMEGA Degraded]");
+    expect(prompt).toContain("controller_state, omega_wsp");
+    expect(prompt).toContain("conservative inspection or maintenance");
+  });
+
+  it("emits a conservative degraded prompt when operational memory is stale even without missing components", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    vi.spyOn(runtimeAuthority, "loadOpenSkynetOmegaRuntimeAuthority").mockResolvedValue({
+      workspaceRoot,
+      sessionKey: "main",
+      project: {
+        key: "skynet",
+        name: "Skynet",
+        role: "lab",
+        mission: "benchmark",
+        benchmarkPurpose: "benchmark",
+        successCriteria: [],
+      },
+      memoryCandidates: [],
+      decisionContext: {
+        timeline: [],
+        sessionState: undefined,
+        kernel: undefined,
+        wsp: undefined,
+        controllerState: undefined,
+        operationalSummary: {
+          recentTurnCount: 1,
+          recentResolvedTurns: 0,
+          recentStalledTurns: 1,
+          latestTurnHealth: "stalled",
+          freshness: "stale",
+          averageCausalImpact: 0,
+          latestCausalImpact: 0,
+        },
+        stateAuthority: {
+          continuity: {
+            source: "session-context",
+            status: "fallback",
+            reason: "kernel_unavailable",
+          },
+          executive: {
+            source: "kernel-fallback",
+            status: "fallback",
+            reason: "no_executive_snapshot_loaded",
+          },
+          operationalHealth: {
+            source: "operational-memory",
+            status: "fallback",
+            reason: "recent_turn_health_stale",
+          },
+          worldObservation: {
+            source: "kernel-fallback",
+            status: "fallback",
+            reason: "world_snapshot_not_requested_or_unavailable",
+          },
+          drives: {
+            source: "kernel-fallback",
+            status: "fallback",
+            reason: "no_persistent_drive_state_loaded",
+          },
+        },
+        policy: {
+          wakeAction: { kind: "heartbeat_ok", reason: "none" },
+          driveSignal: { kind: "idle" },
+          driveSignalSource: "kernel",
+          shouldRunAutonomy: false,
+          needsRecoveryAttention: false,
+        },
+        shouldDispatchHeartbeatPrompt: false,
+        degradedComponents: [],
+      },
+      worldSnapshot: undefined,
+      livingState: undefined,
+    } as any);
+
+    const prompt = await buildOmegaHeartbeatPrompt({
+      workspaceRoot,
+      sessionKey: "main",
+    });
+
+    expect(prompt).toContain("[OMEGA Degraded]");
+    expect(prompt).toContain("Operational memory is stale");
+    expect(prompt).toContain("Revalidate active state before expanding scope");
+  });
+
+  it("includes a fresh runtime observer signal as a soft causal prior in the wake prompt", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    vi.spyOn(runtimeAuthority, "loadOpenSkynetOmegaRuntimeAuthority").mockResolvedValue({
+      workspaceRoot,
+      sessionKey: "main",
+      project: {
+        key: "skynet",
+        name: "Skynet",
+        role: "lab",
+        mission: "benchmark",
+        benchmarkPurpose: "benchmark",
+        successCriteria: [],
+      },
+      memoryCandidates: [],
+      decisionContext: {
+        timeline: [],
+        sessionState: undefined,
+        kernel: makeKernel(),
+        wsp: undefined,
+        controllerState: {
+          dispatchPlan: {
+            shouldDispatchLlmTurn: true,
+            selectedAction: "probe",
+          },
+          selectedWorkItem: {
+            id: "maintenance:agenda:test",
+            detail: "Inspect runtime trajectory signal.",
+            queueKind: "maintenance",
+          },
+        },
+        operationalSummary: {
+          recentTurnCount: 1,
+          recentResolvedTurns: 1,
+          recentStalledTurns: 0,
+          latestTurnHealth: "resolved",
+          freshness: "fresh",
+          averageCausalImpact: 0.4,
+          latestCausalImpact: 0.4,
+        },
+        stateAuthority: {
+          continuity: {
+            source: "session-context",
+            status: "derived",
+            reason: "ok",
+          },
+          executive: {
+            source: "controller-state",
+            status: "derived",
+            reason: "ok",
+          },
+          operationalHealth: {
+            source: "operational-memory",
+            status: "authoritative",
+            reason: "fresh_turn_health",
+          },
+          worldObservation: {
+            source: "world-model",
+            status: "derived",
+            reason: "ok",
+          },
+          drives: {
+            source: "kernel",
+            status: "derived",
+            reason: "ok",
+          },
+        },
+        policy: {
+          wakeAction: { kind: "maintain", reason: "maintenance_selected" },
+          driveSignal: { kind: "idle" },
+          driveSignalSource: "kernel",
+          shouldRunAutonomy: false,
+          needsRecoveryAttention: false,
+        },
+        shouldDispatchHeartbeatPrompt: true,
+        degradedComponents: [],
+      },
+      runtimeObserver: {
+        updatedAt: Date.now(),
+        freshness: "fresh",
+        accuracy: 0.82,
+        majorityBaseline: 0.71,
+        improvementOverBaseline: 0.12,
+        trajectorySamples: 95,
+        harvestedEpisodes: 97,
+        lookback: 3,
+        dominantLabel: "stall",
+      },
+      worldSnapshot: undefined,
+      livingState: undefined,
+    } as any);
+
+    const prompt = await buildOmegaHeartbeatPrompt({
+      workspaceRoot,
+      sessionKey: "main",
+    });
+
+    expect(prompt).toContain("Runtime observer signal");
+    expect(prompt).toContain("soft causal prior");
+    expect(prompt).toContain("stall");
+  });
+
+  it("includes an active cognitive kernel signal in the wake prompt and documents its auto-disable threshold", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    vi.spyOn(runtimeAuthority, "loadOpenSkynetOmegaRuntimeAuthority").mockResolvedValue({
+      workspaceRoot,
+      sessionKey: "main",
+      project: {
+        key: "skynet",
+        name: "Skynet",
+        role: "lab",
+        mission: "benchmark",
+        benchmarkPurpose: "benchmark",
+        successCriteria: [],
+      },
+      memoryCandidates: [],
+      decisionContext: {
+        timeline: [],
+        sessionState: undefined,
+        kernel: makeKernel(),
+        wsp: undefined,
+        controllerState: {
+          dispatchPlan: {
+            shouldDispatchLlmTurn: true,
+            selectedAction: "probe",
+          },
+          selectedWorkItem: {
+            id: "maintenance:agenda:test",
+            detail: "Inspect cognitive kernel signal.",
+            queueKind: "maintenance",
+          },
+        },
+        operationalSummary: {
+          recentTurnCount: 1,
+          recentResolvedTurns: 1,
+          recentStalledTurns: 0,
+          latestTurnHealth: "resolved",
+          freshness: "fresh",
+          averageCausalImpact: 0.4,
+          latestCausalImpact: 0.4,
+        },
+        stateAuthority: {
+          continuity: {
+            source: "session-context",
+            status: "derived",
+            reason: "ok",
+          },
+          executive: {
+            source: "controller-state",
+            status: "derived",
+            reason: "ok",
+          },
+          operationalHealth: {
+            source: "operational-memory",
+            status: "authoritative",
+            reason: "fresh_turn_health",
+          },
+          worldObservation: {
+            source: "world-model",
+            status: "derived",
+            reason: "ok",
+          },
+          drives: {
+            source: "kernel",
+            status: "derived",
+            reason: "ok",
+          },
+        },
+        policy: {
+          wakeAction: { kind: "maintain", reason: "maintenance_selected" },
+          driveSignal: { kind: "idle" },
+          driveSignalSource: "kernel",
+          shouldRunAutonomy: false,
+          needsRecoveryAttention: false,
+        },
+        shouldDispatchHeartbeatPrompt: true,
+        degradedComponents: [],
+      },
+      cognitiveKernel: {
+        updatedAt: Date.now(),
+        freshness: "fresh",
+        accuracy: 0.86,
+        majorityBaseline: 0.56,
+        improvementOverBaseline: 0.3,
+        trajectorySamples: 87,
+        harvestedEpisodes: 91,
+        evaluatedSamples: 79,
+        warmupSamples: 8,
+        dominantLabel: "stall",
+        active: true,
+        activationReason: "enabled_by_default",
+        targetAccuracy: 0.9,
+        deactivationThreshold: 0.8,
+      },
+      worldSnapshot: undefined,
+      livingState: undefined,
+    } as any);
+
+    const prompt = await buildOmegaHeartbeatPrompt({
+      workspaceRoot,
+      sessionKey: "main",
+    });
+
+    expect(prompt).toContain("Cognitive kernel signal");
+    expect(prompt).toContain("enabled by default");
+    expect(prompt).toContain("0.80");
+    expect(prompt).toContain("0.90");
   });
 
   it("returns no prompt when the executive dispatch plan defers active work under budget pressure", async () => {

@@ -4,6 +4,7 @@ import {
   buildExecApprovalPendingReplyPayload,
   buildExecApprovalUnavailableReplyPayload,
 } from "../infra/exec-approval-reply.js";
+import { classifyOpenSkynetRuntimeFailure } from "../infra/runtime-failure.js";
 import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
 import type { PluginHookAfterToolCallEvent } from "../plugins/types.js";
 import { normalizeTextForComparison } from "./pi-embedded-helpers.js";
@@ -288,11 +289,11 @@ async function emitToolResultOutput(params: {
   if (mediaPaths.length === 0) {
     return;
   }
-  try {
-    void ctx.params.onToolResult({ mediaUrls: mediaPaths });
-  } catch {
-    // ignore delivery failures
-  }
+  void Promise.resolve()
+    .then(() => ctx.params.onToolResult?.({ mediaUrls: mediaPaths }))
+    .catch(() => {
+      // ignore delivery failures
+    });
 }
 
 export async function handleToolExecutionStart(
@@ -435,6 +436,21 @@ export async function handleToolExecutionEnd(
   const result = evt.result;
   const isToolError = isError || isToolResultError(result);
   const sanitizedResult = sanitizeToolResult(result);
+  const toolErrorMessage = isToolError ? extractToolErrorMessage(sanitizedResult) : undefined;
+  const runtimeFailure = isToolError
+    ? classifyOpenSkynetRuntimeFailure({
+        status:
+          sanitizedResult &&
+          typeof sanitizedResult === "object" &&
+          "details" in sanitizedResult &&
+          sanitizedResult.details &&
+          typeof sanitizedResult.details === "object" &&
+          "status" in sanitizedResult.details
+            ? String((sanitizedResult.details as { status?: unknown }).status ?? "")
+            : "error",
+        errorText: toolErrorMessage,
+      })
+    : undefined;
   const toolStartKey = buildToolStartKey(runId, toolCallId);
   const startData = toolStartData.get(toolStartKey);
   toolStartData.delete(toolStartKey);
@@ -444,11 +460,10 @@ export async function handleToolExecutionEnd(
   ctx.state.toolMetaById.delete(toolCallId);
   ctx.state.toolSummaryById.delete(toolCallId);
   if (isToolError) {
-    const errorMessage = extractToolErrorMessage(sanitizedResult);
     ctx.state.lastToolError = {
       toolName,
       meta,
-      error: errorMessage,
+      error: toolErrorMessage,
       mutatingAction: callSummary?.mutatingAction,
       actionFingerprint: callSummary?.actionFingerprint,
     };
@@ -527,6 +542,8 @@ export async function handleToolExecutionEnd(
       toolCallId,
       meta,
       isError: isToolError,
+      failureDomain: runtimeFailure?.failureDomain,
+      failureClass: runtimeFailure?.failureClass,
       result: sanitizedResult,
     },
   });
@@ -538,6 +555,8 @@ export async function handleToolExecutionEnd(
       toolCallId,
       meta,
       isError: isToolError,
+      failureDomain: runtimeFailure?.failureDomain,
+      failureClass: runtimeFailure?.failureClass,
     },
   });
 
@@ -557,7 +576,7 @@ export async function handleToolExecutionEnd(
       runId,
       toolCallId,
       result: sanitizedResult,
-      error: isToolError ? extractToolErrorMessage(sanitizedResult) : undefined,
+      error: toolErrorMessage,
       durationMs,
     };
     void hookRunnerAfter

@@ -74,6 +74,12 @@ Current repo priority:
 - only operational continuity / reliability bugs should justify touching the platform now
 - active exploration should move to `Skynet Brain Lab`
 
+Operationally, the repo is still handled under a two-line directive:
+
+- `OpenSkyNet` = platform/runtime/tooling
+- `Skynet Brain Lab` = the separate research line under [`src/skynet`](./src/skynet) for searching a new cognitive substrate beyond a plain LLM-centric agent
+- promote mechanisms from the lab into the platform only after empirical validation and explicit cost/benefit review
+
 The practical benchmark is simple:
 
 - if OpenSkyNet can sustain useful autonomous work on an internal project over time, it is becoming a better agent than the parent runtime

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { withEnvAsync } from "../test-utils/env.js";
 import { admitOmegaDurableMemory } from "./durable-memory.js";
 import { recordOmegaRecoveryStrategyMetrics } from "./empirical-metrics.js";
-import { buildIdleOmegaHeartbeatPrompt } from "./heartbeat-idle.js";
+import { buildIdleOmegaHeartbeatPrompt } from "./experimental/heartbeat-idle.js";
 import { recordOmegaOperationalTurnMemory } from "./operational-memory.js";
 import { recordOmegaSessionOutcome } from "./session-context.js";
 import { loadOmegaWorldModelSnapshot } from "./world-model.js";
@@ -275,11 +275,14 @@ describe("omega world model", () => {
     expect(snapshot.problemAgenda[0]?.classKey).toBe("initiative:autonomy_improvement");
     expect(snapshot.studySupervisor?.focus.key).toBe("endogenous_science_agenda");
     expect(snapshot.studySupervisor?.tracks.length).toBeGreaterThanOrEqual(5);
-    expect(snapshot.skynetNucleus?.name).toBe("Protein Lab");
-    expect(snapshot.skynetNucleus?.mode).toBe("explore");
-    expect(snapshot.skynetStudyProgram?.items.length).toBe(3);
-    expect(snapshot.skynetStudyProgram?.items[0]?.title).toContain("Empujar foco activo");
-    expect(snapshot.skynetContinuity?.focusStreak).toBe(1);
+    expect(snapshot.internalProjectNucleus?.name).toBe("Protein Lab");
+    expect(snapshot.internalProjectNucleus?.mode).toBe("explore");
+    expect(snapshot.internalProjectStudyProgram?.items.length).toBe(3);
+    expect(snapshot.internalProjectStudyProgram?.items[0]?.title).toContain("Empujar foco activo");
+    expect(snapshot.internalProjectContinuity?.focusStreak).toBe(1);
+    expect(snapshot.skynetNucleus).toEqual(snapshot.internalProjectNucleus);
+    expect(snapshot.skynetStudyProgram).toEqual(snapshot.internalProjectStudyProgram);
+    expect(snapshot.skynetContinuity).toEqual(snapshot.internalProjectContinuity);
   });
 
   it("includes the study supervisor focus in the idle heartbeat prompt", async () => {

@@ -139,6 +139,19 @@ describe("handleToolExecutionEnd media emission", () => {
     });
   });
 
+  it("swallows async delivery failures for media-only tool results", async () => {
+    const onToolResult = vi.fn(async () => {
+      throw new Error("delivery failed");
+    });
+    const ctx = createMockContext({ shouldEmitToolOutput: false, onToolResult });
+
+    await emitUntrustedToolMediaResult(ctx, "https://example.com/file.png");
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(onToolResult).toHaveBeenCalledTimes(1);
+  });
+
   it("does NOT emit media when verbose is full (emitToolOutput handles it)", async () => {
     const onToolResult = vi.fn();
     const ctx = createMockContext({ shouldEmitToolOutput: true, onToolResult });

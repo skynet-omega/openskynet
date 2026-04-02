@@ -192,6 +192,10 @@ import {
   SessionsDeleteParamsSchema,
   type SessionsListParams,
   SessionsListParamsSchema,
+  type SessionsMessagesSubscribeParams,
+  SessionsMessagesSubscribeParamsSchema,
+  type SessionsMessagesUnsubscribeParams,
+  SessionsMessagesUnsubscribeParamsSchema,
   type SessionsPatchParams,
   SessionsPatchParamsSchema,
   type SessionsPreviewParams,
@@ -321,6 +325,11 @@ export const validateSessionsListParams = ajv.compile<SessionsListParams>(Sessio
 export const validateSessionsPreviewParams = ajv.compile<SessionsPreviewParams>(
   SessionsPreviewParamsSchema,
 );
+export const validateSessionsMessagesSubscribeParams = ajv.compile<SessionsMessagesSubscribeParams>(
+  SessionsMessagesSubscribeParamsSchema,
+);
+export const validateSessionsMessagesUnsubscribeParams =
+  ajv.compile<SessionsMessagesUnsubscribeParams>(SessionsMessagesUnsubscribeParamsSchema);
 export const validateSessionsResolveParams = ajv.compile<SessionsResolveParams>(
   SessionsResolveParamsSchema,
 );

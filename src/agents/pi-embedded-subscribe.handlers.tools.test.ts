@@ -1,5 +1,6 @@
 import type { AgentEvent } from "@mariozechner/pi-agent-core";
 import { describe, expect, it, vi } from "vitest";
+import { emitAgentEvent } from "../infra/agent-events.js";
 import type { MessagingToolSend } from "./pi-embedded-messaging.js";
 import {
   handleToolExecutionEnd,
@@ -9,6 +10,10 @@ import type {
   ToolCallSummary,
   ToolHandlerContext,
 } from "./pi-embedded-subscribe.handlers.types.js";
+
+vi.mock("../infra/agent-events.js", () => ({
+  emitAgentEvent: vi.fn(),
+}));
 
 type ToolExecutionStartEvent = Extract<AgentEvent, { type: "tool_execution_start" }>;
 type ToolExecutionEndEvent = Extract<AgentEvent, { type: "tool_execution_end" }>;
@@ -173,6 +178,35 @@ describe("handleToolExecutionEnd cron.add commitment tracking", () => {
     );
 
     expect(ctx.state.successfulCronAdds).toBe(0);
+  });
+});
+
+describe("handleToolExecutionEnd classified failures", () => {
+  it("emits classified failure metadata for tool errors", async () => {
+    const { ctx } = createTestContext();
+
+    await handleToolExecutionEnd(
+      ctx as never,
+      {
+        type: "tool_execution_end",
+        toolName: "edit",
+        toolCallId: "tool-edit-error",
+        isError: true,
+        result: { details: { status: "error", error: "syntax error" } },
+      } as never,
+    );
+
+    expect(vi.mocked(emitAgentEvent)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stream: "tool",
+        data: expect.objectContaining({
+          phase: "result",
+          isError: true,
+          failureDomain: "cognitive",
+          failureClass: "validation_error",
+        }),
+      }),
+    );
   });
 });
 

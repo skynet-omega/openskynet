@@ -66,6 +66,8 @@ describe("handleAgentEnd", () => {
       data: {
         phase: "error",
         error: "connection refused",
+        failureDomain: "environmental",
+        failureClass: "gateway_connection",
       },
     });
   });
@@ -145,6 +147,8 @@ describe("handleAgentEnd", () => {
       data: {
         phase: "error",
         error: "x-api-key: ***",
+        failureDomain: "mixed",
+        failureClass: "unknown_error",
       },
     });
   });

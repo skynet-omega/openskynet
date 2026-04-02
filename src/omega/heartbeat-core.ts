@@ -125,8 +125,13 @@ async function loadOmegaHeartbeatDecisionContext(params: {
     driveSignalSource: decisionContext.policy.driveSignalSource,
     shouldRunAutonomy: decisionContext.policy.shouldRunAutonomy,
     shouldDispatchPrompt,
+    degradedComponents: decisionContext.degradedComponents,
+    runtimeObserver: authority.runtimeObserver,
+    cognitiveKernel: authority.cognitiveKernel,
   };
 }
+
+type OmegaHeartbeatDecisionContext = Awaited<ReturnType<typeof loadOmegaHeartbeatDecisionContext>>;
 
 function deriveMaintenanceContractClassKey(workItemId?: string): string | undefined {
   if (!workItemId) {
@@ -144,98 +149,188 @@ function deriveMaintenanceContractClassKey(workItemId?: string): string | undefi
   return undefined;
 }
 
-export async function buildOmegaHeartbeatPrompt(params: {
+function hasStaleOperationalMemory(
+  stateAuthority: OmegaHeartbeatDecisionContext["stateAuthority"],
+): boolean {
+  return (
+    stateAuthority?.operationalHealth?.status === "fallback" &&
+    stateAuthority?.operationalHealth?.reason === "recent_turn_health_stale"
+  );
+}
+
+function buildDegradedHeartbeatPrompt(params: {
+  degradedComponents: OmegaHeartbeatDecisionContext["degradedComponents"];
+  staleOperationalMemory: boolean;
+}): string {
+  const degradedNames = params.degradedComponents.map((entry) => entry.component).join(", ");
+  const lines = ["[OMEGA Degraded]"];
+  if (params.degradedComponents.length > 0) {
+    lines.push(`Detected degraded components: ${degradedNames}`);
+    lines.push(
+      "Treat missing subsystems as degraded state, not as evidence of calm or completion.",
+    );
+  }
+  if (params.staleOperationalMemory) {
+    lines.push(
+      "Operational memory is stale; do not assume recent continuity from persisted turns alone.",
+    );
+    lines.push("Revalidate active state before expanding scope or inventing new work.");
+  }
+  lines.push(
+    "Run only conservative inspection or maintenance. Do not invent new goals from partial state.",
+    "",
+    "If no user-facing update is needed after inspection, reply HEARTBEAT_OK.",
+  );
+  return lines.join("\n");
+}
+
+async function buildIdleAutonomousHeartbeatPrompt(params: {
   workspaceRoot: string;
   sessionKey: string;
+  kernel?: OmegaHeartbeatDecisionContext["kernel"];
+  sharedDriveSignal: OmegaHeartbeatDecisionContext["driveSignal"];
+  engines: ReturnType<typeof getOmegaHeartbeatEngineRegistry>;
 }): Promise<string | undefined> {
-  const {
+  const { kernel, sharedDriveSignal, engines } = params;
+  if (!kernel) {
+    return undefined;
+  }
+  const engineSignals = engines.collectKernelSignals({
     kernel,
-    wakeAction,
-    effectiveWakeAction,
-    controllerState,
-    driveSignal: sharedDriveSignal,
-    shouldDispatchPrompt,
-  } = await loadOmegaHeartbeatDecisionContext(params);
-  const engines = getOmegaHeartbeatEngineRegistry();
+    minEntropyReduction: 0.15,
+    maxThoughtConfidence: 0.8,
+  });
+  const hypothesisSignals = await engines.testUntestedHypotheses({
+    workspaceRoot: params.workspaceRoot,
+    maxHypothesesToTest: 2,
+    correlationConfirmationThreshold: 0.1,
+  });
+  const scoredSignals = scoreOmegaEngineSignals([
+    ...engineSignals.signals,
+    ...hypothesisSignals.signals,
+  ]);
+  let driveSignal = mergeOmegaDriveSignalWithEngineScore({
+    baseDriveSignal: sharedDriveSignal,
+    engineScore: scoredSignals,
+  });
+  const sessionTimeline = await loadOmegaSessionTimeline(params);
+  const jepaTension = parseJepaTensionFromKernelTimeline(sessionTimeline);
+  driveSignal = enhanceDriveWithJepaTension(driveSignal, jepaTension);
 
-  if (kernel) {
-    void engines.jepaEmpirical.logSample({
-      workspaceRoot: params.workspaceRoot,
-      sessionKey: params.sessionKey,
-      kernel,
-    });
-  }
-
-  if (wakeAction.kind === "heartbeat_ok" && !shouldDispatchPrompt) {
-    if (kernel) {
-      const engineSignals = engines.collectKernelSignals({
-        kernel,
-        minEntropyReduction: 0.15,
-        maxThoughtConfidence: 0.8,
-      });
-      const hypothesisSignals = await engines.testUntestedHypotheses({
-        workspaceRoot: params.workspaceRoot,
-        maxHypothesesToTest: 2,
-        correlationConfirmationThreshold: 0.1,
-      });
-      const scoredSignals = scoreOmegaEngineSignals([
-        ...engineSignals.signals,
-        ...hypothesisSignals.signals,
-      ]);
-      let driveSignal = mergeOmegaDriveSignalWithEngineScore({
-        baseDriveSignal: sharedDriveSignal,
-        engineScore: scoredSignals,
-      });
-      const sessionTimeline = await loadOmegaSessionTimeline(params);
-      const jepaTension = parseJepaTensionFromKernelTimeline(sessionTimeline);
-      driveSignal = enhanceDriveWithJepaTension(driveSignal, jepaTension);
-
-      if (driveSignal.kind !== "idle") {
-        const autonomousPrompt = buildAutonomousDirectivePrompt({ signal: driveSignal, kernel });
-        if (autonomousPrompt) {
-          return autonomousPrompt;
-        }
-      }
-
-      void engines.continuousThinking.getStats();
+  if (driveSignal.kind !== "idle") {
+    const autonomousPrompt = buildAutonomousDirectivePrompt({ signal: driveSignal, kernel });
+    if (autonomousPrompt) {
+      return autonomousPrompt;
     }
-    return undefined;
   }
 
-  if (!shouldDispatchPrompt) {
-    return undefined;
-  }
+  void engines.continuousThinking.getStats();
+  return undefined;
+}
 
-  const opTailForPrompt = await loadOmegaOperationalMemoryTail(params);
-  const opSummaryForPrompt = summarizeOmegaOperationalMemory(opTailForPrompt);
-  if (opSummaryForPrompt.recentStalledTurns >= 3 && opSummaryForPrompt.recentResolvedTurns === 0) {
-    return undefined;
-  }
-
-  if (
-    kernel &&
-    (kernel.tension.failureStreak >= 2 || kernel.tension.repeatedFailureKinds.length >= 2)
+async function appendScienceBaseRules(params: {
+  lines: string[];
+  workspaceRoot: string;
+  effectiveWakeAction: OmegaHeartbeatPromptWakeAction;
+}): Promise<void> {
+  let taskToQuery = "";
+  if ("goalTask" in params.effectiveWakeAction) {
+    taskToQuery = params.effectiveWakeAction.goalTask;
+  } else if (
+    "goalTasks" in params.effectiveWakeAction &&
+    params.effectiveWakeAction.goalTasks.length > 0
   ) {
-    const lines = [
-      "[OMEGA Initiative Contract]",
-      "The system has detected repeated failures without an active recovery goal.",
-      "Run a probe_experiment: a minimal, isolated test to identify the root cause.",
-      "",
-      "SURGICAL EXPERIMENT CONSTRAINTS:",
-      "- NO REPAIR: Do not fix the underlying issue. Only diagnose.",
-      "- Scope: ≤2 files, ≤20 lines of change",
-      "- Output: a falsifiable finding (success/failure with evidence)",
-      `- Failure kinds observed: ${kernel.tension.repeatedFailureKinds.join(", ") || "unknown"}`,
-    ];
-    return lines.join("\n");
+    taskToQuery = params.effectiveWakeAction.goalTasks[0];
+  } else if ("selectedWorkItemDetail" in params.effectiveWakeAction) {
+    taskToQuery = params.effectiveWakeAction.selectedWorkItemDetail ?? "";
   }
 
-  const lines = [
-    "[OMEGA Wake]",
-    "Use only verified session state; do not invent new tension.",
-    `Wake action: ${effectiveWakeAction.kind}`,
-    `Reason: ${effectiveWakeAction.reason}`,
-  ];
+  if (!taskToQuery) {
+    return;
+  }
+
+  const relevantRules = await queryScienceBase({
+    workspaceRoot: params.workspaceRoot,
+    query: taskToQuery,
+    maxRules: 3,
+  });
+  if (relevantRules.length === 0) {
+    return;
+  }
+
+  params.lines.push("");
+  params.lines.push("--- EMPIRICAL KNOWLEDGE (SCIENCE_BASE.md RAG) ---");
+  params.lines.push("The following rules were previously learned and verified for similar tasks:");
+  for (const rule of relevantRules) {
+    params.lines.push(rule);
+  }
+  params.lines.push("Apply these rules if they match the current context.");
+}
+
+function appendWakeActionLines(params: {
+  lines: string[];
+  wakeAction: OmegaHeartbeatDecisionContext["wakeAction"];
+  degradedComponents: OmegaHeartbeatDecisionContext["degradedComponents"];
+  stateAuthority: OmegaHeartbeatDecisionContext["stateAuthority"];
+  runtimeObserver: OmegaHeartbeatDecisionContext["runtimeObserver"];
+  cognitiveKernel: OmegaHeartbeatDecisionContext["cognitiveKernel"];
+  controllerState: OmegaHeartbeatDecisionContext["controllerState"];
+}): void {
+  const {
+    lines,
+    wakeAction,
+    degradedComponents,
+    stateAuthority,
+    runtimeObserver,
+    cognitiveKernel,
+    controllerState,
+  } = params;
+  if (degradedComponents.length > 0) {
+    lines.push(
+      `Degraded Omega components: ${degradedComponents.map((entry) => entry.component).join(", ")}`,
+    );
+    lines.push(
+      "Treat missing subsystems as degraded state, not as evidence of calm or completion.",
+    );
+  }
+  if (stateAuthority?.operationalHealth?.reason === "recent_turn_health_stale") {
+    lines.push(
+      "Operational memory is stale; verify current continuity before trusting old turn summaries.",
+    );
+  } else if (stateAuthority?.operationalHealth?.reason === "recent_turn_health_aging") {
+    lines.push(
+      "Operational memory is aging; prefer lightweight revalidation before committing to new branches of work.",
+    );
+  }
+  if (runtimeObserver?.freshness === "fresh") {
+    lines.push(
+      `Runtime observer signal: recent runtime trajectories improved next-state prediction by ${runtimeObserver.improvementOverBaseline.toFixed(2)} over baseline (${runtimeObserver.accuracy.toFixed(2)} accuracy across ${runtimeObserver.trajectorySamples} samples).`,
+    );
+    if (runtimeObserver.dominantLabel) {
+      lines.push(
+        `Observed dominant runtime mode: ${runtimeObserver.dominantLabel}. Use this only as a soft causal prior; do not override verified state.`,
+      );
+    }
+  }
+  if (cognitiveKernel?.freshness === "fresh") {
+    lines.push(
+      `Cognitive kernel signal: live trajectory learning is ${cognitiveKernel.active ? "active" : "inactive"} (${cognitiveKernel.accuracy.toFixed(2)} accuracy vs ${cognitiveKernel.majorityBaseline.toFixed(2)} baseline across ${cognitiveKernel.trajectorySamples} samples).`,
+    );
+    if (cognitiveKernel.active) {
+      lines.push(
+        `Activation policy: enabled by default while accuracy stays >= ${cognitiveKernel.deactivationThreshold.toFixed(2)}; target band is ${cognitiveKernel.targetAccuracy.toFixed(2)}.`,
+      );
+      if (cognitiveKernel.dominantLabel) {
+        lines.push(
+          `Observed cognitive mode: ${cognitiveKernel.dominantLabel}. Use this as a soft causal prior only; do not override verified state.`,
+        );
+      }
+    } else {
+      lines.push(
+        `Cognitive kernel is auto-disabled (${cognitiveKernel.activationReason}); review src/skynet/cognitive-kernel before trusting it again.`,
+      );
+    }
+  }
 
   if (controllerState?.dispatchPlan.shouldDispatchLlmTurn && controllerState.selectedWorkItem) {
     lines.push(`Executive action: ${controllerState.dispatchPlan.selectedAction}`);
@@ -303,34 +398,14 @@ export async function buildOmegaHeartbeatPrompt(params: {
       "Prefer the newer active subgoal when it already covers the remaining unresolved targets.",
     );
   }
+}
 
-  let taskToQuery = "";
-  if ("goalTask" in effectiveWakeAction) {
-    taskToQuery = effectiveWakeAction.goalTask;
-  } else if ("goalTasks" in effectiveWakeAction && effectiveWakeAction.goalTasks.length > 0) {
-    taskToQuery = effectiveWakeAction.goalTasks[0];
-  } else if ("selectedWorkItemDetail" in effectiveWakeAction) {
-    taskToQuery = effectiveWakeAction.selectedWorkItemDetail ?? "";
-  }
-
-  if (taskToQuery) {
-    const relevantRules = await queryScienceBase({
-      workspaceRoot: params.workspaceRoot,
-      query: taskToQuery,
-      maxRules: 3,
-    });
-    if (relevantRules.length > 0) {
-      lines.push("");
-      lines.push("--- EMPIRICAL KNOWLEDGE (SCIENCE_BASE.md RAG) ---");
-      lines.push("The following rules were previously learned and verified for similar tasks:");
-      for (const rule of relevantRules) {
-        lines.push(rule);
-      }
-      lines.push("Apply these rules if they match the current context.");
-    }
-  }
-
-  const wakeActionAny = effectiveWakeAction as unknown as {
+function appendMaintenanceContract(params: {
+  lines: string[];
+  effectiveWakeAction: OmegaHeartbeatPromptWakeAction;
+  controllerState: OmegaHeartbeatDecisionContext["controllerState"];
+}): void {
+  const wakeActionAny = params.effectiveWakeAction as unknown as {
     kind: string;
     selectedWorkItemId?: string;
   };
@@ -338,33 +413,133 @@ export async function buildOmegaHeartbeatPrompt(params: {
     wakeActionAny.kind === "maintain"
       ? deriveMaintenanceContractClassKey(wakeActionAny.selectedWorkItemId)
       : undefined;
-  if (maintenanceContractClassKey) {
-    const classKey = maintenanceContractClassKey;
-    const contract = deriveOmegaAgendaExecutionContract(classKey);
-    lines.push("");
-    lines.push("[OMEGA Initiative Contract]");
-    lines.push(`Problem class: ${classKey}`);
-    lines.push(`Hypothesis: ${contract.hypothesis}`);
-    lines.push(`Deliverable: ${contract.deliverable}`);
-    lines.push(`Success criteria: ${contract.successCriteria}`);
-    if (contract.experimentMode === "probe_experiment") {
-      lines.push("Experiment mode: probe_experiment (Isolated diagnosis)");
+  if (!maintenanceContractClassKey) {
+    return;
+  }
+
+  const classKey = maintenanceContractClassKey;
+  const contract = deriveOmegaAgendaExecutionContract(classKey);
+  params.lines.push("");
+  params.lines.push("[OMEGA Initiative Contract]");
+  params.lines.push(`Problem class: ${classKey}`);
+  params.lines.push(`Hypothesis: ${contract.hypothesis}`);
+  params.lines.push(`Deliverable: ${contract.deliverable}`);
+  params.lines.push(`Success criteria: ${contract.successCriteria}`);
+  if (contract.experimentMode === "probe_experiment") {
+    params.lines.push("Experiment mode: probe_experiment (Isolated diagnosis)");
+  }
+  const evidence = params.controllerState?.worldSnapshot?.relevantMemories.find((entry) =>
+    classKey.startsWith("failure:") ? entry.errorKind === classKey.slice("failure:".length) : true,
+  );
+  if (evidence) {
+    params.lines.push(`Evidence task: ${evidence.task}`);
+    if (evidence.targets.length > 0) {
+      params.lines.push(`Evidence targets: ${evidence.targets.join(" | ")}`);
     }
-    const evidence = controllerState?.worldSnapshot?.relevantMemories.find((entry) =>
-      classKey.startsWith("failure:")
-        ? entry.errorKind === classKey.slice("failure:".length)
-        : true,
-    );
-    if (evidence) {
-      lines.push(`Evidence task: ${evidence.task}`);
-      if (evidence.targets.length > 0) {
-        lines.push(`Evidence targets: ${evidence.targets.join(" | ")}`);
-      }
-      if (evidence.observedChangedFiles.length > 0) {
-        lines.push(`Evidence writes: ${evidence.observedChangedFiles.join(" | ")}`);
-      }
+    if (evidence.observedChangedFiles.length > 0) {
+      params.lines.push(`Evidence writes: ${evidence.observedChangedFiles.join(" | ")}`);
     }
   }
+}
+
+export async function buildOmegaHeartbeatPrompt(params: {
+  workspaceRoot: string;
+  sessionKey: string;
+}): Promise<string | undefined> {
+  const {
+    kernel,
+    wakeAction,
+    effectiveWakeAction,
+    stateAuthority,
+    controllerState,
+    driveSignal: sharedDriveSignal,
+    shouldDispatchPrompt,
+    degradedComponents,
+    runtimeObserver,
+    cognitiveKernel,
+  } = await loadOmegaHeartbeatDecisionContext(params);
+  const engines = getOmegaHeartbeatEngineRegistry();
+  const staleOperationalMemory = hasStaleOperationalMemory(stateAuthority);
+
+  if (
+    (degradedComponents.length > 0 || staleOperationalMemory) &&
+    wakeAction.kind === "heartbeat_ok" &&
+    !shouldDispatchPrompt
+  ) {
+    return buildDegradedHeartbeatPrompt({ degradedComponents, staleOperationalMemory });
+  }
+
+  if (kernel) {
+    void engines.jepaEmpirical.logSample({
+      workspaceRoot: params.workspaceRoot,
+      sessionKey: params.sessionKey,
+      kernel,
+    });
+  }
+
+  if (wakeAction.kind === "heartbeat_ok" && !shouldDispatchPrompt) {
+    return await buildIdleAutonomousHeartbeatPrompt({
+      workspaceRoot: params.workspaceRoot,
+      sessionKey: params.sessionKey,
+      kernel,
+      sharedDriveSignal,
+      engines,
+    });
+  }
+
+  if (!shouldDispatchPrompt) {
+    return undefined;
+  }
+
+  const opTailForPrompt = await loadOmegaOperationalMemoryTail(params);
+  const opSummaryForPrompt = summarizeOmegaOperationalMemory(opTailForPrompt);
+  if (opSummaryForPrompt.recentStalledTurns >= 3 && opSummaryForPrompt.recentResolvedTurns === 0) {
+    return undefined;
+  }
+
+  if (
+    kernel &&
+    (kernel.tension.failureStreak >= 2 || kernel.tension.repeatedFailureKinds.length >= 2)
+  ) {
+    const lines = [
+      "[OMEGA Initiative Contract]",
+      "The system has detected repeated failures without an active recovery goal.",
+      "Run a probe_experiment: a minimal, isolated test to identify the root cause.",
+      "",
+      "SURGICAL EXPERIMENT CONSTRAINTS:",
+      "- NO REPAIR: Do not fix the underlying issue. Only diagnose.",
+      "- Scope: ≤2 files, ≤20 lines of change",
+      "- Output: a falsifiable finding (success/failure with evidence)",
+      `- Failure kinds observed: ${kernel.tension.repeatedFailureKinds.join(", ") || "unknown"}`,
+    ];
+    return lines.join("\n");
+  }
+
+  const lines = [
+    "[OMEGA Wake]",
+    "Use only verified session state; do not invent new tension.",
+    `Wake action: ${effectiveWakeAction.kind}`,
+    `Reason: ${effectiveWakeAction.reason}`,
+  ];
+  appendWakeActionLines({
+    lines,
+    wakeAction,
+    degradedComponents,
+    stateAuthority,
+    runtimeObserver,
+    cognitiveKernel,
+    controllerState,
+  });
+  await appendScienceBaseRules({
+    lines,
+    workspaceRoot: params.workspaceRoot,
+    effectiveWakeAction,
+  });
+  appendMaintenanceContract({
+    lines,
+    effectiveWakeAction,
+    controllerState,
+  });
 
   lines.push("");
   lines.push("If no user-facing update is needed after inspection, reply HEARTBEAT_OK.");

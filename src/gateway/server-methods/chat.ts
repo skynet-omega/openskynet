@@ -312,6 +312,10 @@ function sanitizeChatHistoryContentBlock(block: unknown): { block: unknown; chan
     entry.thinking = res.text;
     changed ||= res.truncated;
   }
+  if ("textSignature" in entry) {
+    delete entry.textSignature;
+    changed = true;
+  }
   if ("thinkingSignature" in entry) {
     delete entry.thinkingSignature;
     changed = true;

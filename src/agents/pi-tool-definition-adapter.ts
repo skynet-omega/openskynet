@@ -5,6 +5,8 @@ import type {
 } from "@mariozechner/pi-agent-core";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { logDebug, logError } from "../logger.js";
+import { redactToolDetail } from "../logging/redact.js";
+import { sanitizeTerminalText } from "../terminal/safe-text.js";
 import { isPlainObject } from "../utils.js";
 import type { ClientToolDefinition } from "./pi-embedded-runner/run/params.js";
 import type { HookContext } from "./pi-tools.before-tool-call.js";
@@ -35,6 +37,7 @@ type ToolExecuteArgs = ToolDefinition["execute"] extends (...args: infer P) => u
   ? P
   : ToolExecuteArgsCurrent;
 type ToolExecuteArgsAny = ToolExecuteArgs | ToolExecuteArgsLegacy | ToolExecuteArgsCurrent;
+const TOOL_ERROR_PARAM_PREVIEW_MAX_CHARS = 600;
 
 function isAbortSignal(value: unknown): value is AbortSignal {
   return typeof value === "object" && value !== null && "aborted" in value;
@@ -58,6 +61,66 @@ function describeToolExecutionError(err: unknown): {
     return { message, stack: err.stack };
   }
   return { message: String(err) };
+}
+
+function serializeToolParams(value: unknown): string {
+  if (value === undefined) {
+    return "<undefined>";
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  if (
+    value === null ||
+    typeof value === "number" ||
+    typeof value === "boolean" ||
+    typeof value === "bigint"
+  ) {
+    return String(value);
+  }
+  try {
+    const serialized = JSON.stringify(value);
+    if (typeof serialized === "string") {
+      return serialized;
+    }
+  } catch {
+    // Fall through to String(value).
+  }
+  if (typeof value === "function") {
+    return value.name ? `[Function ${value.name}]` : "[Function anonymous]";
+  }
+  if (typeof value === "symbol") {
+    return value.description ? `Symbol(${value.description})` : "Symbol()";
+  }
+  return Object.prototype.toString.call(value);
+}
+
+function sanitizeToolPreview(text: string, maxChars = TOOL_ERROR_PARAM_PREVIEW_MAX_CHARS): string {
+  const singleLine = sanitizeTerminalText(text)
+    .replace(/\\[rnt]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return singleLine.length > maxChars ? `${singleLine.slice(0, maxChars)}...` : singleLine;
+}
+
+function formatToolParamPreview(label: string, value: unknown): string {
+  const serialized = serializeToolParams(value);
+  const redacted = redactToolDetail(serialized);
+  const preview = sanitizeToolPreview(redacted);
+  return `${label}=${preview || "<empty>"}`;
+}
+
+function describeToolFailureInputs(params: {
+  rawParams: unknown;
+  effectiveParams: unknown;
+}): string {
+  const parts = [formatToolParamPreview("raw_params", params.rawParams)];
+  const rawSerialized = serializeToolParams(params.rawParams);
+  const effectiveSerialized = serializeToolParams(params.effectiveParams);
+  if (effectiveSerialized !== rawSerialized) {
+    parts.push(formatToolParamPreview("effective_params", params.effectiveParams));
+  }
+  return parts.join(" ");
 }
 
 function stringifyToolPayload(payload: unknown): string {
@@ -134,6 +197,26 @@ function splitToolExecuteArgs(args: ToolExecuteArgsAny): {
   };
 }
 
+function coerceParamsRecord(value: unknown): Record<string, unknown> {
+  if (isPlainObject(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed.length > 0) {
+      try {
+        const parsed: unknown = JSON.parse(trimmed);
+        if (isPlainObject(parsed)) {
+          return parsed;
+        }
+      } catch {
+        // Fall through to empty object.
+      }
+    }
+  }
+  return {};
+}
+
 export function toToolDefinitions(tools: AnyAgentTool[]): ToolDefinition[] {
   return tools.map((tool) => {
     const name = tool.name || "tool";
@@ -180,7 +263,11 @@ export function toToolDefinitions(tools: AnyAgentTool[]): ToolDefinition[] {
           if (described.stack && described.stack !== described.message) {
             logDebug(`tools: ${normalizedName} failed stack:\n${described.stack}`);
           }
-          logError(`[tools] ${normalizedName} failed: ${described.message}`);
+          const inputPreview = describeToolFailureInputs({
+            rawParams: params,
+            effectiveParams: executeParams,
+          });
+          logError(`[tools] ${normalizedName} failed: ${described.message} ${inputPreview}`);
 
           return jsonResult({
             status: "error",
@@ -219,7 +306,7 @@ export function toClientToolDefinitions(
           throw new Error(outcome.reason);
         }
         const adjustedParams = outcome.params;
-        const paramsRecord = isPlainObject(adjustedParams) ? adjustedParams : {};
+        const paramsRecord = coerceParamsRecord(adjustedParams);
         // Notify handler that a client tool was called
         if (onClientToolCall) {
           onClientToolCall(func.name, paramsRecord);

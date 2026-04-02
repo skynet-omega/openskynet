@@ -27,10 +27,20 @@ export type OmegaStateAuthoritySnapshot = {
   drives: OmegaStateAuthoritySlot;
 };
 
+const OMEGA_WSP_MAX_AUTHORITY_STALENESS_MS = 6 * 60 * 60 * 1000;
+
 export function hasActiveOmegaWspDriveAuthority(
   wsp?: OmegaWorldStatePersistent,
+  nowMs: number = Date.now(),
 ): wsp is OmegaWorldStatePersistent {
   if (!wsp) {
+    return false;
+  }
+  const ageMs =
+    typeof wsp.updatedAt === "number" && Number.isFinite(wsp.updatedAt)
+      ? nowMs - wsp.updatedAt
+      : null;
+  if (ageMs !== null && ageMs > OMEGA_WSP_MAX_AUTHORITY_STALENESS_MS) {
     return false;
   }
   if (wsp.updateCount > 0) {
@@ -45,7 +55,15 @@ export function deriveOmegaStateAuthoritySnapshot(params: {
   operationalSummary?: OmegaOperationalMemorySummary;
   worldSnapshot?: OmegaWorldModelSnapshot;
   wsp?: OmegaWorldStatePersistent;
+  nowMs?: number;
 }): OmegaStateAuthoritySnapshot {
+  const nowMs = params.nowMs ?? Date.now();
+  const wspAgeMs =
+    typeof params.wsp?.updatedAt === "number" && Number.isFinite(params.wsp.updatedAt)
+      ? nowMs - params.wsp.updatedAt
+      : undefined;
+  const wspWasPreviouslyCalibrated = (params.wsp?.updateCount ?? 0) > 0;
+  const wspAuthorityActive = hasActiveOmegaWspDriveAuthority(params.wsp, nowMs);
   return {
     continuity: {
       source: params.kernel ? "self-time-kernel" : "session-context",
@@ -61,10 +79,19 @@ export function deriveOmegaStateAuthoritySnapshot(params: {
     },
     operationalHealth: {
       source: "operational-memory",
-      status: params.operationalSummary ? "authoritative" : "fallback",
-      reason: params.operationalSummary
-        ? "recent_turn_health_is_persisted"
-        : "operational_summary_unavailable",
+      status:
+        !params.operationalSummary || params.operationalSummary.freshness === "stale"
+          ? "fallback"
+          : params.operationalSummary.freshness === "aging"
+            ? "derived"
+            : "authoritative",
+      reason: !params.operationalSummary
+        ? "operational_summary_unavailable"
+        : params.operationalSummary.freshness === "stale"
+          ? "recent_turn_health_stale"
+          : params.operationalSummary.freshness === "aging"
+            ? "recent_turn_health_aging"
+            : "recent_turn_health_is_fresh",
     },
     worldObservation: {
       source: "world-model",
@@ -73,18 +100,27 @@ export function deriveOmegaStateAuthoritySnapshot(params: {
         ? "empirical_world_snapshot_loaded"
         : "world_snapshot_not_requested_or_unavailable",
     },
-    drives: hasActiveOmegaWspDriveAuthority(params.wsp)
+    drives: wspAuthorityActive
       ? {
           source: "omega-wsp",
           status: "authoritative",
           reason: "persistent_homeostatic_drive_state_available",
         }
-      : {
-          source: "kernel-fallback",
-          status: params.wsp ? "experimental" : "fallback",
-          reason: params.wsp
-            ? "wsp_present_but_not_calibrated_for_runtime_control"
-            : "no_persistent_drive_state_loaded",
-        },
+      : params.wsp &&
+          wspWasPreviouslyCalibrated &&
+          typeof wspAgeMs === "number" &&
+          wspAgeMs > OMEGA_WSP_MAX_AUTHORITY_STALENESS_MS
+        ? {
+            source: "omega-wsp",
+            status: "fallback",
+            reason: "persistent_drive_state_stale",
+          }
+        : {
+            source: "kernel-fallback",
+            status: params.wsp ? "experimental" : "fallback",
+            reason: params.wsp
+              ? "wsp_present_but_not_calibrated_for_runtime_control"
+              : "no_persistent_drive_state_loaded",
+          },
   };
 }

@@ -25,6 +25,7 @@ import type { OpenClawConfig, ConfigValidationIssue } from "./types.js";
 import { OpenClawSchema } from "./zod-schema.js";
 
 const LEGACY_REMOVED_PLUGIN_IDS = new Set(["google-antigravity-auth"]);
+const LEGACY_COMPAT_CHANNEL_IDS = new Set<string>(["mattermost"]);
 
 type UnknownIssueRecord = Record<string, unknown>;
 type AllowedValuesCollection = {
@@ -388,7 +389,12 @@ function validateConfigObjectWithPluginsBase(
     return info.normalizedPlugins;
   };
 
-  const allowedChannels = new Set<string>(["defaults", "modelByChannel", ...CHANNEL_IDS]);
+  const allowedChannels = new Set<string>([
+    "defaults",
+    "modelByChannel",
+    ...CHANNEL_IDS,
+    ...LEGACY_COMPAT_CHANNEL_IDS,
+  ]);
 
   if (config.channels && isRecord(config.channels)) {
     for (const key of Object.keys(config.channels)) {

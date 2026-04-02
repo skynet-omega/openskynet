@@ -10,6 +10,7 @@ import {
 const createTelegramDraftStream = vi.hoisted(() => vi.fn());
 const dispatchReplyWithBufferedBlockDispatcher = vi.hoisted(() => vi.fn());
 const deliverReplies = vi.hoisted(() => vi.fn());
+const emitInternalMessageSentHook = vi.hoisted(() => vi.fn());
 const editMessageTelegram = vi.hoisted(() => vi.fn());
 const loadSessionStore = vi.hoisted(() => vi.fn());
 const resolveStorePath = vi.hoisted(() => vi.fn(() => "/tmp/sessions.json"));
@@ -24,6 +25,7 @@ vi.mock("../auto-reply/reply/provider-dispatcher.js", () => ({
 
 vi.mock("./bot/delivery.js", () => ({
   deliverReplies,
+  emitInternalMessageSentHook,
 }));
 
 vi.mock("./send.js", () => ({
@@ -53,6 +55,7 @@ describe("dispatchTelegramMessage draft streaming", () => {
     createTelegramDraftStream.mockClear();
     dispatchReplyWithBufferedBlockDispatcher.mockClear();
     deliverReplies.mockClear();
+    emitInternalMessageSentHook.mockClear();
     editMessageTelegram.mockClear();
     loadSessionStore.mockClear();
     resolveStorePath.mockClear();
@@ -252,6 +255,41 @@ describe("dispatchTelegramMessage draft streaming", () => {
     const deliveredPayload = (deliverReplies.mock.calls[0]?.[0] as { replies?: Array<unknown> })
       ?.replies?.[0] as { channelData?: unknown } | undefined;
     expect(deliveredPayload?.channelData).toBeUndefined();
+  });
+
+  it("emits internal message:sent when a preview is finalized in place", async () => {
+    const draftStream = createDraftStream(1001);
+    createTelegramDraftStream
+      .mockImplementationOnce(() => draftStream)
+      .mockImplementationOnce(() => createDraftStream(2002));
+    dispatchReplyWithBufferedBlockDispatcher.mockImplementation(
+      async ({ dispatcherOptions, replyOptions }) => {
+        await replyOptions?.onPartialReply?.({ text: "Hello" });
+        await dispatcherOptions.deliver({ text: "Hello" }, { kind: "final" });
+        return { queuedFinal: true };
+      },
+    );
+
+    const context = createContext({
+      ctxPayload: {
+        SessionKey: "agent:main:telegram:direct:123",
+      } as TelegramMessageContext["ctxPayload"],
+    });
+
+    await dispatchWithContext({ context });
+
+    expect(editMessageTelegram).toHaveBeenCalled();
+    expect(emitInternalMessageSentHook).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionKeyForInternalHooks: "agent:main:telegram:direct:123",
+        chatId: "123",
+        accountId: "default",
+        content: "Hello",
+        success: true,
+        messageId: 1001,
+        isGroup: false,
+      }),
+    );
   });
 
   it("uses 30-char preview debounce for legacy block stream mode", async () => {

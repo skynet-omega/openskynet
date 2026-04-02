@@ -3,10 +3,30 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const hoisted = vi.hoisted(() => {
+  const spawnSubagentDirectMock = vi.fn();
+  const spawnAcpDirectMock = vi.fn();
+  return {
+    spawnSubagentDirectMock,
+    spawnAcpDirectMock,
+  };
+});
+
 const callGatewayMock = vi.fn();
 
 vi.mock("../gateway/call.js", () => ({
   callGateway: (opts: unknown) => callGatewayMock(opts),
+}));
+
+vi.mock("./subagent-spawn.js", () => ({
+  SUBAGENT_SPAWN_MODES: ["run", "session"],
+  spawnSubagentDirect: (...args: unknown[]) => hoisted.spawnSubagentDirectMock(...args),
+}));
+
+vi.mock("./acp-spawn.js", () => ({
+  ACP_SPAWN_MODES: ["run", "session"],
+  ACP_SPAWN_STREAM_TARGETS: ["parent"],
+  spawnAcpDirect: (...args: unknown[]) => hoisted.spawnAcpDirectMock(...args),
 }));
 
 vi.mock("../config/config.js", async (importOriginal) => {
@@ -28,8 +48,10 @@ vi.mock("../config/config.js", async (importOriginal) => {
 });
 
 import "./test-helpers/fast-core-tools.js";
-import { createOpenClawTools } from "./openclaw-tools.js";
+import { resolveOmegaCognitiveKernelArtifactPath } from "../omega/cognitive-kernel.js";
+import { resolveOmegaRuntimeObserverArtifactPath } from "../omega/runtime-observer.js";
 import { recordOmegaSessionOutcome } from "../omega/session-context.js";
+import { createOpenClawTools } from "./openclaw-tools.js";
 
 describe("omega_work hard tasks", () => {
   let workspaceRoot = "";
@@ -40,6 +62,26 @@ describe("omega_work hard tasks", () => {
 
   beforeEach(async () => {
     callGatewayMock.mockReset();
+    hoisted.spawnSubagentDirectMock
+      .mockReset()
+      .mockImplementation(async (params?: { task?: string }) => {
+        const response = (await callGatewayMock({
+          method: "agent",
+          params: {
+            message: params?.task,
+          },
+        })) as { runId?: string } | undefined;
+        return {
+          status: "accepted",
+          childSessionKey: "agent:main:subagent:1",
+          runId: response?.runId ?? "run-subagent",
+        };
+      });
+    hoisted.spawnAcpDirectMock.mockReset().mockResolvedValue({
+      status: "accepted",
+      childSessionKey: "agent:codex:acp:1",
+      runId: "run-acp",
+    });
     workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "openskynet-omega-work-"));
     relA = path.join("workspace", "hard_probe", "range_tools.py").split(path.sep).join("/");
     relB = path.join("workspace", "hard_probe", "test_range_tools.py").split(path.sep).join("/");
@@ -198,6 +240,187 @@ describe("omega_work hard tasks", () => {
           ok: true,
           expectedKeys: ["status", "summary"],
         },
+      },
+    });
+  });
+
+  it("reroutes validated work to sessions_spawn when the requested session does not exist", async () => {
+    callGatewayMock.mockImplementation(async (opts: unknown) => {
+      const request = opts as { method?: string };
+      if (request.method === "sessions.resolve") {
+        throw new Error("No session found");
+      }
+      if (request.method === "agent") {
+        return { runId: "run-missing-session", status: "accepted" };
+      }
+      if (request.method === "agent.wait") {
+        await fs.writeFile(fileA, "def clamp(v):\n    return max(0, v)\n", "utf-8");
+        return { status: "ok" };
+      }
+      if (request.method === "chat.history") {
+        return {
+          messages: [
+            {
+              role: "assistant",
+              content: [{ type: "text", text: '{"status":"ok","summary":"spawned fallback"}' }],
+            },
+          ],
+        };
+      }
+      throw new Error(`unexpected method: ${String(request.method)}`);
+    });
+
+    const result = await getOmegaWorkTool().execute("call-missing-session", {
+      task: "arregla solo el modulo",
+      sessionKey: "skynet-omega-ladder-test",
+      timeoutSeconds: 1,
+      expectsJson: true,
+      expectedKeys: ["status", "summary"],
+      expectedPaths: [relA],
+    });
+
+    expect(result.details).toMatchObject({
+      route: "sessions_spawn",
+      status: "ok",
+      reroutedMissingSession: true,
+      originalRoute: "omega_delegate",
+      missingSessionKey: "skynet-omega-ladder-test",
+      observedChangedFiles: [relA],
+    });
+    expect(hoisted.spawnSubagentDirectMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("exposes a fresh runtime observer prior in omega_work results when available", async () => {
+    await fs.mkdir(path.dirname(resolveOmegaRuntimeObserverArtifactPath(workspaceRoot)), {
+      recursive: true,
+    });
+    await fs.writeFile(
+      resolveOmegaRuntimeObserverArtifactPath(workspaceRoot),
+      JSON.stringify(
+        {
+          updatedAt: Date.now(),
+          status: "pass",
+          accuracy: 0.82,
+          majorityBaseline: 0.71,
+          improvementOverBaseline: 0.12,
+          trajectorySamples: 95,
+          harvestedEpisodes: 97,
+          lookback: 3,
+          labelCoverage: { stall: 67, damage: 15, progress: 9, relief: 2, frustration: 2 },
+        },
+        null,
+        2,
+      ),
+      "utf-8",
+    );
+
+    callGatewayMock.mockImplementation(async (opts: unknown) => {
+      const request = opts as { method?: string };
+      if (request.method === "agent") {
+        return { runId: "run-runtime-observer", status: "accepted" };
+      }
+      if (request.method === "agent.wait") {
+        await fs.writeFile(fileA, "def clamp(v):\n    return max(0, v)\n", "utf-8");
+        return { status: "ok" };
+      }
+      if (request.method === "chat.history") {
+        return {
+          messages: [
+            {
+              role: "assistant",
+              content: [{ type: "text", text: '{"status":"ok","summary":"patched one file"}' }],
+            },
+          ],
+        };
+      }
+      throw new Error(`unexpected method: ${String(request.method)}`);
+    });
+
+    const result = await getOmegaWorkTool().execute("call-runtime-observer", {
+      task: "arregla solo el modulo",
+      sessionKey: "main",
+      timeoutSeconds: 1,
+      expectsJson: true,
+      expectedKeys: ["status", "summary"],
+      expectedPaths: [relA],
+    });
+
+    expect(result.details).toMatchObject({
+      route: "omega_delegate",
+      runtimeObserver: {
+        freshness: "fresh",
+        improvementOverBaseline: 0.12,
+        trajectorySamples: 95,
+        dominantLabel: "stall",
+      },
+    });
+  });
+
+  it("exposes an active cognitive kernel prior in omega_work results when available", async () => {
+    await fs.mkdir(path.dirname(resolveOmegaCognitiveKernelArtifactPath(workspaceRoot)), {
+      recursive: true,
+    });
+    await fs.writeFile(
+      resolveOmegaCognitiveKernelArtifactPath(workspaceRoot),
+      JSON.stringify(
+        {
+          updatedAt: Date.now(),
+          status: "pass",
+          accuracy: 0.86,
+          majorityBaseline: 0.56,
+          improvementOverBaseline: 0.3,
+          trajectorySamples: 87,
+          harvestedEpisodes: 91,
+          evaluatedSamples: 79,
+          warmupSamples: 8,
+          labelCoverage: { stall: 48, damage: 15, relief: 15, progress: 9 },
+        },
+        null,
+        2,
+      ),
+      "utf-8",
+    );
+
+    callGatewayMock.mockImplementation(async (opts: unknown) => {
+      const request = opts as { method?: string };
+      if (request.method === "agent") {
+        return { runId: "run-cognitive-kernel", status: "accepted" };
+      }
+      if (request.method === "agent.wait") {
+        await fs.writeFile(fileA, "def clamp(v):\n    return max(0, v)\n", "utf-8");
+        return { status: "ok" };
+      }
+      if (request.method === "chat.history") {
+        return {
+          messages: [
+            {
+              role: "assistant",
+              content: [{ type: "text", text: '{"status":"ok","summary":"patched one file"}' }],
+            },
+          ],
+        };
+      }
+      throw new Error(`unexpected method: ${String(request.method)}`);
+    });
+
+    const result = await getOmegaWorkTool().execute("call-cognitive-kernel", {
+      task: "arregla solo el modulo",
+      sessionKey: "main",
+      timeoutSeconds: 1,
+      expectsJson: true,
+      expectedKeys: ["status", "summary"],
+      expectedPaths: [relA],
+    });
+
+    expect(result.details).toMatchObject({
+      route: "omega_delegate",
+      cognitiveKernel: {
+        freshness: "fresh",
+        active: true,
+        accuracy: 0.86,
+        trajectorySamples: 87,
+        dominantLabel: "stall",
+        deactivationThreshold: 0.8,
       },
     });
   });
@@ -843,7 +1066,9 @@ describe("omega_work hard tasks", () => {
           messages: [
             {
               role: "assistant",
-              content: [{ type: "text", text: '{"status":"ok","summary":"patched after escalation"}' }],
+              content: [
+                { type: "text", text: '{"status":"ok","summary":"patched after escalation"}' },
+              ],
             },
           ],
         };

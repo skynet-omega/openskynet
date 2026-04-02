@@ -131,12 +131,12 @@ afterAll(() => {
 });
 
 describe("applyPluginAutoEnable", () => {
-  it("auto-enables built-in channels and appends to existing allowlist", () => {
+  it("auto-enables built-in channels without appending to plugins.allow", () => {
     const result = applyWithSlackConfig({ plugins: { allow: ["telegram"] } });
 
     expect(result.config.channels?.slack?.enabled).toBe(true);
     expect(result.config.plugins?.entries?.slack).toBeUndefined();
-    expect(result.config.plugins?.allow).toEqual(["telegram", "slack"]);
+    expect(result.config.plugins?.allow).toEqual(["telegram"]);
     expect(result.changes.join("\n")).toContain("Slack configured, enabled automatically.");
   });
 

@@ -534,6 +534,32 @@ function emitMessageSentHooks(params: {
   );
 }
 
+export function emitInternalMessageSentHook(params: {
+  sessionKeyForInternalHooks?: string;
+  chatId: string;
+  accountId?: string;
+  content: string;
+  success: boolean;
+  error?: string;
+  messageId?: number;
+  isGroup?: boolean;
+  groupId?: string;
+}): void {
+  emitMessageSentHooks({
+    hookRunner: getGlobalHookRunner(),
+    enabled: false,
+    sessionKeyForInternalHooks: params.sessionKeyForInternalHooks,
+    chatId: params.chatId,
+    accountId: params.accountId,
+    content: params.content,
+    success: params.success,
+    error: params.error,
+    messageId: params.messageId,
+    isGroup: params.isGroup,
+    groupId: params.groupId,
+  });
+}
+
 export async function deliverReplies(params: {
   replies: ReplyPayload[];
   chatId: string;

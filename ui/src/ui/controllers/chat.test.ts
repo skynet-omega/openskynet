@@ -3,8 +3,10 @@ import { GatewayRequestError } from "../gateway.ts";
 import {
   abortChatRun,
   handleChatEvent,
+  handleSessionMessageEvent,
   loadChatHistory,
   sendChatMessage,
+  syncSessionMessageSubscription,
   type ChatEventPayload,
   type ChatState,
 } from "./chat.ts";
@@ -499,6 +501,86 @@ describe("handleChatEvent", () => {
     // entry.text takes precedence — "real reply" is NOT silent, so the message is kept.
     expect(handleChatEvent(state, payload)).toBe("final");
     expect(state.chatMessages).toHaveLength(1);
+  });
+});
+
+describe("handleSessionMessageEvent", () => {
+  it("returns null when sessionKey does not match", () => {
+    const state = createState({ sessionKey: "main" });
+    expect(handleSessionMessageEvent(state, { sessionKey: "other", message: {} })).toBe(null);
+  });
+
+  it("ignores session.message while the current run is still active", () => {
+    const state = createState({ sessionKey: "main", chatRunId: "run-1" });
+    expect(
+      handleSessionMessageEvent(state, {
+        sessionKey: "main",
+        message: { role: "assistant", content: [{ type: "text", text: "Done" }] },
+      }),
+    ).toBe(null);
+    expect(state.chatMessages).toEqual([]);
+  });
+
+  it("appends normalized assistant message for the active session", () => {
+    const state = createState({ sessionKey: "main" });
+    expect(
+      handleSessionMessageEvent(state, {
+        sessionKey: "main",
+        message: { role: "assistant", content: [{ type: "text", text: "From transcript" }] },
+      }),
+    ).toBe("appended");
+    expect(state.chatMessages).toEqual([
+      { role: "assistant", content: [{ type: "text", text: "From transcript" }] },
+    ]);
+  });
+
+  it("falls back to reload when the payload cannot be normalized as assistant content", () => {
+    const state = createState({ sessionKey: "main" });
+    expect(
+      handleSessionMessageEvent(state, { sessionKey: "main", message: { role: "tool" } }),
+    ).toBe("reload");
+  });
+
+  it("deduplicates identical appended messages", () => {
+    const message = { role: "assistant", content: [{ type: "text", text: "Repeated" }] };
+    const state = createState({ sessionKey: "main", chatMessages: [message] });
+    expect(handleSessionMessageEvent(state, { sessionKey: "main", message })).toBe(null);
+    expect(state.chatMessages).toEqual([message]);
+  });
+});
+
+describe("syncSessionMessageSubscription", () => {
+  it("subscribes current session on first sync", async () => {
+    const request = vi.fn(async () => undefined);
+    const state = createState({
+      sessionKey: "agent:main:main",
+      client: { request } as unknown as ChatState["client"],
+    });
+
+    await syncSessionMessageSubscription(state);
+
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request).toHaveBeenCalledWith("sessions.messages.subscribe", {
+      key: "agent:main:main",
+    });
+  });
+
+  it("unsubscribes previous session before subscribing the next one", async () => {
+    const request = vi.fn(async () => undefined);
+    const state = createState({
+      sessionKey: "agent:main:next",
+      client: { request } as unknown as ChatState["client"],
+    }) as ChatState & { subscribedSessionMessageKey?: string | null };
+    state.subscribedSessionMessageKey = "agent:main:prev";
+
+    await syncSessionMessageSubscription(state);
+
+    expect(request).toHaveBeenNthCalledWith(1, "sessions.messages.unsubscribe", {
+      key: "agent:main:prev",
+    });
+    expect(request).toHaveBeenNthCalledWith(2, "sessions.messages.subscribe", {
+      key: "agent:main:next",
+    });
   });
 });
 

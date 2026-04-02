@@ -285,7 +285,7 @@ export function buildEmbeddedRunPayloads(params: {
   if (params.lastToolError) {
     const warningPolicy = resolveToolErrorWarningPolicy({
       lastToolError: params.lastToolError,
-      hasUserFacingReply: hasUserFacingAssistantReply,
+      hasUserFacingReply: hasUserFacingAssistantReply || params.didSendViaMessagingTool === true,
       suppressToolErrors: Boolean(params.config?.messages?.suppressToolErrors),
       suppressToolErrorWarnings: params.suppressToolErrorWarnings,
       verboseLevel: params.verboseLevel,

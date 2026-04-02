@@ -61,7 +61,7 @@ export function deriveOmegaPolicySnapshot(params: {
     kernel: params.kernel,
   });
   const activeWsp =
-    params.wsp !== undefined && hasActiveOmegaWspDriveAuthority(params.wsp)
+    params.wsp !== undefined && hasActiveOmegaWspDriveAuthority(params.wsp, params.nowMs)
       ? params.wsp
       : undefined;
   const useWspDriveAuthority = params.kernel !== undefined && activeWsp !== undefined;

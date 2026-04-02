@@ -1,12 +1,10 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { resolveCliName } from "../cli/cli-name.js";
 import { resolveHomeRelativePath, resolveRequiredHomeDir } from "../infra/home-dir.js";
-import type { OpenClawConfig } from "./types.js";
-
 import { resolveDefaultGatewayPort } from "./port-defaults.js";
-
-import { ALT_CLI_NAME, resolveCliName } from "../cli/cli-name.js";
+import type { OpenClawConfig } from "./types.js";
 
 /**
  * Nix mode detection: When OPENCLAW_NIX_MODE=1, the gateway is running under Nix.
@@ -23,7 +21,7 @@ export const isNixMode = resolveIsNixMode();
 
 // Support historical (and occasionally misspelled) legacy state dirs.
 const LEGACY_STATE_DIRNAMES = [".clawdbot", ".moldbot", ".moltbot"] as const;
-const NEW_STATE_DIRNAME = ".openclaw";
+const NEW_STATE_DIRNAME = ".openskynet";
 const CONFIG_FILENAME = "openclaw.json";
 const LEGACY_CONFIG_FILENAMES = ["clawdbot.json", "moldbot.json", "moltbot.json"] as const;
 
@@ -59,7 +57,7 @@ export function resolveNewStateDir(homedir: () => string = resolveDefaultHomeDir
 /**
  * State directory for mutable data (sessions, logs, caches).
  * Can be overridden via OPENCLAW_STATE_DIR or OPENSKYNET_STATE_DIR.
- * Default: ~/.openclaw (or ~/.openskynet when running as openskynet)
+ * Default: ~/.openskynet (or ~/.openskynet when running as openskynet)
  */
 export function resolveStateDir(
   env: NodeJS.ProcessEnv = process.env,
@@ -68,17 +66,13 @@ export function resolveStateDir(
   const effectiveHomedir = () => resolveRequiredHomeDir(env, homedir);
 
   // Priority: OPENSKYNET_STATE_DIR > OPENCLAW_STATE_DIR > auto-detect > default
-  const override = env.OPENSKYNET_STATE_DIR?.trim() ||
+  const override =
+    env.OPENSKYNET_STATE_DIR?.trim() ||
     env.OPENCLAW_STATE_DIR?.trim() ||
     env.CLAWDBOT_STATE_DIR?.trim();
 
   if (override) {
     return resolveUserPath(override, env, effectiveHomedir);
-  }
-
-  // Auto-detect based on cliName for OpenSkyNet
-  if (resolveCliName() === ALT_CLI_NAME) {
-    return path.join(effectiveHomedir(), ".openskynet");
   }
 
   const newDir = newStateDir(effectiveHomedir);
@@ -117,14 +111,17 @@ export function resolveStateDirDefault(): string {
 
 /**
  * Config file path (JSON5).
- * Can be overridden via OPENCLAW_CONFIG_PATH.
- * Default: ~/.openclaw/openclaw.json (or $OPENCLAW_STATE_DIR/openclaw.json)
+ * Can be overridden via OPENSKYNET_CONFIG_PATH or OPENCLAW_CONFIG_PATH.
+ * Default: ~/.openskynet/openclaw.json (or $*_STATE_DIR/openclaw.json)
  */
 export function resolveCanonicalConfigPath(
   env: NodeJS.ProcessEnv = process.env,
   stateDir: string = resolveStateDir(env, envHomedir(env)),
 ): string {
-  const override = env.OPENCLAW_CONFIG_PATH?.trim() || env.CLAWDBOT_CONFIG_PATH?.trim();
+  const override =
+    env.OPENSKYNET_CONFIG_PATH?.trim() ||
+    env.OPENCLAW_CONFIG_PATH?.trim() ||
+    env.CLAWDBOT_CONFIG_PATH?.trim();
   if (override) {
     return resolveUserPath(override, env, envHomedir(env));
   }
@@ -164,14 +161,20 @@ export function resolveConfigPath(
   stateDir: string = resolveStateDir(env, envHomedir(env)),
   homedir: () => string = envHomedir(env),
 ): string {
-  const override = env.OPENCLAW_CONFIG_PATH?.trim();
+  const override =
+    env.OPENSKYNET_CONFIG_PATH?.trim() ||
+    env.OPENCLAW_CONFIG_PATH?.trim() ||
+    env.CLAWDBOT_CONFIG_PATH?.trim();
   if (override) {
     return resolveUserPath(override, env, homedir);
   }
   if (env.OPENCLAW_TEST_FAST === "1") {
     return path.join(stateDir, CONFIG_FILENAME);
   }
-  const stateOverride = env.OPENCLAW_STATE_DIR?.trim();
+  const stateOverride =
+    env.OPENSKYNET_STATE_DIR?.trim() ||
+    env.OPENCLAW_STATE_DIR?.trim() ||
+    env.CLAWDBOT_STATE_DIR?.trim();
   const candidates = [
     path.join(stateDir, CONFIG_FILENAME),
     ...LEGACY_CONFIG_FILENAMES.map((name) => path.join(stateDir, name)),
@@ -209,13 +212,19 @@ export function resolveDefaultConfigCandidates(
   homedir: () => string = envHomedir(env),
 ): string[] {
   const effectiveHomedir = () => resolveRequiredHomeDir(env, homedir);
-  const explicit = env.OPENCLAW_CONFIG_PATH?.trim() || env.CLAWDBOT_CONFIG_PATH?.trim();
+  const explicit =
+    env.OPENSKYNET_CONFIG_PATH?.trim() ||
+    env.OPENCLAW_CONFIG_PATH?.trim() ||
+    env.CLAWDBOT_CONFIG_PATH?.trim();
   if (explicit) {
     return [resolveUserPath(explicit, env, effectiveHomedir)];
   }
 
   const candidates: string[] = [];
-  const openclawStateDir = env.OPENCLAW_STATE_DIR?.trim() || env.CLAWDBOT_STATE_DIR?.trim();
+  const openclawStateDir =
+    env.OPENSKYNET_STATE_DIR?.trim() ||
+    env.OPENCLAW_STATE_DIR?.trim() ||
+    env.CLAWDBOT_STATE_DIR?.trim();
   if (openclawStateDir) {
     const resolved = resolveUserPath(openclawStateDir, env, effectiveHomedir);
     candidates.push(path.join(resolved, CONFIG_FILENAME));
@@ -223,9 +232,11 @@ export function resolveDefaultConfigCandidates(
   }
 
   const defaultDirs = [
-    resolveStateDir(env, homedir),
-    newStateDir(effectiveHomedir),
-    ...legacyStateDirs(effectiveHomedir),
+    ...new Set([
+      resolveStateDir(env, homedir),
+      newStateDir(effectiveHomedir),
+      ...legacyStateDirs(effectiveHomedir),
+    ]),
   ];
   for (const dir of defaultDirs) {
     candidates.push(path.join(dir, CONFIG_FILENAME));
@@ -273,16 +284,48 @@ export function resolveOAuthPath(
   return path.join(resolveOAuthDir(env, stateDir), OAUTH_FILENAME);
 }
 
+function parseGatewayPortEnvValue(raw: string | undefined): number | null {
+  const trimmed = raw?.trim();
+  if (!trimmed) {
+    return null;
+  }
+  if (/^\d+$/.test(trimmed)) {
+    const parsed = Number.parseInt(trimmed, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }
+
+  // Docker Compose publish strings can leak into host CLI env loading via repo `.env`,
+  // for example `127.0.0.1:18789` or `[::1]:18789`. Accept only explicit host:port forms.
+  const bracketedIpv6Match = trimmed.match(/^\[[^\]]+\]:(\d+)$/);
+  if (bracketedIpv6Match?.[1]) {
+    const parsed = Number.parseInt(bracketedIpv6Match[1], 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }
+
+  const firstColon = trimmed.indexOf(":");
+  const lastColon = trimmed.lastIndexOf(":");
+  if (firstColon <= 0 || firstColon !== lastColon) {
+    return null;
+  }
+  const suffix = trimmed.slice(firstColon + 1);
+  if (!/^\d+$/.test(suffix)) {
+    return null;
+  }
+  const parsed = Number.parseInt(suffix, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
 export function resolveGatewayPort(
   cfg?: OpenClawConfig,
   env: NodeJS.ProcessEnv = process.env,
 ): number {
-  const envRaw = env.OPENCLAW_GATEWAY_PORT?.trim() || env.CLAWDBOT_GATEWAY_PORT?.trim();
-  if (envRaw) {
-    const parsed = Number.parseInt(envRaw, 10);
-    if (Number.isFinite(parsed) && parsed > 0) {
-      return parsed;
-    }
+  const envRaw =
+    env.OPENSKYNET_GATEWAY_PORT?.trim() ||
+    env.OPENCLAW_GATEWAY_PORT?.trim() ||
+    env.CLAWDBOT_GATEWAY_PORT?.trim();
+  const envPort = parseGatewayPortEnvValue(envRaw);
+  if (envPort !== null) {
+    return envPort;
   }
   const configPort = cfg?.gateway?.port;
   if (typeof configPort === "number" && Number.isFinite(configPort)) {

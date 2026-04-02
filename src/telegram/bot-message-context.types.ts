@@ -17,7 +17,9 @@ export type TelegramMediaRef = {
 
 export type TelegramMessageContextOptions = {
   forceWasMentioned?: boolean;
+  ingressBuffer?: "inbound-debounce" | "text-fragment";
   messageIdOverride?: string;
+  receivedAtMs?: number;
 };
 
 export type TelegramLogger = {

@@ -104,7 +104,27 @@ function resolveToolNameForPermission(params: RequestPermissionRequest): string 
   const fromMeta = readFirstStringValue(toolMeta, ["toolName", "tool_name", "name"]);
   const fromRawInput = readFirstStringValue(rawInput, ["tool", "toolName", "tool_name", "name"]);
   const fromTitle = parseToolNameFromTitle(toolCall?.title);
-  return normalizeToolName(fromMeta ?? fromRawInput ?? fromTitle ?? "");
+  const hasExplicitMetaHint = typeof fromMeta === "string" && fromMeta.length > 0;
+  const hasExplicitRawHint = typeof fromRawInput === "string" && fromRawInput.length > 0;
+  const normalizedMeta = normalizeToolName(fromMeta ?? "");
+  const normalizedRawInput = normalizeToolName(fromRawInput ?? "");
+  const normalizedTitle = normalizeToolName(fromTitle ?? "");
+
+  if ((hasExplicitMetaHint && !normalizedMeta) || (hasExplicitRawHint && !normalizedRawInput)) {
+    return undefined;
+  }
+
+  const candidates = [normalizedMeta, normalizedRawInput].filter((value): value is string =>
+    Boolean(value),
+  );
+  const hintedName = candidates[0];
+  if (candidates.length > 1 && new Set(candidates).size > 1) {
+    return undefined;
+  }
+  if (normalizedTitle && hintedName && normalizedTitle !== hintedName) {
+    return undefined;
+  }
+  return normalizedTitle ?? hintedName;
 }
 
 function extractPathFromToolTitle(

@@ -3,7 +3,7 @@ import type { ResolvedAgentRoute } from "../routing/resolve-route.js";
 import { deriveLastRoutePolicy } from "../routing/resolve-route.js";
 import { resolveAgentIdFromSessionKey } from "../routing/session-key.js";
 import {
-  ensureConfiguredAcpBindingSession,
+  ensureConfiguredAcpBindingReady,
   resolveConfiguredAcpBindingRecord,
   type ConfiguredAcpBindingChannel,
   type ResolvedConfiguredAcpBinding,
@@ -64,18 +64,8 @@ export async function ensureConfiguredAcpRouteReady(params: {
   cfg: OpenClawConfig;
   configuredBinding: ResolvedConfiguredAcpBinding | null;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (!params.configuredBinding) {
-    return { ok: true };
-  }
-  const ensured = await ensureConfiguredAcpBindingSession({
+  return ensureConfiguredAcpBindingReady({
     cfg: params.cfg,
-    spec: params.configuredBinding.spec,
+    configuredBinding: params.configuredBinding,
   });
-  if (ensured.ok) {
-    return { ok: true };
-  }
-  return {
-    ok: false,
-    error: ensured.error ?? "unknown error",
-  };
 }

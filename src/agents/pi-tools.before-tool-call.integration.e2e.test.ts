@@ -278,4 +278,39 @@ describe("before_tool_call hook integration for client tools", () => {
       extra: true,
     });
   });
+
+  it("coerces JSON string params for client tool callbacks", async () => {
+    hookRunner.hasHooks.mockReturnValue(true);
+    hookRunner.runBeforeToolCall.mockResolvedValue({
+      params: '{ "value": "ok", "extra": true }',
+    });
+    const onClientToolCall = vi.fn();
+    const [tool] = toClientToolDefinitions(
+      [
+        {
+          type: "function",
+          function: {
+            name: "client_tool",
+            description: "Client tool",
+            parameters: { type: "object", properties: { value: { type: "string" } } },
+          },
+        },
+      ],
+      onClientToolCall,
+      { agentId: "main", sessionKey: "main" },
+    );
+    const extensionContext = {} as Parameters<typeof tool.execute>[4];
+    await tool.execute(
+      "client-call-2",
+      { value: "ignored" },
+      undefined,
+      undefined,
+      extensionContext,
+    );
+
+    expect(onClientToolCall).toHaveBeenCalledWith("client_tool", {
+      value: "ok",
+      extra: true,
+    });
+  });
 });

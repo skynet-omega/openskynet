@@ -16,8 +16,13 @@ import { shouldReloadHistoryForFinalEvent } from "./chat-event-reload.ts";
 import { formatConnectError } from "./connect-error.ts";
 import { loadAgents } from "./controllers/agents.ts";
 import { loadAssistantIdentity } from "./controllers/assistant-identity.ts";
-import { loadChatHistory } from "./controllers/chat.ts";
-import { handleChatEvent, type ChatEventPayload } from "./controllers/chat.ts";
+import {
+  loadChatHistory,
+  handleChatEvent,
+  handleSessionMessageEvent,
+  syncSessionMessageSubscription,
+  type ChatEventPayload,
+} from "./controllers/chat.ts";
 import { loadDevices } from "./controllers/devices.ts";
 import type { ExecApprovalRequest } from "./controllers/exec-approval.ts";
 import {
@@ -28,7 +33,7 @@ import {
 } from "./controllers/exec-approval.ts";
 import { loadHealthState } from "./controllers/health.ts";
 import { loadNodes } from "./controllers/nodes.ts";
-import { loadSessions } from "./controllers/sessions.ts";
+import { loadSessions, subscribeSessions } from "./controllers/sessions.ts";
 import {
   resolveGatewayErrorDetailCode,
   type GatewayEventFrame,
@@ -206,6 +211,8 @@ export function connectGateway(host: GatewayHost) {
       (host as unknown as { chatStream: string | null }).chatStream = null;
       (host as unknown as { chatStreamStartedAt: number | null }).chatStreamStartedAt = null;
       resetToolStream(host as unknown as Parameters<typeof resetToolStream>[0]);
+      void syncSessionMessageSubscription(host as unknown as OpenClawApp);
+      void subscribeSessions(host as unknown as OpenClawApp);
       void loadAssistantIdentity(host as unknown as OpenClawApp);
       void loadAgents(host as unknown as OpenClawApp);
       void loadHealthState(host as unknown as OpenClawApp);
@@ -337,6 +344,17 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
     return;
   }
 
+  if (evt.event === "session.message") {
+    const result = handleSessionMessageEvent(
+      host as unknown as OpenClawApp,
+      evt.payload as { sessionKey?: string; message?: unknown } | undefined,
+    );
+    if (result === "reload") {
+      void loadChatHistory(host as unknown as OpenClawApp);
+    }
+    return;
+  }
+
   if (evt.event === "presence") {
     const payload = evt.payload as { presence?: PresenceEntry[] } | undefined;
     if (payload?.presence && Array.isArray(payload.presence)) {
@@ -344,6 +362,11 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
       host.presenceError = null;
       host.presenceStatus = null;
     }
+    return;
+  }
+
+  if (evt.event === "sessions.changed") {
+    void loadSessions(host as unknown as OpenClawApp);
     return;
   }
 

@@ -1,102 +1,93 @@
-import * as omegaIntegratedReasoner from "./omega-integrated-reasoning.js";
-// EXPERIMENTAL: To be decoupled
-const { getOmegaIntegratedReasoner } = omegaIntegratedReasoner;
-import type { InnerDriveSignal } from "./inner-life/drives.js";
-import type { IntegratedReasoningState } from "./omega-integrated-reasoning.js";
-import type { OmegaOperationalMemorySummary } from "./operational-memory.js";
-import type { OmegaSelfTimeKernelState } from "./self-time-kernel.js";
-
-/**
- * Procesa el razonamiento integrado de Omega unificando las 5 joyas cognitivas.
- */
-export async function processIntegratedBrain(params: {
+type IntegratedBrainParams = {
   workspaceRoot: string;
-  kernel: OmegaSelfTimeKernelState;
-  operationalSummary?: OmegaOperationalMemorySummary;
-  driveSignal: InnerDriveSignal;
+  kernel: unknown;
+  operationalSummary?: unknown;
+  driveSignal: unknown;
   jepaTension: number;
   expectedUtility?: number;
   somaticMetrics?: {
     lastTurnLatencyMs: number;
     cumulativeTokenCost?: number;
   };
-}) {
-  const reasoner = getOmegaIntegratedReasoner();
+};
 
-  const latestCausalImpact = params.operationalSummary?.latestCausalImpact ?? 1.0;
-  const expectedUtility = params.expectedUtility ?? 0.5;
-  const surprise = Math.abs(expectedUtility - latestCausalImpact);
-
-  // Normalización somática: Latencia > 30s se considera "estrés metabólico"
-  const latencyStress = Math.min((params.somaticMetrics?.lastTurnLatencyMs ?? 0) / 30000, 1);
-
-  // Economía de Recursos: Presión de tokens (Stress económico)
-  // Se asume 1M tokens como umbral de alerta (configurable)
-  const costStress = Math.min((params.somaticMetrics?.cumulativeTokenCost ?? 0) / 1000000, 1);
-
-  const kernelGoals = params.kernel?.goals || [];
-  const successRate =
-    kernelGoals.length > 0
-      ? kernelGoals.filter((g) => g && g.status === "completed").length / kernelGoals.length
-      : 0.5;
-
-  const kernelState = {
-    successRate,
-    failureCount: params.kernel?.tension?.failureStreak ?? 0,
-    recentFailureCount: params.kernel?.tension?.failureStreak ?? 0,
-    lastFrustration: params.operationalSummary?.averageCausalImpact
-      ? 1 - params.operationalSummary.averageCausalImpact
-      : 0.5,
-    predictionError: surprise,
-    somaticStress: latencyStress,
-    averageCausalImpact: params.operationalSummary?.averageCausalImpact ?? 1.0,
-    costStress,
+type IntegratedReasoningStateLike = {
+  frustration: number;
+  metabolism: {
+    activeComponents: string[];
+    totalMetabolicRate: number;
   };
+  lyapunov?: {
+    isStable?: boolean;
+  };
+  causal?: {
+    predictedBackfires: string[];
+  };
+  nle?: {
+    confidence: number;
+    activeRules: number;
+  };
+  finalDrive: {
+    confidence: number;
+    vetoProb?: number;
+  };
+  somaticStress?: number;
+  projection?: {
+    expectedOutcome: string;
+    confidence: number;
+    potentialSideEffects: string[];
+  };
+};
 
-  const result = await reasoner.integratedReason(
-    params.driveSignal,
-    kernelState,
-    params.jepaTension,
-  );
-  (result.state as any).somaticStress = latencyStress;
-  return result;
+type IntegratedBrainModule = {
+  processIntegratedBrain?: (params: IntegratedBrainParams) => Promise<unknown>;
+  formatInternalReflection?: (state: IntegratedReasoningStateLike) => string[];
+};
+
+async function loadOptionalIntegratedBrain(): Promise<IntegratedBrainModule | undefined> {
+  try {
+    return (await import("../skynet/integrated-brain.js")) as IntegratedBrainModule;
+  } catch {
+    return undefined;
+  }
 }
 
-/**
- * Formatea la reflexión interna del cerebro para el prompt del agente.
- * Esto le da al agente un "yo interno" y conciencia de su estado cognitivo.
- */
-export function formatInternalReflection(state: IntegratedReasoningState): string[] {
+export async function processIntegratedBrain(params: IntegratedBrainParams): Promise<unknown> {
+  const mod = await loadOptionalIntegratedBrain();
+  if (typeof mod?.processIntegratedBrain !== "function") {
+    return undefined;
+  }
+  return mod.processIntegratedBrain(params);
+}
+
+export function formatInternalReflection(state: IntegratedReasoningStateLike): string[] {
   const lines = ["[INTERNAL REFLECTION — Self-Awareness]"];
 
   const stability = state.lyapunov?.isStable ? "STABLE (Focused)" : "DIVERGENT (Seeking path)";
   lines.push(`Cognitive State: ${stability}`);
   lines.push(`Frustration Level: ${(state.frustration * 100).toFixed(1)}%`);
-
-  const metabolism = `Active: ${state.metabolism.activeComponents.join(", ") || "Minimal"}`;
   lines.push(
-    `Resource Allocation: ${metabolism} (Rate: ${state.metabolism.totalMetabolicRate.toFixed(2)})`,
+    `Resource Allocation: ${state.metabolism.activeComponents.join(", ") || "Minimal"} (Rate: ${state.metabolism.totalMetabolicRate.toFixed(2)})`,
   );
 
-  if (typeof (state as any).somaticStress === "number" && (state as any).somaticStress > 0.7) {
+  if (typeof state.somaticStress === "number" && state.somaticStress > 0.7) {
     lines.push(
-      `Somatic Signal: HIGH METABOLIC STRESS (System response latency affecting coherence)`,
+      "Somatic Signal: HIGH METABOLIC STRESS (System response latency affecting coherence)",
     );
   }
 
-  if (state.causal && state.causal.predictedBackfires.length > 0) {
+  if (state.causal?.predictedBackfires?.length) {
     lines.push(
       `Causal Projection: WARNING - Potential backfires in current strategy: ${state.causal.predictedBackfires.join(", ")}`,
     );
   }
 
-  if ((state as any).projection) {
-    const proj = (state as any).projection;
+  if (state.projection) {
     lines.push(
-      `Imaginative Projection: Expected outcome is ${proj.expectedOutcome.toUpperCase()} (Confidence: ${(proj.confidence * 100).toFixed(0)}%)`,
+      `Imaginative Projection: Expected outcome is ${state.projection.expectedOutcome.toUpperCase()} (Confidence: ${(state.projection.confidence * 100).toFixed(0)}%)`,
     );
-    if (proj.potentialSideEffects.length > 0) {
-      lines.push(`Side Effects Rehearsal: ${proj.potentialSideEffects.join(", ")}`);
+    if (state.projection.potentialSideEffects.length > 0) {
+      lines.push(`Side Effects Rehearsal: ${state.projection.potentialSideEffects.join(", ")}`);
     }
   }
 
@@ -106,10 +97,9 @@ export function formatInternalReflection(state: IntegratedReasoningState): strin
     );
   }
 
-  if (state.finalDrive && typeof (state.finalDrive as any).vetoProb === "number") {
-    const prob = (((state.finalDrive as any).vetoProb as number) * 100).toFixed(1);
-    const signal =
-      ((state.finalDrive as any).vetoProb as number) < 0.5 ? "🔴 VETO RISK" : "🟢 VIABLE";
+  if (typeof state.finalDrive.vetoProb === "number") {
+    const prob = (state.finalDrive.vetoProb * 100).toFixed(1);
+    const signal = state.finalDrive.vetoProb < 0.5 ? "🔴 VETO RISK" : "🟢 VIABLE";
     lines.push(`Operational Viability: ${prob}% — ${signal}`);
   }
 

@@ -242,6 +242,7 @@ export function attachGatewayWsConnectionHandler(params: AttachGatewayWsConnecti
         upsertPresence(client.presenceKey, { reason: "disconnect" });
         broadcastPresenceSnapshot({ broadcast, incrementPresenceVersion, getHealthVersion });
       }
+      buildRequestContext().unsubscribeAllSessionEvents(connId);
       if (client?.connect?.role === "node") {
         const context = buildRequestContext();
         const nodeId = context.nodeRegistry.unregister(connId);

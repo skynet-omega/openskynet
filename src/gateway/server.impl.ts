@@ -63,6 +63,7 @@ import {
   prepareSecretsRuntimeSnapshot,
   resolveCommandSecretsFromActiveRuntimeSnapshot,
 } from "../secrets/runtime.js";
+import { onSessionTranscriptUpdate } from "../sessions/transcript-events.js";
 import { runOnboardingWizard } from "../wizard/onboarding.js";
 import { createAuthRateLimiter, type AuthRateLimiter } from "./auth-rate-limit.js";
 import { startChannelHealthMonitor } from "./channel-health-monitor.js";
@@ -76,7 +77,11 @@ import { ExecApprovalManager } from "./exec-approval-manager.js";
 import { NodeRegistry } from "./node-registry.js";
 import type { startBrowserControlServerIfEnabled } from "./server-browser.js";
 import { createChannelManager } from "./server-channels.js";
-import { createAgentEventHandler } from "./server-chat.js";
+import {
+  createAgentEventHandler,
+  createSessionEventSubscriberRegistry,
+  createSessionMessageSubscriberRegistry,
+} from "./server-chat.js";
 import { createGatewayCloseHandler } from "./server-close.js";
 import { buildGatewayCronService } from "./server-cron.js";
 import { startGatewayDiscovery } from "./server-discovery-runtime.js";
@@ -631,6 +636,8 @@ export async function startGatewayServer(
   const nodeRegistry = new NodeRegistry();
   const nodePresenceTimers = new Map<string, ReturnType<typeof setInterval>>();
   const nodeSubscriptions = createNodeSubscriptionManager();
+  const sessionEventSubscribers = createSessionEventSubscriberRegistry();
+  const sessionMessageSubscribers = createSessionMessageSubscriberRegistry();
   const nodeSendEvent = (opts: { nodeId: string; event: string; payloadJSON?: string | null }) => {
     const payload = safeParseJson(opts.payloadJSON ?? null);
     nodeRegistry.sendEvent(opts.nodeId, opts.event, payload);
@@ -739,6 +746,7 @@ export async function startGatewayServer(
           resolveSessionKeyForRun,
           clearAgentRunContext,
           toolEventRecipients,
+          sessionEventSubscribers,
         }),
       );
 
@@ -747,6 +755,42 @@ export async function startGatewayServer(
     : onHeartbeatEvent((evt) => {
         broadcast("heartbeat", evt, { dropIfSlow: true });
       });
+
+  const transcriptUnsub = onSessionTranscriptUpdate((update) => {
+    const sessionKey = update.sessionKey?.trim();
+    if (!sessionKey) {
+      return;
+    }
+    const messageConnIds = sessionMessageSubscribers.get(sessionKey);
+    if (messageConnIds.size > 0 && update.message) {
+      broadcastToConnIds(
+        "session.message",
+        {
+          sessionKey,
+          message: update.message,
+          ...(typeof update.messageId === "string" ? { messageId: update.messageId } : {}),
+          ts: Date.now(),
+        },
+        messageConnIds,
+        { dropIfSlow: true },
+      );
+    }
+
+    const sessionEventConnIds = sessionEventSubscribers.getAll();
+    if (sessionEventConnIds.size > 0) {
+      broadcastToConnIds(
+        "sessions.changed",
+        {
+          sessionKey,
+          phase: "message",
+          ts: Date.now(),
+          ...(typeof update.messageId === "string" ? { messageId: update.messageId } : {}),
+        },
+        sessionEventConnIds,
+        { dropIfSlow: true },
+      );
+    }
+  });
 
   let heartbeatRunner: HeartbeatRunner = minimalTestGateway
     ? {
@@ -834,8 +878,11 @@ export async function startGatewayServer(
     nodeUnsubscribe,
     nodeUnsubscribeAll,
     hasConnectedMobileNode: hasMobileNodeConnected,
-    hasExecApprovalClients: () => {
+    hasExecApprovalClients: (excludeConnId?: string) => {
       for (const gatewayClient of clients) {
+        if (excludeConnId && gatewayClient.connId === excludeConnId) {
+          continue;
+        }
         const scopes = Array.isArray(gatewayClient.connect.scopes)
           ? gatewayClient.connect.scopes
           : [];
@@ -853,6 +900,15 @@ export async function startGatewayServer(
     chatDeltaSentAt: chatRunState.deltaSentAt,
     addChatRun,
     removeChatRun,
+    subscribeSessionEvents: sessionEventSubscribers.subscribe,
+    unsubscribeSessionEvents: sessionEventSubscribers.unsubscribe,
+    subscribeSessionMessageEvents: sessionMessageSubscribers.subscribe,
+    unsubscribeSessionMessageEvents: sessionMessageSubscribers.unsubscribe,
+    unsubscribeAllSessionEvents: (connId: string) => {
+      sessionEventSubscribers.unsubscribe(connId);
+      sessionMessageSubscribers.unsubscribeAll(connId);
+    },
+    getSessionEventSubscriberConnIds: sessionEventSubscribers.getAll,
     registerToolEventRecipient: toolEventRecipients.add,
     dedupe,
     wizardSessions,
@@ -1035,6 +1091,7 @@ export async function startGatewayServer(
     mediaCleanup,
     agentUnsub,
     heartbeatUnsub,
+    transcriptUnsub,
     chatRunState,
     clients,
     configReloader,
@@ -1043,7 +1100,6 @@ export async function startGatewayServer(
     httpServer,
     httpServers,
   });
-
 
   return {
     close: async (opts) => {

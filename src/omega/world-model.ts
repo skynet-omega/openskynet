@@ -1,19 +1,3 @@
-import { type SkynetBifurcationState } from "../skynet/bifurcation-engine.js";
-import {
-  formatSkynetContinuityBlock,
-  syncSkynetContinuityState,
-  type SkynetContinuityState,
-} from "../skynet/continuity-tracker.js";
-import {
-  formatSkynetNucleusBlock,
-  syncSkynetNucleus,
-  type SkynetNucleusState,
-} from "../skynet/nucleus.js";
-import {
-  formatSkynetStudyProgramBlock,
-  syncSkynetStudyProgram,
-  type SkynetStudyProgram,
-} from "../skynet/study-program.js";
 import {
   loadOmegaDurableMemory,
   queryOmegaDurableMemory,
@@ -21,6 +5,12 @@ import {
 } from "./durable-memory.js";
 import { loadOmegaEmpiricalMetrics } from "./empirical-metrics.js";
 import type { OmegaSessionSelfState } from "./event-model.js";
+import {
+  type SkynetContinuityState,
+  type SkynetNucleusState,
+  type SkynetBifurcationState,
+  type SkynetStudyProgram,
+} from "./internal-project-lab.js";
 import { loadOpenSkynetInternalProjectProfile } from "./internal-project.js";
 import {
   loadOmegaOperationalMemory,
@@ -39,6 +29,11 @@ import {
   syncOmegaStudySupervisor,
   type OmegaStudySupervisorState,
 } from "./study-supervisor.js";
+import {
+  formatOmegaWorldModelInternalProjectBlocks,
+  loadOmegaWorldModelInternalProjectState,
+  type OmegaWorldModelInternalProjectState,
+} from "./world-model-internal-project.js";
 
 type OmegaRecoveryPreference = {
   preferredRoute: "omega_delegate" | "sessions_spawn";
@@ -79,11 +74,71 @@ export type OmegaWorldModelSnapshot = {
   relevantMemories: OmegaDurableMemoryEntry[];
   operationalSignals: OmegaOperationalTurnMemoryEntry[];
   studySupervisor?: OmegaStudySupervisorState;
+  internalProjectNucleus?: SkynetNucleusState;
+  internalProjectStudyProgram?: SkynetStudyProgram;
+  internalProjectContinuity?: SkynetContinuityState;
+  /** @deprecated compatibility alias */
   skynetNucleus?: SkynetNucleusState;
+  /** @deprecated compatibility alias */
   skynetStudyProgram?: SkynetStudyProgram;
+  /** @deprecated compatibility alias */
   skynetContinuity?: SkynetContinuityState;
   skynetBifurcation?: SkynetBifurcationState;
+  degradedComponents: Array<{
+    component: string;
+    reason: string;
+  }>;
 };
+
+type LoadOmegaWorldModelSnapshotParams = {
+  workspaceRoot: string;
+  sessionKey: string;
+  task?: string;
+  expectedPaths?: string[];
+  watchedPaths?: string[];
+};
+
+type OmegaWorldModelBaseState = {
+  sessionAuthority: OmegaSessionAuthority;
+  empiricalMetrics: Awaited<ReturnType<typeof loadOmegaEmpiricalMetrics>>;
+  project: Awaited<ReturnType<typeof loadOpenSkynetInternalProjectProfile>>;
+  allDurableMemory: OmegaDurableMemoryEntry[];
+  relevantMemories: OmegaDurableMemoryEntry[];
+  operationalSignals: OmegaOperationalTurnMemoryEntry[];
+  activeGoalTask?: string;
+};
+
+type OmegaWorldModelDerivedState = {
+  problemAgenda: OmegaProblemAgendaItem[];
+  selfState?: OmegaSessionSelfState;
+  localityExecutionGuard?: OmegaLocalityExecutionGuard;
+  studySupervisor?: OmegaStudySupervisorState;
+};
+
+type OmegaWorldModelPreferenceState = {
+  activeRecoveryPreference?: OmegaRecoveryPreference;
+  generalizedRecoveryPreference?: OmegaRecoveryPreference & {
+    mechanismKey: string;
+  };
+  localityRoutingPreference?: OmegaLocalityRoutingPreference;
+};
+
+async function captureWorldModelComponent<T>(
+  component: string,
+  degradedComponents: OmegaWorldModelSnapshot["degradedComponents"],
+  operation: () => Promise<T>,
+  fallback: () => Promise<T> | T,
+): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    degradedComponents.push({
+      component,
+      reason: error instanceof Error ? error.message : String(error),
+    });
+    return await fallback();
+  }
+}
 
 function normalizeWorldModelText(value: string): string {
   return value.toLowerCase().replace(/\s+/g, " ").trim();
@@ -343,13 +398,62 @@ function deriveActiveRecoveryPreference(params: {
   return buildRecoveryPreference({ delegateSuccesses, isolatedSuccesses });
 }
 
-export async function loadOmegaWorldModelSnapshot(params: {
-  workspaceRoot: string;
-  sessionKey: string;
+function deriveOmegaWorldModelPreferenceState(params: {
+  base: OmegaWorldModelBaseState;
+}): OmegaWorldModelPreferenceState {
+  return {
+    activeRecoveryPreference: deriveActiveRecoveryPreference({
+      kernel: params.base.sessionAuthority.kernel,
+      metrics: params.base.empiricalMetrics,
+    }),
+    generalizedRecoveryPreference: deriveGeneralizedRecoveryPreference({
+      kernel: params.base.sessionAuthority.kernel,
+      metrics: params.base.empiricalMetrics,
+    }),
+    localityRoutingPreference: deriveLocalityRoutingPreference(params.base.relevantMemories),
+  };
+}
+
+function deriveEnrichedSelfState(params: {
+  sessionAuthority: OmegaSessionAuthority;
+  allDurableMemory: OmegaDurableMemoryEntry[];
+  relevantMemories: OmegaDurableMemoryEntry[];
   task?: string;
   expectedPaths?: string[];
-  watchedPaths?: string[];
-}): Promise<OmegaWorldModelSnapshot> {
+}): OmegaSessionSelfState | undefined {
+  const constraintBridgeMemories = deriveConstraintBridgeMemories({
+    durableMemory: params.allDurableMemory,
+    task: params.task,
+    expectedPaths: params.expectedPaths,
+  });
+  const inheritedConstraints = [...params.relevantMemories, ...constraintBridgeMemories].flatMap(
+    (memory) => memory.learnedConstraints ?? [],
+  );
+  const mergedLearnedConstraints = Array.from(
+    new Set([
+      ...(params.sessionAuthority.state?.learnedConstraints ?? []),
+      ...inheritedConstraints,
+    ]),
+  ).slice(-6); // OMEGA_STATE_CONSTRAINT_LIMIT equivalent
+
+  return params.sessionAuthority.state
+    ? {
+        ...params.sessionAuthority.state,
+        learnedConstraints: mergedLearnedConstraints,
+      }
+    : inheritedConstraints.length > 0
+      ? {
+          activeTargets: params.expectedPaths ?? [],
+          requiredKeys: [],
+          learnedConstraints: mergedLearnedConstraints,
+          updatedAt: Date.now(),
+        }
+      : undefined;
+}
+
+async function loadOmegaWorldModelBaseState(
+  params: LoadOmegaWorldModelSnapshotParams,
+): Promise<OmegaWorldModelBaseState> {
   const [sessionAuthority, empiricalMetrics, project] = await Promise.all([
     loadOmegaSessionAuthority(params),
     loadOmegaEmpiricalMetrics({ workspaceRoot: params.workspaceRoot }),
@@ -367,119 +471,143 @@ export async function loadOmegaWorldModelSnapshot(params: {
         })
       : allDurableMemory.slice(0, 4);
   const operationalSignals = (await loadOmegaOperationalMemory(params)).slice(-3).reverse();
-  const problemAgenda = await syncOmegaProblemAgenda({
-    workspaceRoot: params.workspaceRoot,
-    sessionKey: params.sessionKey,
-    kernel: sessionAuthority.kernel,
-    durableMemory: allDurableMemory,
-    operationalSignals,
-  }).catch(() => loadOmegaProblemAgenda(params));
   const activeGoalTask = sessionAuthority.kernel?.goals.find(
     (goal) => goal.id === sessionAuthority.kernel?.activeGoalId,
   )?.task;
 
-  // Inherit constraints from Durable Memory (The Bridge)
-  const constraintBridgeMemories = deriveConstraintBridgeMemories({
-    durableMemory: allDurableMemory,
-    task: params.task,
-    expectedPaths: params.expectedPaths,
-  });
-  const inheritedConstraints = [...relevantMemories, ...constraintBridgeMemories].flatMap(
-    (m) => m.learnedConstraints ?? [],
-  );
-  const mergedLearnedConstraints = Array.from(
-    new Set([...(sessionAuthority.state?.learnedConstraints ?? []), ...inheritedConstraints]),
-  ).slice(-6); // OMEGA_STATE_CONSTRAINT_LIMIT equivalent
-
-  const enrichedSelfState: OmegaSessionSelfState | undefined = sessionAuthority.state
-    ? {
-        ...sessionAuthority.state,
-        learnedConstraints: mergedLearnedConstraints,
-      }
-    : inheritedConstraints.length > 0
-      ? {
-          activeTargets: params.expectedPaths ?? [],
-          requiredKeys: [],
-          learnedConstraints: mergedLearnedConstraints,
-          updatedAt: Date.now(),
-        }
-      : undefined;
-  const studySupervisor = await syncOmegaStudySupervisor({
-    workspaceRoot: params.workspaceRoot,
-    sessionKey: params.sessionKey,
-    problemAgenda,
-    relevantMemories,
-    operationalSignals,
-    learnedConstraints: enrichedSelfState?.learnedConstraints ?? [],
-    activeGoalTask,
-    localityExecutionGuard: deriveLocalityExecutionGuard({
-      relevantMemories,
-      expectedPaths: params.expectedPaths,
-      watchedPaths: params.watchedPaths,
-    }),
-  }).catch(() => undefined);
-  const localityExecutionGuard = deriveLocalityExecutionGuard({
-    relevantMemories,
-    expectedPaths: params.expectedPaths,
-    watchedPaths: params.watchedPaths,
-  });
-  const skynetNucleus = studySupervisor
-    ? await syncSkynetNucleus({
-        workspaceRoot: params.workspaceRoot,
-        sessionKey: params.sessionKey,
-        projectName: project.name,
-        studyFocus: studySupervisor.focus,
-        operationalSignals,
-        learnedConstraints: enrichedSelfState?.learnedConstraints ?? [],
-      }).catch(() => undefined)
-    : undefined;
-  const skynetStudyProgram =
-    studySupervisor && skynetNucleus
-      ? await syncSkynetStudyProgram({
-          workspaceRoot: params.workspaceRoot,
-          sessionKey: params.sessionKey,
-          supervisor: studySupervisor,
-          nucleus: skynetNucleus,
-        }).catch(() => undefined)
-      : undefined;
-  const skynetContinuity =
-    skynetNucleus && skynetStudyProgram
-      ? await syncSkynetContinuityState({
-          workspaceRoot: params.workspaceRoot,
-          sessionKey: params.sessionKey,
-          nucleus: skynetNucleus,
-          program: skynetStudyProgram,
-        }).catch(() => undefined)
-      : undefined;
-
   return {
-    sessionKey: params.sessionKey,
     sessionAuthority,
-    kernel: sessionAuthority.kernel,
-    selfState: enrichedSelfState,
-    activeRecoveryPreference: deriveActiveRecoveryPreference({
-      kernel: sessionAuthority.kernel,
-      metrics: empiricalMetrics,
-    }),
-    generalizedRecoveryPreference: deriveGeneralizedRecoveryPreference({
-      kernel: sessionAuthority.kernel,
-      metrics: empiricalMetrics,
-    }),
-    localityRoutingPreference: deriveLocalityRoutingPreference(relevantMemories),
-    localityExecutionGuard,
-    problemAgenda,
-    timelineLength: sessionAuthority.timeline.length,
-    activeGoalTask,
+    empiricalMetrics,
+    project,
+    allDurableMemory,
     relevantMemories,
     operationalSignals,
-    studySupervisor,
-    skynetNucleus,
-    skynetStudyProgram,
-    skynetContinuity,
+    activeGoalTask,
   };
 }
 
-export function formatOmegaWorldModelSnapshot(snapshot: OmegaWorldModelSnapshot): string[] {
+async function loadOmegaWorldModelDerivedState(params: {
+  input: LoadOmegaWorldModelSnapshotParams;
+  base: OmegaWorldModelBaseState;
+  degradedComponents: OmegaWorldModelSnapshot["degradedComponents"];
+}): Promise<OmegaWorldModelDerivedState> {
+  const { input, base, degradedComponents } = params;
+  const problemAgenda = await captureWorldModelComponent(
+    "problem_agenda",
+    degradedComponents,
+    () =>
+      syncOmegaProblemAgenda({
+        workspaceRoot: input.workspaceRoot,
+        sessionKey: input.sessionKey,
+        kernel: base.sessionAuthority.kernel,
+        durableMemory: base.allDurableMemory,
+        operationalSignals: base.operationalSignals,
+      }),
+    () => loadOmegaProblemAgenda(input),
+  );
+  const selfState = deriveEnrichedSelfState({
+    sessionAuthority: base.sessionAuthority,
+    allDurableMemory: base.allDurableMemory,
+    relevantMemories: base.relevantMemories,
+    task: input.task,
+    expectedPaths: input.expectedPaths,
+  });
+  const localityExecutionGuard = deriveLocalityExecutionGuard({
+    relevantMemories: base.relevantMemories,
+    expectedPaths: input.expectedPaths,
+    watchedPaths: input.watchedPaths,
+  });
+  const studySupervisor = await captureWorldModelComponent(
+    "study_supervisor",
+    degradedComponents,
+    () =>
+      syncOmegaStudySupervisor({
+        workspaceRoot: input.workspaceRoot,
+        sessionKey: input.sessionKey,
+        problemAgenda,
+        relevantMemories: base.relevantMemories,
+        operationalSignals: base.operationalSignals,
+        learnedConstraints: selfState?.learnedConstraints ?? [],
+        activeGoalTask: base.activeGoalTask,
+        localityExecutionGuard,
+      }),
+    () => undefined,
+  );
+
+  return {
+    problemAgenda,
+    selfState,
+    localityExecutionGuard,
+    studySupervisor,
+  };
+}
+
+function buildOmegaWorldModelSnapshot(params: {
+  input: LoadOmegaWorldModelSnapshotParams;
+  base: OmegaWorldModelBaseState;
+  derived: OmegaWorldModelDerivedState;
+  internalProject: OmegaWorldModelInternalProjectState;
+  preferences: OmegaWorldModelPreferenceState;
+  degradedComponents: OmegaWorldModelSnapshot["degradedComponents"];
+}): OmegaWorldModelSnapshot {
+  const { input, base, derived, internalProject, preferences, degradedComponents } = params;
+  return {
+    sessionKey: input.sessionKey,
+    sessionAuthority: base.sessionAuthority,
+    kernel: base.sessionAuthority.kernel,
+    selfState: derived.selfState,
+    activeRecoveryPreference: preferences.activeRecoveryPreference,
+    generalizedRecoveryPreference: preferences.generalizedRecoveryPreference,
+    localityRoutingPreference: preferences.localityRoutingPreference,
+    localityExecutionGuard: derived.localityExecutionGuard,
+    problemAgenda: derived.problemAgenda,
+    timelineLength: base.sessionAuthority.timeline.length,
+    activeGoalTask: base.activeGoalTask,
+    relevantMemories: base.relevantMemories,
+    operationalSignals: base.operationalSignals,
+    studySupervisor: derived.studySupervisor,
+    internalProjectNucleus: internalProject.internalProjectNucleus,
+    internalProjectStudyProgram: internalProject.internalProjectStudyProgram,
+    internalProjectContinuity: internalProject.internalProjectContinuity,
+    skynetNucleus: internalProject.internalProjectNucleus,
+    skynetStudyProgram: internalProject.internalProjectStudyProgram,
+    skynetContinuity: internalProject.internalProjectContinuity,
+    degradedComponents,
+  };
+}
+
+export async function loadOmegaWorldModelSnapshot(
+  params: LoadOmegaWorldModelSnapshotParams,
+): Promise<OmegaWorldModelSnapshot> {
+  const degradedComponents: OmegaWorldModelSnapshot["degradedComponents"] = [];
+  const base = await loadOmegaWorldModelBaseState(params);
+  const derived = await loadOmegaWorldModelDerivedState({
+    input: params,
+    base,
+    degradedComponents,
+  });
+  const internalProject = await loadOmegaWorldModelInternalProjectState({
+    workspaceRoot: params.workspaceRoot,
+    sessionKey: params.sessionKey,
+    projectName: base.project.name,
+    studySupervisor: derived.studySupervisor,
+    operationalSignals: base.operationalSignals,
+    learnedConstraints: derived.selfState?.learnedConstraints ?? [],
+    degradedComponents,
+  });
+  const preferences = deriveOmegaWorldModelPreferenceState({ base });
+
+  return buildOmegaWorldModelSnapshot({
+    input: params,
+    base,
+    derived,
+    internalProject,
+    preferences,
+    degradedComponents,
+  });
+}
+
+function formatOmegaWorldModelOverview(snapshot: OmegaWorldModelSnapshot): string[] {
   const lines = ["[OMEGA World Model]"];
   if (!snapshot.kernel) {
     lines.push("Kernel state: unavailable");
@@ -522,6 +650,11 @@ export function formatOmegaWorldModelSnapshot(snapshot: OmegaWorldModelSnapshot)
       `Locality guard: isolate edits touching protected paths ${snapshot.localityExecutionGuard.atRiskPaths.join(", ")}`,
     );
   }
+  if (snapshot.degradedComponents.length > 0) {
+    lines.push(
+      `Degraded components: ${snapshot.degradedComponents.map((entry) => entry.component).join(", ")}`,
+    );
+  }
   if (snapshot.problemAgenda.length > 0) {
     lines.push(
       `Open problem classes: ${snapshot.problemAgenda
@@ -530,17 +663,11 @@ export function formatOmegaWorldModelSnapshot(snapshot: OmegaWorldModelSnapshot)
         .join(", ")}`,
     );
   }
-  lines.push(...formatOmegaStudySupervisorBlock(snapshot.studySupervisor));
-  if (snapshot.skynetNucleus) {
-    lines.push("");
-    lines.push(...formatSkynetNucleusBlock(snapshot.skynetNucleus));
-  }
-  if (snapshot.skynetStudyProgram) {
-    lines.push(...formatSkynetStudyProgramBlock(snapshot.skynetStudyProgram));
-  }
-  if (snapshot.skynetContinuity) {
-    lines.push(...formatSkynetContinuityBlock(snapshot.skynetContinuity));
-  }
+  return lines;
+}
+
+function formatOmegaWorldModelMemoryBlocks(snapshot: OmegaWorldModelSnapshot): string[] {
+  const lines: string[] = [];
   if (snapshot.relevantMemories.length > 0) {
     lines.push("");
     lines.push("[OMEGA Durable Memory]");
@@ -562,5 +689,13 @@ export function formatOmegaWorldModelSnapshot(snapshot: OmegaWorldModelSnapshot)
       );
     });
   }
+  return lines;
+}
+
+export function formatOmegaWorldModelSnapshot(snapshot: OmegaWorldModelSnapshot): string[] {
+  const lines = formatOmegaWorldModelOverview(snapshot);
+  lines.push(...formatOmegaStudySupervisorBlock(snapshot.studySupervisor));
+  lines.push(...formatOmegaWorldModelInternalProjectBlocks(snapshot));
+  lines.push(...formatOmegaWorldModelMemoryBlocks(snapshot));
   return lines;
 }

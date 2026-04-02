@@ -982,7 +982,22 @@ export async function maybeApplyTtsToPayload(params: {
           text: visibleText.length > 0 ? visibleText : undefined,
         };
 
+  const openclawChannelData =
+    nextPayload.channelData &&
+    typeof nextPayload.channelData === "object" &&
+    !Array.isArray(nextPayload.channelData)
+      ? nextPayload.channelData.openclaw
+      : undefined;
+  const suppressAutoTtsFromPayload =
+    openclawChannelData &&
+    typeof openclawChannelData === "object" &&
+    !Array.isArray(openclawChannelData) &&
+    (openclawChannelData as { suppressAutoTts?: unknown }).suppressAutoTts === true;
+
   if (params.suppressSynthesis === true) {
+    return nextPayload;
+  }
+  if (suppressAutoTtsFromPayload) {
     return nextPayload;
   }
 

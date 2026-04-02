@@ -32,4 +32,24 @@ describe("transcript events", () => {
     expect(first).toHaveBeenCalledTimes(1);
     expect(second).toHaveBeenCalledTimes(1);
   });
+
+  it("emits normalized rich transcript updates", () => {
+    const listener = vi.fn();
+    cleanup.push(onSessionTranscriptUpdate(listener));
+
+    emitSessionTranscriptUpdate({
+      sessionFile: "  /tmp/session.jsonl  ",
+      sessionKey: "  agent:main:main  ",
+      message: { role: "assistant", content: [{ type: "text", text: "hi" }] },
+      messageId: "  msg-1  ",
+    });
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith({
+      sessionFile: "/tmp/session.jsonl",
+      sessionKey: "agent:main:main",
+      message: { role: "assistant", content: [{ type: "text", text: "hi" }] },
+      messageId: "msg-1",
+    });
+  });
 });

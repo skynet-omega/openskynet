@@ -9,6 +9,13 @@ describe("buildBareSessionResetPrompt", () => {
     expect(prompt).toContain("read the required files before responding to the user");
   });
 
+  it("asks for a neutral reset greeting without assuming prior topics", () => {
+    const prompt = buildBareSessionResetPrompt();
+    expect(prompt).toContain("greet the user briefly and neutrally");
+    expect(prompt).toContain("avoid theatrical startup metaphors");
+    expect(prompt).toContain("do not assume prior tasks");
+  });
+
   it("appends current time line so agents know the date", () => {
     const cfg = {
       agents: { defaults: { userTimezone: "America/New_York", timeFormat: "12" } },

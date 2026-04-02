@@ -2,8 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { SkynetCommitmentDecision } from "../skynet/commitment-engine.js";
-import type { SkynetExperimentPlan } from "../skynet/experiment-cycle.js";
+import type { SkynetCommitmentDecision, SkynetExperimentPlan } from "./internal-project-lab.js";
 import {
   collectOpenSkynetMemoryCandidates,
   planOpenSkynetMemoryReset,
@@ -33,6 +32,7 @@ describe("omega living memory", () => {
     const experiment: SkynetExperimentPlan = {
       sessionKey,
       updatedAt: Date.now(),
+      projectName: "Skynet",
       focusKey: "endogenous_science_agenda",
       mode: "explore",
       hypothesis: "h",
@@ -44,6 +44,7 @@ describe("omega living memory", () => {
     const commitment: SkynetCommitmentDecision = {
       sessionKey,
       updatedAt: Date.now(),
+      projectName: "Skynet",
       kind: "artifact",
       artifactKind: "module",
       targetFocusKey: "endogenous_science_agenda",
@@ -65,7 +66,10 @@ describe("omega living memory", () => {
     expect(state.internalProjectState.commitment?.kind).toBe("artifact");
     expect(state.selfModel.platform.name).toBe("OpenSkyNet");
     expect(state.selfModel.internalProject.name).toBe("Skynet");
+    expect(state.skynet.name).toBe("Skynet");
     expect(state.selfModel.reporting.separatePlatformFromInternalProject).toBe(true);
+    expect(state.selfModel.reporting.internalProjectFindingsMustTransferToKernel).toBe(true);
+    expect(state.selfModel.reporting.internalProjectMustNotBeKernelDependency).toBe(true);
     expect(state.agenticBenchmark.projectKey).toBe("skynet");
     expect(state.agenticBenchmark.benchmarkScore).toBeGreaterThan(0);
 
@@ -74,6 +78,7 @@ describe("omega living memory", () => {
     ) as typeof state;
     expect(persisted.internalProjectState.recommendedAction).toBe("Execute the top item");
     expect(persisted.selfModel.reporting.maintenanceIsNotProjectProgress).toBe(true);
+    expect(persisted.selfModel.reporting.internalProjectMustNotBeKernelDependency).toBe(true);
 
     const historyLines = (
       await fs.readFile(resolveOpenSkynetLivingHistoryFile(workspaceRoot), "utf-8")
@@ -145,5 +150,69 @@ describe("omega living memory", () => {
     expect(state.selfModel.internalProject.key).toBe("protein-lab");
     expect(state.selfModel.internalProject.name).toBe("Protein Lab");
     expect(state.agenticBenchmark.projectName).toBe("Protein Lab");
+    expect(state.skynet.name).toBe("Protein Lab");
+  });
+
+  it("marks living memory as degraded when the world model snapshot has degraded components", async () => {
+    const healthySnapshot = await loadOmegaWorldModelSnapshot({
+      workspaceRoot,
+      sessionKey,
+    });
+    const degradedSnapshot = {
+      ...healthySnapshot,
+      degradedComponents: [{ component: "study_supervisor", reason: "boom" }],
+    };
+
+    const healthyState = await syncOpenSkynetLivingMemory({
+      workspaceRoot,
+      sessionKey,
+      snapshot: healthySnapshot,
+      recommendedAction: "Execute the top item",
+    });
+
+    const degradedState = await syncOpenSkynetLivingMemory({
+      workspaceRoot,
+      sessionKey,
+      snapshot: degradedSnapshot,
+      recommendedAction: "Execute the top item",
+    });
+
+    expect(degradedState.authority).toMatchObject({
+      worldModelStatus: "degraded",
+      degradedComponents: ["study_supervisor"],
+    });
+    expect(healthyState.authority.worldModelStatus).toBe("healthy");
+    expect(degradedState.agenticBenchmark.benchmarkScore).toBeLessThan(
+      healthyState.agenticBenchmark.benchmarkScore,
+    );
+  });
+
+  it("persists operational memory freshness in living authority state", async () => {
+    const snapshot = await loadOmegaWorldModelSnapshot({
+      workspaceRoot,
+      sessionKey,
+    });
+
+    const state = await syncOpenSkynetLivingMemory({
+      workspaceRoot,
+      sessionKey,
+      snapshot,
+      operationalSummary: {
+        recentTurnCount: 2,
+        recentStalledTurns: 1,
+        recentResolvedTurns: 1,
+        latestTurnHealth: "resolved",
+        latestRecordedAt: 12345,
+        ageMs: 3 * 60 * 60 * 1000,
+        freshness: "stale",
+        averageCausalImpact: 0.5,
+        latestCausalImpact: 1,
+      },
+    });
+
+    expect(state.authority).toMatchObject({
+      operationalMemoryStatus: "stale",
+      operationalMemoryLatestAt: 12345,
+    });
   });
 });

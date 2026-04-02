@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { readLatestAssistantReply } from "../agents/tools/agent-step.js";
 import { callGateway } from "../gateway/call.js";
+import { classifyOpenSkynetRuntimeFailure } from "../infra/runtime-failure.js";
 import { collectObservedWriteChanges, createObservedWriteBaseline } from "./observed-write.js";
 import {
   recordOmegaSessionOutcome,
@@ -33,12 +34,21 @@ export type OmegaSessionTaskFailure = {
   validation?: OmegaSessionTaskValidationSummary;
 };
 
+type OmegaRunValidationEvidence = {
+  reply?: string;
+  observedChangedFiles?: string[];
+  validation: OmegaSessionTaskValidationSummary;
+  structuredFailure: ReturnType<typeof validateStructuredOmegaResult> | null;
+  writeFailure: ReturnType<typeof validateObservedWrite> | null;
+};
+
 async function startOmegaAgentRun(params: {
   runId: string;
   sendParams: Record<string, unknown>;
   sessionKey: string;
 }): Promise<
-  { ok: true; runId: string } | { ok: false; status: "error"; runId: string; error: string }
+  | { ok: true; runId: string }
+  | { ok: false; status: "error"; runId: string; error: string; errorKind?: string }
 > {
   try {
     const response = await callGateway<{ runId?: string }>({
@@ -51,11 +61,19 @@ async function startOmegaAgentRun(params: {
       runId: typeof response?.runId === "string" && response.runId ? response.runId : params.runId,
     };
   } catch (err) {
+    const error = err instanceof Error ? err.message : typeof err === "string" ? err : "error";
+    const classified = classifyOpenSkynetRuntimeFailure({
+      status: "error",
+      errorText: error,
+    });
     return {
       ok: false,
       status: "error",
       runId: params.runId,
-      error: err instanceof Error ? err.message : typeof err === "string" ? err : "error",
+      error,
+      ...(classified.failureClass !== "unknown_error" && classified.failureClass !== "none"
+        ? { errorKind: classified.failureClass }
+        : {}),
     };
   }
 }
@@ -84,6 +102,59 @@ function stringifyOmegaTask(value: unknown): string {
   return String(value);
 }
 
+async function collectOmegaRunValidationEvidence(params: {
+  sessionKey: string;
+  task: string;
+  requestedValidation: OmegaSessionTaskValidationRequest;
+  observedWriteBaseline: Awaited<ReturnType<typeof createObservedWriteBaseline>> | null;
+}): Promise<OmegaRunValidationEvidence> {
+  const expectedKeys = params.requestedValidation.expectedKeys ?? [];
+  const expectedPaths = params.requestedValidation.expectedPaths ?? [];
+  const expectsJson = params.requestedValidation.expectsJson === true;
+  const reply = await readLatestAssistantReply({ sessionKey: params.sessionKey }).catch(
+    () => undefined,
+  );
+  const validation: OmegaSessionTaskValidationSummary = {};
+  let structuredFailure: ReturnType<typeof validateStructuredOmegaResult> | null = null;
+
+  if (expectsJson || expectedKeys.length > 0) {
+    const structuredValidation = validateStructuredOmegaResult(
+      {
+        task: params.task,
+        expectsJson: true,
+        expectedKeys,
+      },
+      reply ?? "",
+    );
+    validation.structured = structuredValidation;
+    if (!structuredValidation.ok) {
+      structuredFailure = structuredValidation;
+    }
+  }
+
+  let observedChangedFiles: string[] | undefined;
+  let writeFailure: ReturnType<typeof validateObservedWrite> | null = null;
+  if (params.observedWriteBaseline) {
+    observedChangedFiles = await collectObservedWriteChanges(params.observedWriteBaseline);
+    const writeValidation = validateObservedWrite({
+      expectedPaths,
+      observedChangedFiles,
+    });
+    validation.write = writeValidation;
+    if (!writeValidation.ok) {
+      writeFailure = writeValidation;
+    }
+  }
+
+  return {
+    reply,
+    observedChangedFiles,
+    validation,
+    structuredFailure,
+    writeFailure,
+  };
+}
+
 export async function awaitValidatedOmegaSessionRun(params: {
   runId: string;
   task: string;
@@ -109,6 +180,9 @@ export async function awaitValidatedOmegaSessionRun(params: {
           expectedPaths,
         })
       : null;
+  let terminalFailureStatus: "error" | "timeout" | undefined;
+  let terminalFailureError: string | undefined;
+  let terminalFailureErrorKind: string | undefined;
 
   try {
     const wait = await callGateway<{ status?: string; error?: string }>({
@@ -122,108 +196,55 @@ export async function awaitValidatedOmegaSessionRun(params: {
     const waitStatus = typeof wait?.status === "string" ? wait.status : undefined;
     const waitError = typeof wait?.error === "string" ? wait.error : undefined;
     if (waitStatus === "timeout") {
-      await recordOmegaSessionOutcome({
-        workspaceRoot: params.workspaceRoot,
-        sessionKey: params.sessionKey,
-        task: params.task,
-        validation: validationSnapshot,
-        outcome: {
-          status: "timeout",
-        },
-        execution: {
-          ...params.execution,
-          runId: params.execution?.runId ?? params.runId,
-        },
-      }).catch(() => undefined);
-      return {
-        ok: false,
-        runId: params.runId,
-        status: "timeout",
-        error: waitError ?? "agent timeout",
-      };
+      terminalFailureStatus = "timeout";
+      terminalFailureError = waitError ?? "agent timeout";
     }
     if (waitStatus === "error") {
-      await recordOmegaSessionOutcome({
-        workspaceRoot: params.workspaceRoot,
-        sessionKey: params.sessionKey,
-        task: params.task,
-        validation: validationSnapshot,
-        outcome: {
-          status: "error",
-        },
-        execution: {
-          ...params.execution,
-          runId: params.execution?.runId ?? params.runId,
-        },
-      }).catch(() => undefined);
-      return {
-        ok: false,
-        runId: params.runId,
-        status: "error",
-        error: waitError ?? "agent error",
-      };
+      terminalFailureStatus = "error";
+      terminalFailureError = waitError ?? "agent error";
+    }
+    if (terminalFailureStatus) {
+      const classified = classifyOpenSkynetRuntimeFailure({
+        status: terminalFailureStatus,
+        errorText: terminalFailureError,
+      });
+      if (classified.failureClass !== "unknown_error" && classified.failureClass !== "none") {
+        terminalFailureErrorKind = classified.failureClass;
+      }
     }
   } catch (err) {
-    const errorText =
+    terminalFailureError =
       err instanceof Error ? err.message : typeof err === "string" ? err : "agent wait error";
-    await recordOmegaSessionOutcome({
-      workspaceRoot: params.workspaceRoot,
-      sessionKey: params.sessionKey,
-      task: params.task,
-      validation: validationSnapshot,
-      outcome: {
-        status: errorText.includes("gateway timeout") ? "timeout" : "error",
-      },
-      execution: {
-        ...params.execution,
-        runId: params.execution?.runId ?? params.runId,
-      },
-    }).catch(() => undefined);
-    return {
-      ok: false,
-      runId: params.runId,
-      status: errorText.includes("gateway timeout") ? "timeout" : "error",
-      error: errorText,
-    };
-  }
-
-  const reply = await readLatestAssistantReply({ sessionKey: params.sessionKey });
-  const validation: OmegaSessionTaskValidationSummary = {};
-  let structuredFailure: ReturnType<typeof validateStructuredOmegaResult> | null = null;
-
-  if (expectsJson || expectedKeys.length > 0) {
-    const structuredValidation = validateStructuredOmegaResult(
-      {
-        task: params.task,
-        expectsJson: true,
-        expectedKeys,
-      },
-      reply ?? "",
-    );
-    validation.structured = structuredValidation;
-    if (!structuredValidation.ok) {
-      structuredFailure = structuredValidation;
+    terminalFailureStatus = terminalFailureError.includes("gateway timeout") ? "timeout" : "error";
+    const classified = classifyOpenSkynetRuntimeFailure({
+      status: terminalFailureStatus,
+      errorText: terminalFailureError,
+    });
+    if (classified.failureClass !== "unknown_error" && classified.failureClass !== "none") {
+      terminalFailureErrorKind = classified.failureClass;
     }
   }
 
-  let observedChangedFiles: string[] | undefined;
-  if (observedWriteBaseline) {
-    observedChangedFiles = await collectObservedWriteChanges(observedWriteBaseline);
-    const writeValidation = validateObservedWrite({
-      expectedPaths,
-      observedChangedFiles,
+  const { reply, observedChangedFiles, validation, structuredFailure, writeFailure } =
+    await collectOmegaRunValidationEvidence({
+      sessionKey: params.sessionKey,
+      task: params.task,
+      requestedValidation,
+      observedWriteBaseline,
     });
-    if (!writeValidation.ok) {
-      validation.write = writeValidation;
+
+  if (terminalFailureStatus) {
+    const reconciledSuccess =
+      !structuredFailure && !writeFailure && (reply || observedChangedFiles);
+    if (reconciledSuccess) {
       await recordOmegaSessionOutcome({
         workspaceRoot: params.workspaceRoot,
         sessionKey: params.sessionKey,
         task: params.task,
         validation: validationSnapshot,
         outcome: {
-          status: "error",
-          errorKind: writeValidation.errorKind,
-          observedChangedFiles,
+          status: "ok",
+          ...(observedChangedFiles ? { observedChangedFiles } : {}),
           ...summarizeValidationOutcome(validation),
         },
         reply,
@@ -233,17 +254,72 @@ export async function awaitValidatedOmegaSessionRun(params: {
         },
       }).catch(() => undefined);
       return {
-        ok: false,
+        ok: true,
         runId: params.runId,
-        status: "error",
-        errorKind: writeValidation.errorKind,
-        error: writeValidation.message,
         reply,
-        observedChangedFiles,
-        validation,
+        ...(observedChangedFiles ? { observedChangedFiles } : {}),
+        ...(validation.structured || validation.write ? { validation } : {}),
       };
     }
-    validation.write = writeValidation;
+    const failureErrorKind =
+      writeFailure?.errorKind ?? structuredFailure?.errorKind ?? terminalFailureErrorKind;
+    await recordOmegaSessionOutcome({
+      workspaceRoot: params.workspaceRoot,
+      sessionKey: params.sessionKey,
+      task: params.task,
+      validation: validationSnapshot,
+      outcome: {
+        status: terminalFailureStatus,
+        ...(failureErrorKind ? { errorKind: failureErrorKind } : {}),
+        ...(observedChangedFiles ? { observedChangedFiles } : {}),
+        ...summarizeValidationOutcome(validation),
+      },
+      reply,
+      execution: {
+        ...params.execution,
+        runId: params.execution?.runId ?? params.runId,
+      },
+    }).catch(() => undefined);
+    return {
+      ok: false,
+      runId: params.runId,
+      status: terminalFailureStatus,
+      error: terminalFailureError ?? "agent wait error",
+      ...(failureErrorKind ? { errorKind: failureErrorKind } : {}),
+      ...(reply ? { reply } : {}),
+      ...(observedChangedFiles ? { observedChangedFiles } : {}),
+      ...(validation.structured || validation.write ? { validation } : {}),
+    };
+  }
+
+  if (writeFailure) {
+    await recordOmegaSessionOutcome({
+      workspaceRoot: params.workspaceRoot,
+      sessionKey: params.sessionKey,
+      task: params.task,
+      validation: validationSnapshot,
+      outcome: {
+        status: "error",
+        errorKind: writeFailure.errorKind,
+        ...(observedChangedFiles ? { observedChangedFiles } : {}),
+        ...summarizeValidationOutcome(validation),
+      },
+      reply,
+      execution: {
+        ...params.execution,
+        runId: params.execution?.runId ?? params.runId,
+      },
+    }).catch(() => undefined);
+    return {
+      ok: false,
+      runId: params.runId,
+      status: "error",
+      errorKind: writeFailure.errorKind,
+      error: writeFailure.message,
+      reply,
+      observedChangedFiles,
+      validation,
+    };
   }
 
   if (structuredFailure) {
@@ -329,6 +405,7 @@ export async function runValidatedOmegaSessionTask(params: {
       validation: validationSnapshot,
       outcome: {
         status: "error",
+        ...(started.errorKind ? { errorKind: started.errorKind } : {}),
       },
       execution: {
         ...params.execution,

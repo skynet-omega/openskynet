@@ -10,6 +10,7 @@ import {
 } from "./episodic-recall.js";
 import { deriveOmegaSessionSelfState, type OmegaSessionSelfState } from "./event-model.js";
 import { buildScienceBasePromptSection } from "./science-base-reader.js";
+import { appendScienceBaseRule } from "./science-base-writer.js";
 import {
   deriveOmegaSelfTimeKernel,
   type OmegaKernelCausalEdge,
@@ -158,6 +159,209 @@ function parseCausalGraph(value: unknown): OmegaKernelCausalGraphState {
   };
 }
 
+function parseKernelIdentity(value: unknown): NonNullable<OmegaSelfTimeKernelState["identity"]> {
+  if (!value || typeof value !== "object") {
+    return {
+      continuityId: "",
+      firstSeenAt: 0,
+      lastSeenAt: 0,
+    };
+  }
+  const identity = value as Partial<OmegaSelfTimeKernelState["identity"]>;
+  return {
+    continuityId: typeof identity.continuityId === "string" ? identity.continuityId : "",
+    firstSeenAt: typeof identity.firstSeenAt === "number" ? identity.firstSeenAt : 0,
+    lastSeenAt: typeof identity.lastSeenAt === "number" ? identity.lastSeenAt : 0,
+    lastTask: typeof identity.lastTask === "string" ? identity.lastTask : undefined,
+    lastInteractionKind:
+      typeof identity.lastInteractionKind === "string" ? identity.lastInteractionKind : undefined,
+  };
+}
+
+function parseKernelWorld(value: unknown): NonNullable<OmegaSelfTimeKernelState["world"]> {
+  if (!value || typeof value !== "object") {
+    return {
+      lastObservedChangedFiles: [],
+    };
+  }
+  const world = value as Partial<OmegaSelfTimeKernelState["world"]>;
+  return {
+    lastOutcomeStatus:
+      typeof world.lastOutcomeStatus === "string" ? world.lastOutcomeStatus : undefined,
+    lastErrorKind: typeof world.lastErrorKind === "string" ? world.lastErrorKind : undefined,
+    lastObservedChangedFiles: Array.isArray(world.lastObservedChangedFiles)
+      ? world.lastObservedChangedFiles.filter(
+          (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
+        )
+      : [],
+    lastStructuredOk:
+      typeof world.lastStructuredOk === "boolean" ? world.lastStructuredOk : undefined,
+    lastWriteOk: typeof world.lastWriteOk === "boolean" ? world.lastWriteOk : undefined,
+  };
+}
+
+function parseKernelGoals(value: unknown): OmegaKernelGoal[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter(
+      (goal): goal is OmegaKernelGoal =>
+        !!goal &&
+        typeof goal === "object" &&
+        typeof goal.id === "string" &&
+        typeof goal.task === "string",
+    )
+    .map((goal) => ({
+      id: goal.id,
+      task: goal.task,
+      targets: Array.isArray(goal.targets)
+        ? goal.targets.filter(
+            (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
+          )
+        : [],
+      requiredKeys: Array.isArray(goal.requiredKeys)
+        ? goal.requiredKeys.filter(
+            (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
+          )
+        : [],
+      status:
+        goal.status === "active" || goal.status === "completed" || goal.status === "stale"
+          ? goal.status
+          : "stale",
+      createdAt: typeof goal.createdAt === "number" ? goal.createdAt : 0,
+      updatedAt: typeof goal.updatedAt === "number" ? goal.updatedAt : 0,
+      createdTurn: typeof goal.createdTurn === "number" ? goal.createdTurn : 0,
+      updatedTurn: typeof goal.updatedTurn === "number" ? goal.updatedTurn : 0,
+      failureCount: typeof goal.failureCount === "number" ? goal.failureCount : 0,
+      successCount: typeof goal.successCount === "number" ? goal.successCount : 0,
+      lastOutcomeStatus:
+        typeof goal.lastOutcomeStatus === "string" ? goal.lastOutcomeStatus : undefined,
+      lastErrorKind: typeof goal.lastErrorKind === "string" ? goal.lastErrorKind : undefined,
+      lastInteractionKind:
+        typeof goal.lastInteractionKind === "string" ? goal.lastInteractionKind : undefined,
+      observedChangedFiles: Array.isArray(goal.observedChangedFiles)
+        ? goal.observedChangedFiles.filter(
+            (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
+          )
+        : [],
+    }));
+}
+
+function parseKernelTension(value: unknown): NonNullable<OmegaSelfTimeKernelState["tension"]> {
+  if (!value || typeof value !== "object") {
+    return {
+      openGoalCount: 0,
+      staleGoalCount: 0,
+      failureStreak: 0,
+      repeatedFailureKinds: [],
+      pendingCorrection: false,
+    };
+  }
+  const tension = value as Partial<OmegaSelfTimeKernelState["tension"]>;
+  return {
+    openGoalCount: typeof tension.openGoalCount === "number" ? tension.openGoalCount : 0,
+    staleGoalCount: typeof tension.staleGoalCount === "number" ? tension.staleGoalCount : 0,
+    failureStreak: typeof tension.failureStreak === "number" ? tension.failureStreak : 0,
+    repeatedFailureKinds: Array.isArray(tension.repeatedFailureKinds)
+      ? tension.repeatedFailureKinds.filter(
+          (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
+        )
+      : [],
+    pendingCorrection: tension.pendingCorrection === true,
+  };
+}
+
+function parseTimelineEntries(entries: unknown[]): OmegaSessionTimelineEntry[] {
+  return entries
+    .filter((entry): entry is OmegaSessionTimelineEntry => {
+      if (!entry || typeof entry !== "object") {
+        return false;
+      }
+      const candidate = entry as Partial<OmegaSessionTimelineEntry>;
+      return (
+        typeof candidate.createdAt === "number" &&
+        typeof candidate.task === "string" &&
+        !!candidate.validation &&
+        !!candidate.outcome
+      );
+    })
+    .map((entry) => {
+      const causalTargets = (entry as { causalTargets?: unknown[] }).causalTargets;
+      return {
+        ...entry,
+        causalTargets: Array.isArray(causalTargets)
+          ? causalTargets.filter(
+              (value): value is string => typeof value === "string" && value.trim().length > 0,
+            )
+          : undefined,
+        ...(typeof (entry as { reply?: unknown }).reply === "string"
+          ? { reply: (entry as { reply?: string }).reply }
+          : {}),
+      };
+    });
+}
+
+function parseSessionSelfState(value: unknown): OmegaSessionSelfState | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const state = value as Partial<OmegaSessionSelfState>;
+  return {
+    activeGoal: typeof state.activeGoal === "string" ? state.activeGoal : undefined,
+    activeTargets: Array.isArray(state.activeTargets)
+      ? state.activeTargets.filter(
+          (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
+        )
+      : [],
+    requiredKeys: Array.isArray(state.requiredKeys)
+      ? state.requiredKeys.filter(
+          (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
+        )
+      : [],
+    lastInteractionKind:
+      typeof state.lastInteractionKind === "string" ? state.lastInteractionKind : undefined,
+    lastTask: typeof state.lastTask === "string" ? state.lastTask : undefined,
+    lastOutcomeStatus:
+      typeof state.lastOutcomeStatus === "string" ? state.lastOutcomeStatus : undefined,
+    lastErrorKind: typeof state.lastErrorKind === "string" ? state.lastErrorKind : undefined,
+    lastSuccessfulTask:
+      typeof state.lastSuccessfulTask === "string" ? state.lastSuccessfulTask : undefined,
+    lastFailedTask: typeof state.lastFailedTask === "string" ? state.lastFailedTask : undefined,
+    learnedConstraints: Array.isArray(state.learnedConstraints)
+      ? state.learnedConstraints.filter(
+          (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
+        )
+      : [],
+    updatedAt: typeof state.updatedAt === "number" ? state.updatedAt : 0,
+  };
+}
+
+function parseSelfTimeKernel(
+  value: unknown,
+  fallbackSessionKey: string,
+): OmegaSelfTimeKernelState | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const kernel = value as Partial<OmegaSelfTimeKernelState>;
+  return {
+    revision: typeof kernel.revision === "number" ? kernel.revision : 1,
+    sessionKey:
+      typeof kernel.sessionKey === "string"
+        ? canonicalizeOmegaSessionKey(kernel.sessionKey)
+        : fallbackSessionKey,
+    turnCount: typeof kernel.turnCount === "number" ? kernel.turnCount : 0,
+    activeGoalId: typeof kernel.activeGoalId === "string" ? kernel.activeGoalId : undefined,
+    identity: parseKernelIdentity(kernel.identity),
+    world: parseKernelWorld(kernel.world),
+    goals: parseKernelGoals(kernel.goals),
+    tension: parseKernelTension(kernel.tension),
+    causalGraph: parseCausalGraph(kernel.causalGraph),
+    updatedAt: typeof kernel.updatedAt === "number" ? kernel.updatedAt : 0,
+  };
+}
+
 function sanitizeSessionKey(sessionKey: string): string {
   const normalized = canonicalizeOmegaSessionKey(sessionKey);
   const readable = normalized.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 48) || "main";
@@ -215,169 +419,7 @@ export async function readOmegaSessionTimeline(params: {
       if (!parsed || !Array.isArray(parsed.entries)) {
         return null;
       }
-      const parsedKernel =
-        parsed.kernel && typeof parsed.kernel === "object"
-          ? {
-              revision: typeof parsed.kernel.revision === "number" ? parsed.kernel.revision : 1,
-              sessionKey:
-                typeof parsed.kernel.sessionKey === "string"
-                  ? canonicalizeOmegaSessionKey(parsed.kernel.sessionKey)
-                  : canonicalSessionKey,
-              turnCount: typeof parsed.kernel.turnCount === "number" ? parsed.kernel.turnCount : 0,
-              activeGoalId:
-                typeof parsed.kernel.activeGoalId === "string"
-                  ? parsed.kernel.activeGoalId
-                  : undefined,
-              identity:
-                parsed.kernel.identity && typeof parsed.kernel.identity === "object"
-                  ? {
-                      continuityId:
-                        typeof parsed.kernel.identity.continuityId === "string"
-                          ? parsed.kernel.identity.continuityId
-                          : "",
-                      firstSeenAt:
-                        typeof parsed.kernel.identity.firstSeenAt === "number"
-                          ? parsed.kernel.identity.firstSeenAt
-                          : 0,
-                      lastSeenAt:
-                        typeof parsed.kernel.identity.lastSeenAt === "number"
-                          ? parsed.kernel.identity.lastSeenAt
-                          : 0,
-                      lastTask:
-                        typeof parsed.kernel.identity.lastTask === "string"
-                          ? parsed.kernel.identity.lastTask
-                          : undefined,
-                      lastInteractionKind:
-                        typeof parsed.kernel.identity.lastInteractionKind === "string"
-                          ? parsed.kernel.identity.lastInteractionKind
-                          : undefined,
-                    }
-                  : {
-                      continuityId: "",
-                      firstSeenAt: 0,
-                      lastSeenAt: 0,
-                    },
-              world:
-                parsed.kernel.world && typeof parsed.kernel.world === "object"
-                  ? {
-                      lastOutcomeStatus:
-                        typeof parsed.kernel.world.lastOutcomeStatus === "string"
-                          ? parsed.kernel.world.lastOutcomeStatus
-                          : undefined,
-                      lastErrorKind:
-                        typeof parsed.kernel.world.lastErrorKind === "string"
-                          ? parsed.kernel.world.lastErrorKind
-                          : undefined,
-                      lastObservedChangedFiles: Array.isArray(
-                        parsed.kernel.world.lastObservedChangedFiles,
-                      )
-                        ? parsed.kernel.world.lastObservedChangedFiles.filter(
-                            (value): value is string =>
-                              typeof value === "string" && value.trim().length > 0,
-                          )
-                        : [],
-                      lastStructuredOk:
-                        typeof parsed.kernel.world.lastStructuredOk === "boolean"
-                          ? parsed.kernel.world.lastStructuredOk
-                          : undefined,
-                      lastWriteOk:
-                        typeof parsed.kernel.world.lastWriteOk === "boolean"
-                          ? parsed.kernel.world.lastWriteOk
-                          : undefined,
-                    }
-                  : {
-                      lastObservedChangedFiles: [],
-                    },
-              goals: Array.isArray(parsed.kernel.goals)
-                ? parsed.kernel.goals
-                    .filter(
-                      (goal): goal is OmegaKernelGoal =>
-                        !!goal &&
-                        typeof goal === "object" &&
-                        typeof goal.id === "string" &&
-                        typeof goal.task === "string",
-                    )
-                    .map((goal) => ({
-                      id: goal.id,
-                      task: goal.task,
-                      targets: Array.isArray(goal.targets)
-                        ? goal.targets.filter(
-                            (value): value is string =>
-                              typeof value === "string" && value.trim().length > 0,
-                          )
-                        : [],
-                      requiredKeys: Array.isArray(goal.requiredKeys)
-                        ? goal.requiredKeys.filter(
-                            (value): value is string =>
-                              typeof value === "string" && value.trim().length > 0,
-                          )
-                        : [],
-                      status:
-                        goal.status === "active" ||
-                        goal.status === "completed" ||
-                        goal.status === "stale"
-                          ? goal.status
-                          : "stale",
-                      createdAt: typeof goal.createdAt === "number" ? goal.createdAt : 0,
-                      updatedAt: typeof goal.updatedAt === "number" ? goal.updatedAt : 0,
-                      createdTurn: typeof goal.createdTurn === "number" ? goal.createdTurn : 0,
-                      updatedTurn: typeof goal.updatedTurn === "number" ? goal.updatedTurn : 0,
-                      failureCount: typeof goal.failureCount === "number" ? goal.failureCount : 0,
-                      successCount: typeof goal.successCount === "number" ? goal.successCount : 0,
-                      lastOutcomeStatus:
-                        typeof goal.lastOutcomeStatus === "string"
-                          ? goal.lastOutcomeStatus
-                          : undefined,
-                      lastErrorKind:
-                        typeof goal.lastErrorKind === "string" ? goal.lastErrorKind : undefined,
-                      lastInteractionKind:
-                        typeof goal.lastInteractionKind === "string"
-                          ? goal.lastInteractionKind
-                          : undefined,
-                      observedChangedFiles: Array.isArray(goal.observedChangedFiles)
-                        ? goal.observedChangedFiles.filter(
-                            (value): value is string =>
-                              typeof value === "string" && value.trim().length > 0,
-                          )
-                        : [],
-                    }))
-                : [],
-              tension:
-                parsed.kernel.tension && typeof parsed.kernel.tension === "object"
-                  ? {
-                      openGoalCount:
-                        typeof parsed.kernel.tension.openGoalCount === "number"
-                          ? parsed.kernel.tension.openGoalCount
-                          : 0,
-                      staleGoalCount:
-                        typeof parsed.kernel.tension.staleGoalCount === "number"
-                          ? parsed.kernel.tension.staleGoalCount
-                          : 0,
-                      failureStreak:
-                        typeof parsed.kernel.tension.failureStreak === "number"
-                          ? parsed.kernel.tension.failureStreak
-                          : 0,
-                      repeatedFailureKinds: Array.isArray(
-                        parsed.kernel.tension.repeatedFailureKinds,
-                      )
-                        ? parsed.kernel.tension.repeatedFailureKinds.filter(
-                            (value): value is string =>
-                              typeof value === "string" && value.trim().length > 0,
-                          )
-                        : [],
-                      pendingCorrection: parsed.kernel.tension.pendingCorrection === true,
-                    }
-                  : {
-                      openGoalCount: 0,
-                      staleGoalCount: 0,
-                      failureStreak: 0,
-                      repeatedFailureKinds: [],
-                      pendingCorrection: false,
-                    },
-              causalGraph: parseCausalGraph(parsed.kernel.causalGraph),
-              updatedAt: typeof parsed.kernel.updatedAt === "number" ? parsed.kernel.updatedAt : 0,
-            }
-          : undefined;
+      const parsedKernel = parseSelfTimeKernel(parsed.kernel, canonicalSessionKey);
 
       return {
         sessionKey:
@@ -385,79 +427,8 @@ export async function readOmegaSessionTimeline(params: {
             ? canonicalizeOmegaSessionKey(parsed.sessionKey)
             : canonicalSessionKey,
         updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : 0,
-        entries: parsed.entries
-          .filter(
-            (entry): entry is OmegaSessionTimelineEntry =>
-              !!entry &&
-              typeof entry === "object" &&
-              typeof entry.createdAt === "number" &&
-              typeof entry.task === "string" &&
-              !!entry.validation &&
-              !!entry.outcome,
-          )
-          .map((entry) => {
-            const causalTargets = (entry as { causalTargets?: unknown[] }).causalTargets;
-            return {
-              ...entry,
-              causalTargets: Array.isArray(causalTargets)
-                ? causalTargets.filter(
-                    (value): value is string =>
-                      typeof value === "string" && value.trim().length > 0,
-                  )
-                : undefined,
-              ...(typeof (entry as { reply?: unknown }).reply === "string"
-                ? { reply: (entry as { reply?: string }).reply }
-                : {}),
-            };
-          }),
-        state:
-          parsed.state && typeof parsed.state === "object"
-            ? {
-                activeGoal:
-                  typeof parsed.state.activeGoal === "string" ? parsed.state.activeGoal : undefined,
-                activeTargets: Array.isArray(parsed.state.activeTargets)
-                  ? parsed.state.activeTargets.filter(
-                      (value): value is string =>
-                        typeof value === "string" && value.trim().length > 0,
-                    )
-                  : [],
-                requiredKeys: Array.isArray(parsed.state.requiredKeys)
-                  ? parsed.state.requiredKeys.filter(
-                      (value): value is string =>
-                        typeof value === "string" && value.trim().length > 0,
-                    )
-                  : [],
-                lastInteractionKind:
-                  typeof parsed.state.lastInteractionKind === "string"
-                    ? parsed.state.lastInteractionKind
-                    : undefined,
-                lastTask:
-                  typeof parsed.state.lastTask === "string" ? parsed.state.lastTask : undefined,
-                lastOutcomeStatus:
-                  typeof parsed.state.lastOutcomeStatus === "string"
-                    ? parsed.state.lastOutcomeStatus
-                    : undefined,
-                lastErrorKind:
-                  typeof parsed.state.lastErrorKind === "string"
-                    ? parsed.state.lastErrorKind
-                    : undefined,
-                lastSuccessfulTask:
-                  typeof parsed.state.lastSuccessfulTask === "string"
-                    ? parsed.state.lastSuccessfulTask
-                    : undefined,
-                lastFailedTask:
-                  typeof parsed.state.lastFailedTask === "string"
-                    ? parsed.state.lastFailedTask
-                    : undefined,
-                learnedConstraints: Array.isArray(parsed.state.learnedConstraints)
-                  ? parsed.state.learnedConstraints.filter(
-                      (value): value is string =>
-                        typeof value === "string" && value.trim().length > 0,
-                    )
-                  : [],
-                updatedAt: typeof parsed.state.updatedAt === "number" ? parsed.state.updatedAt : 0,
-              }
-            : undefined,
+        entries: parseTimelineEntries(parsed.entries),
+        state: parseSessionSelfState(parsed.state),
         kernel: parsedKernel,
         transactions: parseOmegaTaskTransactions(parsed.transactions),
       };
@@ -869,57 +840,6 @@ export async function recordOmegaSessionOutcome(params: {
       sessionKey: canonicalSessionKey,
     }).catch(() => undefined);
   }
-}
-
-/**
- * FRENTE A: Memoria Causal Útil
- *
- * Appends a verified causal flow rule to SCIENCE_BASE.md.
- * Each entry represents: "To achieve [task], write to [files]."
- * These invariants accumulate across sessions, making the system smarter over time.
- *
- * Format: Markdown table row for easy diffing and parsing.
- */
-async function appendScienceBaseRule(params: {
-  workspaceRoot: string;
-  task: string;
-  observedChangedFiles: string[];
-  sessionKey: string;
-}): Promise<void> {
-  const scienceBasePath = path.join(params.workspaceRoot, "SCIENCE_BASE.md");
-  const timestamp = new Date().toISOString().slice(0, 19).replace("T", " ");
-  const files = params.observedChangedFiles.slice(0, 5).join(", "); // máximo 5
-
-  // Crear entrada de regla causal
-  const rule = `| ${timestamp} | ${params.task.slice(0, 80)} | ${files} | ${params.sessionKey} |\n`;
-
-  // Asegurar que existe el archivo con header
-  let existing = "";
-  try {
-    existing = await fs.readFile(scienceBasePath, "utf-8");
-  } catch {
-    // Archivo no existe — crear con header
-    const header = [
-      "# SCIENCE_BASE — Reglas Causales Verificadas",
-      "",
-      "> Generado automáticamente por Omega. Cada fila = patrón de éxito verificado.",
-      "> Formato: tarea → archivos modificados.",
-      "",
-      "| Timestamp | Tarea | Archivos Modificados | Sesión |",
-      "|-----------|-------|---------------------|--------|",
-      "",
-    ].join("\n");
-    existing = header;
-  }
-
-  // Evitar duplicados exactos (misma tarea + mismos archivos)
-  if (existing.includes(files) && existing.includes(params.task.slice(0, 40))) {
-    return;
-  }
-
-  // Insertar antes del último bloque vacío o al final
-  const newContent = existing.trimEnd() + "\n" + rule;
-  await fs.writeFile(scienceBasePath, newContent, "utf-8");
 }
 
 export function summarizeValidationOutcome(

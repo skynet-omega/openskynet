@@ -178,10 +178,12 @@ export async function agentViaGatewayCommand(opts: AgentCliOpts, runtime: Runtim
 }
 
 export async function agentCliCommand(opts: AgentCliOpts, runtime: RuntimeEnv, deps?: CliDeps) {
+  const fallbackWorkspaceDir = process.cwd();
   const localOpts = {
     ...opts,
     agentId: opts.agent,
     replyAccountId: opts.replyAccount,
+    workspaceDir: fallbackWorkspaceDir,
   };
   if (opts.local === true) {
     return await agentCommand(localOpts, runtime, deps);

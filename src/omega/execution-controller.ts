@@ -71,6 +71,17 @@ export type OmegaHeartbeatCorrectiveControl =
       wakeAction: Extract<OmegaWakeAction, { kind: "abort_interrupted_goal" }>;
     };
 
+type SyncOmegaExecutionControllerStateParams = {
+  workspaceRoot: string;
+  sessionKey: string;
+  skipExecutiveSync?: boolean;
+  includeOperationalSummary?: boolean;
+  includeWorldSnapshot?: boolean | "urgent_maintenance";
+  task?: string;
+  expectedPaths?: string[];
+  watchedPaths?: string[];
+};
+
 function isUrgentMaintenanceWorkItem(item?: OmegaExecutiveScheduledItem): boolean {
   return Boolean(
     item?.id.startsWith("maintenance:agenda:") ||
@@ -91,16 +102,12 @@ function shouldReloadWorldSnapshotForTaskContext(params: {
   );
 }
 
-export async function syncOmegaExecutionControllerState(params: {
-  workspaceRoot: string;
-  sessionKey: string;
-  skipExecutiveSync?: boolean;
-  includeOperationalSummary?: boolean;
-  includeWorldSnapshot?: boolean | "urgent_maintenance";
-  task?: string;
-  expectedPaths?: string[];
-  watchedPaths?: string[];
-}): Promise<OmegaExecutionControllerState> {
+async function loadOmegaExecutionControllerObservation(
+  params: SyncOmegaExecutionControllerStateParams,
+): Promise<{
+  executiveState: OmegaExecutiveState;
+  operationalSummary?: OmegaOperationalMemorySummary;
+}> {
   const [executiveState, operationalSummary] = await Promise.all([
     syncOmegaExecutiveObserverState(
       {
@@ -117,31 +124,63 @@ export async function syncOmegaExecutionControllerState(params: {
       : Promise.resolve(undefined),
   ]);
 
+  return {
+    executiveState,
+    operationalSummary,
+  };
+}
+
+async function resolveOmegaExecutionControllerWorldSnapshot(params: {
+  input: SyncOmegaExecutionControllerStateParams;
+  executiveState: OmegaExecutiveState;
+  selectedWorkItem?: OmegaExecutiveScheduledItem;
+}): Promise<{
+  worldSnapshot?: OmegaWorldModelSnapshot;
+  hasUrgentMaintenance: boolean;
+}> {
+  const mustReloadForTaskContext = shouldReloadWorldSnapshotForTaskContext({
+    task: params.input.task,
+    expectedPaths: params.input.expectedPaths,
+    watchedPaths: params.input.watchedPaths,
+  });
+  const hasUrgentMaintenance = isUrgentMaintenanceWorkItem(params.selectedWorkItem);
+  const shouldLoadWorldSnapshot =
+    mustReloadForTaskContext ||
+    params.input.includeWorldSnapshot === true ||
+    (params.input.includeWorldSnapshot === "urgent_maintenance" && hasUrgentMaintenance);
+  const worldSnapshot = !shouldLoadWorldSnapshot
+    ? undefined
+    : !mustReloadForTaskContext && params.executiveState.sourceWorldSnapshot
+      ? params.executiveState.sourceWorldSnapshot
+      : await loadOmegaWorldModelSnapshot({
+          workspaceRoot: params.input.workspaceRoot,
+          sessionKey: params.input.sessionKey,
+          task: params.input.task,
+          expectedPaths: params.input.expectedPaths,
+          watchedPaths: params.input.watchedPaths,
+        }).catch(() => undefined);
+
+  return {
+    worldSnapshot,
+    hasUrgentMaintenance,
+  };
+}
+
+export async function syncOmegaExecutionControllerState(
+  params: SyncOmegaExecutionControllerStateParams,
+): Promise<OmegaExecutionControllerState> {
+  const { executiveState, operationalSummary } =
+    await loadOmegaExecutionControllerObservation(params);
   const dispatchPlan = executiveState.runtime.dispatchPlan;
   const selectedWorkItem = dispatchPlan.scheduledItems.find(
     (item) => item.id === dispatchPlan.selectedWorkItemId,
   );
-  const mustReloadForTaskContext = shouldReloadWorldSnapshotForTaskContext({
-    task: params.task,
-    expectedPaths: params.expectedPaths,
-    watchedPaths: params.watchedPaths,
-  });
-  const hasUrgentMaintenance = isUrgentMaintenanceWorkItem(selectedWorkItem);
-  const shouldLoadWorldSnapshot =
-    mustReloadForTaskContext ||
-    params.includeWorldSnapshot === true ||
-    (params.includeWorldSnapshot === "urgent_maintenance" && hasUrgentMaintenance);
-  const worldSnapshot = !shouldLoadWorldSnapshot
-    ? undefined
-    : !mustReloadForTaskContext && executiveState.sourceWorldSnapshot
-      ? executiveState.sourceWorldSnapshot
-      : await loadOmegaWorldModelSnapshot({
-          workspaceRoot: params.workspaceRoot,
-          sessionKey: params.sessionKey,
-          task: params.task,
-          expectedPaths: params.expectedPaths,
-          watchedPaths: params.watchedPaths,
-        }).catch(() => undefined);
+  const { worldSnapshot, hasUrgentMaintenance } =
+    await resolveOmegaExecutionControllerWorldSnapshot({
+      input: params,
+      executiveState,
+      selectedWorkItem,
+    });
 
   return {
     executiveState,
@@ -153,7 +192,7 @@ export async function syncOmegaExecutionControllerState(params: {
   };
 }
 
-export async function resolveOmegaValidatedWorkRouting(params: {
+type ResolveOmegaValidatedWorkRoutingParams = {
   workspaceRoot: string;
   sessionKey: string;
   task: string;
@@ -165,26 +204,29 @@ export async function resolveOmegaValidatedWorkRouting(params: {
   interactionKind?: string;
   timeoutSeconds?: number;
   matchedRecoverySuggestedRoute?: "omega_delegate" | "sessions_spawn";
-}): Promise<{
+};
+
+function resolveOmegaNonValidatedWorkRoute(
+  params: ResolveOmegaValidatedWorkRoutingParams,
+): OmegaWorkPolicyRoute {
+  return decideOmegaWorkPolicyRoute({
+    isolated: params.isolated,
+    runtime: params.runtime,
+    requiresValidation: false,
+    expectedPathCount: params.expectedPaths.length,
+    interactionKind: params.interactionKind,
+    timeoutSeconds: params.timeoutSeconds,
+  });
+}
+
+async function loadOmegaValidatedWorkRoutingInputs(
+  params: ResolveOmegaValidatedWorkRoutingParams,
+): Promise<{
   controllerState?: OmegaExecutionControllerState;
   preferredValidatedRoute?: OmegaEmpiricalRoutingPreference;
-  executiveRoutingDirective?: OmegaExecutiveRoutingDirective;
   preflight?: OmegaValidatedExecutionPreflight;
-  plannedRoute: OmegaWorkPolicyRoute;
+  executiveRoutingDirective?: OmegaExecutiveRoutingDirective;
 }> {
-  if (!params.requiresValidation) {
-    return {
-      plannedRoute: decideOmegaWorkPolicyRoute({
-        isolated: params.isolated,
-        runtime: params.runtime,
-        requiresValidation: false,
-        expectedPathCount: params.expectedPaths.length,
-        interactionKind: params.interactionKind,
-        timeoutSeconds: params.timeoutSeconds,
-      }),
-    };
-  }
-
   const controllerState = await syncOmegaExecutionControllerState({
     workspaceRoot: params.workspaceRoot,
     sessionKey: params.sessionKey,
@@ -211,6 +253,32 @@ export async function resolveOmegaValidatedWorkRouting(params: {
     matchedRecoverySuggestedRoute: params.matchedRecoverySuggestedRoute,
     preferredValidatedRoute,
   });
+
+  return {
+    controllerState,
+    preferredValidatedRoute,
+    preflight,
+    executiveRoutingDirective,
+  };
+}
+
+export async function resolveOmegaValidatedWorkRouting(
+  params: ResolveOmegaValidatedWorkRoutingParams,
+): Promise<{
+  controllerState?: OmegaExecutionControllerState;
+  preferredValidatedRoute?: OmegaEmpiricalRoutingPreference;
+  executiveRoutingDirective?: OmegaExecutiveRoutingDirective;
+  preflight?: OmegaValidatedExecutionPreflight;
+  plannedRoute: OmegaWorkPolicyRoute;
+}> {
+  if (!params.requiresValidation) {
+    return {
+      plannedRoute: resolveOmegaNonValidatedWorkRoute(params),
+    };
+  }
+
+  const { controllerState, preferredValidatedRoute, preflight, executiveRoutingDirective } =
+    await loadOmegaValidatedWorkRoutingInputs(params);
 
   return {
     controllerState,

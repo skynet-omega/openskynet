@@ -26,6 +26,7 @@ describe("skynet pulse", () => {
     expect(result.focusTitle).toBe("Agenda científica endógena");
     expect(result.nucleusMode).toBe("explore");
     expect(result.topWorkItem).toContain("Empujar foco activo");
+    expect(result.degradedComponents).toEqual([]);
     expect(result.benchmarkSnapshotPath).toContain(
       path.join(".openskynet", "internal-project-benchmark", "agent_openskynet_main.json"),
     );
@@ -33,6 +34,7 @@ describe("skynet pulse", () => {
     const pulse = await fs.readFile(path.join(workspaceRoot, "memory", "SKYNET_PULSE.md"), "utf-8");
     expect(pulse).toContain("# SKYNET Pulse");
     expect(pulse).toContain("Agenda científica endógena");
+    expect(pulse).toContain("Degraded components: none");
     const benchmarkSnapshot = JSON.parse(
       await fs.readFile(
         path.join(
@@ -78,5 +80,6 @@ describe("skynet pulse", () => {
     expect(pulse.topWorkItem).toBe(runtime.snapshot.skynetStudyProgram?.items[0]?.title);
     expect(pulse.commitment?.kind).toBe(runtime.commitment?.kind);
     expect(pulse.experimentPlan?.focusKey).toBe(runtime.experimentPlan?.focusKey);
+    expect(pulse.degradedComponents).toEqual(runtime.degradedComponents);
   });
 });

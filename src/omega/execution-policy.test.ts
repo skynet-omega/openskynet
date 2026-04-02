@@ -6,6 +6,12 @@ import {
   deriveOmegaEmpiricalRoutingPreference,
   deriveOmegaExecutiveRoutingDirective,
 } from "./execution-policy.js";
+import type { OmegaSessionAuthority } from "./session-context.js";
+
+const sessionAuthority = {
+  timeline: [],
+  transactions: [],
+} satisfies OmegaSessionAuthority;
 
 describe("omega execution policy", () => {
   it("prefers strong generalized empirical routing for validated single-target work", () => {
@@ -15,6 +21,7 @@ describe("omega execution policy", () => {
       watchedPathCount: 1,
       snapshot: {
         sessionKey: "main",
+        sessionAuthority,
         problemAgenda: [],
         timelineLength: 0,
         relevantMemories: [],
@@ -26,6 +33,7 @@ describe("omega execution policy", () => {
           isolatedSuccesses: 4,
           mechanismKey: "target_not_touched|single_target",
         },
+        degradedComponents: [],
       },
     });
 
@@ -42,6 +50,7 @@ describe("omega execution policy", () => {
       watchedPathCount: 1,
       snapshot: {
         sessionKey: "main",
+        sessionAuthority,
         problemAgenda: [],
         timelineLength: 0,
         relevantMemories: [],
@@ -52,6 +61,7 @@ describe("omega execution policy", () => {
           lowLocalityFailures: 3,
           highLocalitySuccesses: 0,
         },
+        degradedComponents: [],
       },
     });
 
@@ -68,6 +78,7 @@ describe("omega execution policy", () => {
       watchedPathCount: 2,
       snapshot: {
         sessionKey: "main",
+        sessionAuthority,
         problemAgenda: [],
         timelineLength: 0,
         relevantMemories: [],
@@ -79,6 +90,7 @@ describe("omega execution policy", () => {
           atRiskPaths: ["src/unrelated.ts"],
           reasons: ["unexpected_collateral_writes"],
         },
+        degradedComponents: [],
       },
     });
 
