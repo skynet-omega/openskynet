@@ -55,24 +55,17 @@ Public mirrors and contact:
 
 ## Current Direction
 
-OpenSkyNet should be read as two explicit lines of work:
+OpenSkyNet now has three clearly separated layers:
 
-- **OpenSkyNet**: the platform itself. This includes the gateway, sessions, tools, channels, cron, UI, and the `Omega` runtime spine for memory, routing, recovery, and executive control.
-- **Skynet Brain Lab**: the separate research line under [`src/skynet`](./src/skynet) for searching a new cognitive substrate beyond a plain LLM-centric agent.
+- **Gateway / agent platform**: channels, sessions, tools, cron, UI, and the operational shell inherited from OpenClaw.
+- **Omega runtime**: the main experimental spine for decision context, recovery, routing, executive dispatch, world modeling, and structured memory.
+- **Internal project benchmark**: a configurable autonomous background project defined by [`INTERNAL_PROJECT.json`](./INTERNAL_PROJECT.json). By default that project is `Skynet`, but it is not the identity of OpenSkyNet and can be replaced by another domain.
 
-There is also a configurable autonomous benchmark workload defined by [`INTERNAL_PROJECT.json`](./INTERNAL_PROJECT.json). By default that workload is `Skynet`, but that file is a benchmark target for the platform, not the identity of the whole repository.
+Operationally, the repo is still handled under a two-line directive:
 
-Practical rule:
-
-- if the goal is runtime quality, autonomy quality, recovery, observability, or lower waste, work in `OpenSkyNet`
-- if the goal is a new brain, new substrate, geometric quantization, biphasic/cyborg cognition, or a generalist architecture beyond the current stack, work in `Skynet Brain Lab`
-- only promote mechanisms from the lab into the platform after empirical validation and explicit cost/benefit review
-
-Current repo priority:
-
-- `OpenSkyNet` is stable enough that new architectural work should mostly pause there
-- only operational continuity / reliability bugs should justify touching the platform now
-- active exploration should move to `Skynet Brain Lab`
+- `OpenSkyNet` = platform/runtime/tooling
+- `Skynet Brain Lab` = the separate research line under [`src/skynet`](./src/skynet) for searching a new cognitive substrate beyond a plain LLM-centric agent
+- promote mechanisms from the lab into the platform only after empirical validation and explicit cost/benefit review
 
 The practical benchmark is simple:
 
