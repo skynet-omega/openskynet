@@ -1,0 +1,96 @@
+{
+  "experiment": "exp42_runtime_continuity_multiseed",
+  "seeds": [101, 202, 303, 404, 505],
+  "baseline": {
+    "runs": [
+      {
+        "seed": 101,
+        "acc_ood": 0.87890625,
+        "epochs_to_80": 4,
+        "stabilized_accuracy": 0.92578125
+      },
+      {
+        "seed": 202,
+        "acc_ood": 0.890625,
+        "epochs_to_80": 5,
+        "stabilized_accuracy": 0.9140625
+      },
+      {
+        "seed": 303,
+        "acc_ood": 0.87890625,
+        "epochs_to_80": 4,
+        "stabilized_accuracy": 0.8984375
+      },
+      {
+        "seed": 404,
+        "acc_ood": 0.8828125,
+        "epochs_to_80": 5,
+        "stabilized_accuracy": 0.921875
+      },
+      {
+        "seed": 505,
+        "acc_ood": 0.89453125,
+        "epochs_to_80": 5,
+        "stabilized_accuracy": 0.91015625
+      }
+    ],
+    "acc_ood": {
+      "mean": 0.88515625,
+      "min": 0.87890625,
+      "max": 0.89453125
+    },
+    "stabilized_accuracy": {
+      "mean": 0.9140625,
+      "min": 0.8984375,
+      "max": 0.92578125
+    }
+  },
+  "candidate": {
+    "runs": [
+      {
+        "seed": 101,
+        "acc_ood": 0.96484375,
+        "epochs_to_80": 4,
+        "stabilized_accuracy": 0.9921875
+      },
+      {
+        "seed": 202,
+        "acc_ood": 0.95703125,
+        "epochs_to_80": 4,
+        "stabilized_accuracy": 0.984375
+      },
+      {
+        "seed": 303,
+        "acc_ood": 0.9296875,
+        "epochs_to_80": 4,
+        "stabilized_accuracy": 0.984375
+      },
+      {
+        "seed": 404,
+        "acc_ood": 0.96484375,
+        "epochs_to_80": 4,
+        "stabilized_accuracy": 0.9765625
+      },
+      {
+        "seed": 505,
+        "acc_ood": 0.95703125,
+        "epochs_to_80": 4,
+        "stabilized_accuracy": 0.98046875
+      }
+    ],
+    "acc_ood": {
+      "mean": 0.9546875,
+      "min": 0.9296875,
+      "max": 0.96484375
+    },
+    "stabilized_accuracy": {
+      "mean": 0.98359375,
+      "min": 0.9765625,
+      "max": 0.9921875
+    }
+  },
+  "delta": {
+    "mean_acc_ood": 0.06953125000000004,
+    "mean_stabilized_accuracy": 0.06953125000000004
+  }
+}

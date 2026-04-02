@@ -1,0 +1,103 @@
+{
+  "protocol": "ex_hypothesis_protocol_v1",
+  "baseline": {
+    "hypothesis_id": "gru_baseline",
+    "family": "baseline",
+    "task_id": "exp50_hybrid_binding_memory_plus_regime",
+    "capability": {
+      "test_accuracy": 0.984375,
+      "epochs_to_80": 6,
+      "area_under_curve": 0.8622395833333334,
+      "param_count": 26180,
+      "wall_time_ms": 4014.396240234375
+    },
+    "adaptation": {
+      "shift_recovery_steps": 1.0,
+      "post_shift_accuracy": 0.984375,
+      "stabilized_accuracy": 1.0
+    },
+    "retention": null,
+    "elasticity": null,
+    "internal": {
+      "temperature_delta": 0.0,
+      "participation_ratio_initial": null,
+      "participation_ratio_final": null,
+      "surprise_mean": null
+    },
+    "notes": "{\"acc_id\": 1.0, \"acc_ood\": 0.984375, \"debug_id\": {\"state_energy_mean\": 0.6858278401196003}, \"debug_ood\": {\"state_energy_mean\": 0.7006786236396203}, \"recovery_curve\": [0.996874988079071, 0.9906250238418579, 0.996874988079071, 0.996874988079071, 0.996874988079071, 1.0]}"
+  },
+  "candidates": [
+    {
+      "run": {
+        "hypothesis_id": "organ_only",
+        "family": "continuous_organ",
+        "task_id": "exp50_hybrid_binding_memory_plus_regime",
+        "capability": {
+          "test_accuracy": 0.9593750238418579,
+          "epochs_to_80": 2,
+          "area_under_curve": 0.9544270833333333,
+          "param_count": 10312,
+          "wall_time_ms": 11518.33203125
+        },
+        "adaptation": {
+          "shift_recovery_steps": 1.0,
+          "post_shift_accuracy": 0.9593750238418579,
+          "stabilized_accuracy": 0.9906250238418579
+        },
+        "retention": null,
+        "elasticity": null,
+        "internal": {
+          "temperature_delta": 0.01008495884254959,
+          "participation_ratio_initial": null,
+          "participation_ratio_final": null,
+          "surprise_mean": null
+        },
+        "notes": "{\"acc_id\": 1.0, \"acc_ood\": 0.9593750238418579, \"debug_id\": {\"temperature_mean\": 0.23592187526325384, \"state_energy_mean\": 0.07087314873933792}, \"debug_ood\": {\"temperature_mean\": 0.24600683410580343, \"state_energy_mean\": 0.1906140148639679}, \"recovery_curve\": [0.981249988079071, 0.9781250357627869, 0.9906250238418579, 0.9906250238418579, 0.9937500357627869, 0.9906250238418579]}"
+      },
+      "vs_baseline": {
+        "accuracy_delta": -0.02499997615814209,
+        "sample_efficiency_delta": 4,
+        "forgetting_delta": null,
+        "recovery_delta": 0.0,
+        "elasticity_gain_delta": null
+      },
+      "promotion_reasons": []
+    },
+    {
+      "run": {
+        "hypothesis_id": "cyborg_minimal",
+        "family": "v28_cyborg_minimal",
+        "task_id": "exp50_hybrid_binding_memory_plus_regime",
+        "capability": {
+          "test_accuracy": 0.9156250357627869,
+          "epochs_to_80": 3,
+          "area_under_curve": 0.9429166666666666,
+          "param_count": 22088,
+          "wall_time_ms": 18545.427734375
+        },
+        "adaptation": {
+          "shift_recovery_steps": 1.0,
+          "post_shift_accuracy": 0.9156250357627869,
+          "stabilized_accuracy": 1.0
+        },
+        "retention": null,
+        "elasticity": null,
+        "internal": {
+          "temperature_delta": -0.041348733485509215,
+          "participation_ratio_initial": null,
+          "participation_ratio_final": null,
+          "surprise_mean": 0.34729565336154056
+        },
+        "notes": "{\"acc_id\": 1.0, \"acc_ood\": 0.9156250357627869, \"debug_id\": {\"temperature_mean\": 0.3241198981801669, \"bridge_mean\": 0.31701335807641345, \"state_energy_mean\": 0.5932587385177612}, \"debug_ood\": {\"temperature_mean\": 0.2827711646946577, \"bridge_mean\": 0.34729565336154056, \"state_energy_mean\": 1.0626957416534424}, \"recovery_curve\": [0.996874988079071, 0.996874988079071, 0.996874988079071, 0.996874988079071, 1.0, 1.0]}"
+      },
+      "vs_baseline": {
+        "accuracy_delta": -0.06874996423721313,
+        "sample_efficiency_delta": 3,
+        "forgetting_delta": null,
+        "recovery_delta": 0.0,
+        "elasticity_gain_delta": null
+      },
+      "promotion_reasons": []
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 import type { EventFrame } from "../../gateway/protocol/index.js";
+import { classifyOpenSkynetRuntimeFailure } from "../../infra/runtime-failure.js";
 
 export type SkynetRuntimeLiveObservation = {
   source: "gateway";
@@ -10,8 +11,11 @@ export type SkynetRuntimeLiveObservation = {
   phase?: string;
   toolName?: string;
   toolPhase?: string;
+  isError?: boolean;
   role?: string;
   status?: string;
+  failureDomain?: string;
+  failureClass?: string;
   textPreview?: string;
   seq?: number;
   rawTs?: number;
@@ -34,6 +38,49 @@ function previewText(value: unknown, maxChars = 240): string | undefined {
     return undefined;
   }
   return normalized.length > maxChars ? `${normalized.slice(0, maxChars - 1)}…` : normalized;
+}
+
+function inferFailureClassification(params: {
+  stream?: string;
+  phase?: string;
+  isError?: boolean;
+  status?: string;
+  explicitFailureDomain?: string;
+  explicitFailureClass?: string;
+  errorText?: string;
+  result?: unknown;
+}): { failureDomain?: string; failureClass?: string } {
+  const explicitFailureDomain = trimToUndefined(params.explicitFailureDomain);
+  const explicitFailureClass = trimToUndefined(params.explicitFailureClass);
+  if (explicitFailureDomain && explicitFailureClass) {
+    return {
+      failureDomain: explicitFailureDomain,
+      failureClass: explicitFailureClass,
+    };
+  }
+
+  const isLifecycleError = params.stream === "lifecycle" && params.phase === "error";
+  const isToolError =
+    params.stream === "tool" && params.phase === "result" && params.isError === true;
+  if (!isLifecycleError && !isToolError) {
+    return {
+      failureDomain: explicitFailureDomain,
+      failureClass: explicitFailureClass,
+    };
+  }
+
+  const resultText =
+    params.result && typeof params.result === "object" && !Array.isArray(params.result)
+      ? JSON.stringify(params.result)
+      : undefined;
+  const classification = classifyOpenSkynetRuntimeFailure({
+    status: params.status,
+    errorText: [params.errorText, resultText].filter(Boolean).join("\n"),
+  });
+  return {
+    failureDomain: classification.failureDomain,
+    failureClass: classification.failureClass,
+  };
 }
 
 function extractMessagePreview(message: unknown): { role?: string; textPreview?: string } {
@@ -84,18 +131,45 @@ export function normalizeSkynetRuntimeGatewayEvent(
           })
         : undefined;
     const data = payload?.data ?? {};
+    const phase = trimToUndefined(data.phase);
+    const stream = trimToUndefined(payload?.stream);
+    const status = trimToUndefined(data.status);
+    const isError = typeof data.isError === "boolean" ? data.isError : undefined;
+    const textPreview =
+      previewText(data.text) ??
+      previewText(data.error) ??
+      previewText(data.message) ??
+      previewText(typeof data.result === "string" ? data.result : undefined) ??
+      previewText(
+        data.result && typeof data.result === "object" && !Array.isArray(data.result)
+          ? JSON.stringify(data.result)
+          : undefined,
+      );
+    const failure = inferFailureClassification({
+      stream,
+      phase,
+      isError,
+      status,
+      explicitFailureDomain: trimToUndefined(data.failureDomain),
+      explicitFailureClass: trimToUndefined(data.failureClass),
+      errorText: textPreview,
+      result: data.result,
+    });
     return {
       source: "gateway",
       event: frame.event,
       recordedAt,
       sessionKey: trimToUndefined(payload?.sessionKey),
       runId: trimToUndefined(payload?.runId),
-      stream: trimToUndefined(payload?.stream),
-      phase: trimToUndefined(data.phase),
+      stream,
+      phase,
       toolName: trimToUndefined(data.toolName),
-      toolPhase: trimToUndefined(data.phase),
-      status: trimToUndefined(data.status),
-      textPreview: previewText(data.text) ?? previewText(data.error),
+      toolPhase: phase,
+      isError,
+      status,
+      failureDomain: failure.failureDomain,
+      failureClass: failure.failureClass,
+      textPreview,
       seq: typeof payload?.seq === "number" ? payload.seq : undefined,
       rawTs: typeof payload?.ts === "number" ? payload.ts : undefined,
     };

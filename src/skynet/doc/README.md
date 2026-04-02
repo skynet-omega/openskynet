@@ -34,12 +34,15 @@ These connect the thesis to concrete experimental lines.
 
 - [study_plan_solitonic_foundations.md](/home/daroch/openskynet/src/skynet/doc/study_plan_solitonic_foundations.md)
 - [study_legacy_experiments.md](/home/daroch/openskynet/src/skynet/doc/study_legacy_experiments.md)
+- [BRAIN_LAB_DIRECTION_2026-04-02.md](/home/daroch/openskynet/src/skynet/analysis/BRAIN_LAB_DIRECTION_2026-04-02.md)
+- [V28_ORGAN_TRACK_2026-04-02.md](/home/daroch/openskynet/src/skynet/analysis/V28_ORGAN_TRACK_2026-04-02.md)
 
 Use for:
 
 - recovering old experimental families
 - extracting mechanisms worth benchmarking again
 - avoiding repeated dead ends
+- keeping the continuity of the Brain Lab inside `src/skynet` rather than scattering it into general repo analysis
 
 ## 3. Papers / Technical Inputs
 
@@ -143,3 +146,17 @@ For every document or paper, ask:
 4. What would falsify it quickly?
 
 If you cannot answer those four questions, keep it as inspiration only.
+
+## Location Rule
+
+If the document is about:
+
+- `Skynet Brain Lab`
+- `EX`
+- `V28/V77`
+- organ search
+- geometric quantization
+- substrate search
+- papers used only by the lab
+
+it should live in `src/skynet/doc/` or `src/skynet/analysis/`, not in generic repo analysis folders.

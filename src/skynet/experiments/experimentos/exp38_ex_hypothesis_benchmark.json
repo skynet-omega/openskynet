@@ -1,0 +1,88 @@
+{
+  "protocol": "ex_hypothesis_protocol_v1",
+  "baseline": {
+    "hypothesis_id": "gru_baseline",
+    "family": "baseline",
+    "task_id": "exp38_delayed_dependency_plus_forgetting",
+    "capability": {
+      "test_accuracy": 1.0,
+      "epochs_to_80": 1,
+      "area_under_curve": 0.9967447916666666,
+      "param_count": 14930,
+      "wall_time_ms": 3501.333225009148
+    },
+    "adaptation": null,
+    "retention": {
+      "task_a_after_a": 0.98828125,
+      "task_a_after_b": 0.55078125,
+      "forgetting": 0.4375
+    },
+    "elasticity": null,
+    "internal": null,
+    "notes": "Combined probe: delayed dependency drives capability; forgetting probe drives retention. debug={'delayed_accuracy': 1.0}"
+  },
+  "candidates": [
+    {
+      "run": {
+        "hypothesis_id": "gru_adaptive_decay",
+        "family": "adaptive_decay",
+        "task_id": "exp38_delayed_dependency_plus_forgetting",
+        "capability": {
+          "test_accuracy": 1.0,
+          "epochs_to_80": 2,
+          "area_under_curve": 0.970458984375,
+          "param_count": 14932,
+          "wall_time_ms": 4705.727398992167
+        },
+        "adaptation": null,
+        "retention": {
+          "task_a_after_a": 0.984375,
+          "task_a_after_b": 0.78125,
+          "forgetting": 0.203125
+        },
+        "elasticity": null,
+        "internal": null,
+        "notes": "Combined probe: delayed dependency drives capability; forgetting probe drives retention. debug={'delayed_accuracy': 1.0}"
+      },
+      "vs_baseline": {
+        "accuracy_delta": 0.0,
+        "sample_efficiency_delta": -1,
+        "forgetting_delta": 0.234375,
+        "recovery_delta": null,
+        "elasticity_gain_delta": null
+      },
+      "promotion_reasons": ["wins_retention"]
+    },
+    {
+      "run": {
+        "hypothesis_id": "gru_spectral_memory",
+        "family": "spectral_memory",
+        "task_id": "exp38_delayed_dependency_plus_forgetting",
+        "capability": {
+          "test_accuracy": 1.0,
+          "epochs_to_80": 1,
+          "area_under_curve": 0.996826171875,
+          "param_count": 24434,
+          "wall_time_ms": 3961.638677996234
+        },
+        "adaptation": null,
+        "retention": {
+          "task_a_after_a": 0.9765625,
+          "task_a_after_b": 0.55859375,
+          "forgetting": 0.41796875
+        },
+        "elasticity": null,
+        "internal": null,
+        "notes": "Combined probe: delayed dependency drives capability; forgetting probe drives retention. debug={'delayed_accuracy': 1.0}"
+      },
+      "vs_baseline": {
+        "accuracy_delta": 0.0,
+        "sample_efficiency_delta": 0,
+        "forgetting_delta": 0.01953125,
+        "recovery_delta": null,
+        "elasticity_gain_delta": null
+      },
+      "promotion_reasons": []
+    }
+  ]
+}

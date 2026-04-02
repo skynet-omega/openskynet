@@ -1,0 +1,62 @@
+{
+  "protocol": "ex_hypothesis_protocol_v1",
+  "baseline": {
+    "hypothesis_id": "gru_baseline",
+    "family": "baseline",
+    "task_id": "example",
+    "capability": {
+      "test_accuracy": 0.81,
+      "epochs_to_80": 12,
+      "area_under_curve": null,
+      "param_count": 100000,
+      "wall_time_ms": null
+    },
+    "adaptation": null,
+    "retention": {
+      "task_a_after_a": null,
+      "task_a_after_b": null,
+      "forgetting": 0.18
+    },
+    "elasticity": null,
+    "internal": null,
+    "notes": null
+  },
+  "candidates": [
+    {
+      "run": {
+        "hypothesis_id": "gru_adaptive_decay",
+        "family": "adaptive_decay",
+        "task_id": "example",
+        "capability": {
+          "test_accuracy": 0.83,
+          "epochs_to_80": 9,
+          "area_under_curve": null,
+          "param_count": 102000,
+          "wall_time_ms": null
+        },
+        "adaptation": null,
+        "retention": {
+          "task_a_after_a": null,
+          "task_a_after_b": null,
+          "forgetting": 0.09
+        },
+        "elasticity": null,
+        "internal": {
+          "temperature_delta": -0.07,
+          "participation_ratio_initial": 1.2,
+          "participation_ratio_final": 2.8,
+          "surprise_mean": null
+        },
+        "notes": "Example only. Replace with real experiment output."
+      },
+      "vs_baseline": {
+        "accuracy_delta": 0.019999999999999907,
+        "sample_efficiency_delta": 3,
+        "forgetting_delta": 0.09,
+        "recovery_delta": null,
+        "elasticity_gain_delta": null
+      },
+      "promotion_reasons": ["wins_retention"]
+    }
+  ]
+}

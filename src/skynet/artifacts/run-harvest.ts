@@ -1,32 +1,50 @@
-import fs from "node:fs/promises";
+import { execSync } from "node:child_process";
 import path from "node:path";
-import { harvestResearch } from "./research-harvester.js";
+import { fileURLToPath } from "node:url";
+import { appendSkynetCausalEpisode } from "./episode-ledger.js";
+import { harvestSkynetObservedCausalEpisodes } from "./observed-harvester.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const workspaceRoot = path.resolve(__dirname, "../../..");
 
 async function runHarvest() {
-  const workspaceRoot = process.cwd();
-  console.log(`[skynet-harvest] Running harvester in ${workspaceRoot}...`);
+  console.log("Starting Causal Valence Harvest...");
 
-  const artifact = await harvestResearch(workspaceRoot);
+  // Find recent sessions (last 7 days in March/April 2026)
+  const sessionFiles = execSync(
+    'find ~/.codex/sessions/2026/03 ~/.codex/sessions/2026/04 -name "*.jsonl" -mtime -7 2>/dev/null || true',
+  )
+    .toString()
+    .split("\n")
+    .filter(Boolean);
 
-  console.log(`[skynet-harvest] Harvest completed. ID: ${artifact.id}`);
-  console.log(`[skynet-harvest] Finding count: ${artifact.findings.length}`);
-  console.log(`[skynet-harvest] Next steps: ${artifact.nextSteps.join(", ")}`);
-
-  const memoryPath = path.join(workspaceRoot, "memory", "SKYNET_RESEARCH_HARVEST.md");
-  const exists = await fs
-    .access(memoryPath)
-    .then(() => true)
-    .catch(() => false);
-
-  if (exists) {
-    console.log(`[skynet-harvest] Successfully persisted artifact to ${memoryPath}`);
-  } else {
-    console.error(`[skynet-harvest] FAILED to persist artifact to ${memoryPath}`);
-    process.exit(1);
+  if (sessionFiles.length === 0) {
+    console.log("No recent sessions found to harvest.");
+    return;
   }
+
+  console.log(`Found ${sessionFiles.length} session files.`);
+
+  const result = await harvestSkynetObservedCausalEpisodes({ sessionFiles });
+  console.log(
+    `Harvested ${result.episodes.length} episodes (skipped ${result.skippedToolResults}).`,
+  );
+
+  for (const episode of result.episodes) {
+    await appendSkynetCausalEpisode({
+      workspaceRoot,
+      sessionKey: episode.sessionKey,
+      context: episode.context,
+      transition: episode.transition,
+      outcome: episode.outcome,
+      recordedAt: episode.recordedAt,
+    });
+  }
+
+  console.log("Harvest complete.");
 }
 
 runHarvest().catch((err) => {
-  console.error("[skynet-harvest] Error running harvester:", err);
+  console.error("Harvest failed:", err);
   process.exit(1);
 });

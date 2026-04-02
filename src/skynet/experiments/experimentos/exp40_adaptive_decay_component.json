@@ -1,0 +1,65 @@
+{
+  "protocol": "ex_hypothesis_protocol_v1",
+  "baseline": {
+    "hypothesis_id": "gru_fixed_decay",
+    "family": "fixed_decay",
+    "task_id": "exp40_fixed_decay_vs_adaptive_decay",
+    "capability": {
+      "test_accuracy": 1.0,
+      "epochs_to_80": 1,
+      "area_under_curve": 0.9912760416666666,
+      "param_count": 14930,
+      "wall_time_ms": 1770.148508992861
+    },
+    "adaptation": {
+      "shift_recovery_steps": 3.0,
+      "post_shift_accuracy": 0.5390625,
+      "stabilized_accuracy": 1.0
+    },
+    "retention": {
+      "task_a_after_a": 0.984375,
+      "task_a_after_b": 0.7578125,
+      "forgetting": 0.2265625
+    },
+    "elasticity": null,
+    "internal": null,
+    "notes": "{\"shift_curve\": [0.5390625, 0.4765625, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]}"
+  },
+  "candidates": [
+    {
+      "run": {
+        "hypothesis_id": "gru_adaptive_decay",
+        "family": "adaptive_decay",
+        "task_id": "exp40_fixed_decay_vs_adaptive_decay",
+        "capability": {
+          "test_accuracy": 1.0,
+          "epochs_to_80": 1,
+          "area_under_curve": 0.9912760416666666,
+          "param_count": 14932,
+          "wall_time_ms": 2140.0220740033546
+        },
+        "adaptation": {
+          "shift_recovery_steps": 3.0,
+          "post_shift_accuracy": 0.5390625,
+          "stabilized_accuracy": 1.0
+        },
+        "retention": {
+          "task_a_after_a": 0.984375,
+          "task_a_after_b": 0.75,
+          "forgetting": 0.234375
+        },
+        "elasticity": null,
+        "internal": null,
+        "notes": "{\"shift_curve\": [0.5390625, 0.50390625, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]}"
+      },
+      "vs_baseline": {
+        "accuracy_delta": 0.0,
+        "sample_efficiency_delta": 0,
+        "forgetting_delta": -0.0078125,
+        "recovery_delta": 0.0,
+        "elasticity_gain_delta": null
+      },
+      "promotion_reasons": []
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "experiment": "exp43_rule_vs_adaptive_continuity",
+  "rule_baseline": {
+    "acc_id": 0.984375,
+    "acc_ood": 0.94921875
+  },
+  "gru_fixed_decay": {
+    "acc_id": 0.91796875,
+    "acc_ood": 0.83203125
+  },
+  "gru_adaptive_decay": {
+    "acc_id": 0.99609375,
+    "acc_ood": 0.87890625
+  },
+  "delta_vs_rule": {
+    "fixed_acc_ood": -0.1171875,
+    "adaptive_acc_ood": -0.0703125,
+    "adaptive_vs_fixed_acc_ood": 0.046875
+  }
+}

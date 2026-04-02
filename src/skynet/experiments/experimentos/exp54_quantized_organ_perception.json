@@ -1,0 +1,15 @@
+{
+  "experiment": "exp54_quantized_organ_perception",
+  "results": {
+    "nearest": {
+      "acc_ood": 1.0
+    },
+    "bilinear": {
+      "acc_ood": 1.0
+    },
+    "quantized": {
+      "acc_ood": 1.0
+    }
+  },
+  "best": "nearest"
+}

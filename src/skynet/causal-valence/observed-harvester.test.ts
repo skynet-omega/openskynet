@@ -189,4 +189,45 @@ describe("skynet observed causal harvester", () => {
     expect(result.episodes[0]?.outcome.failureClass).toBe("provider_rate_limit");
     expect(result.episodes[0]?.bootstrapLabel).toBe("stall");
   });
+
+  it("classifies session locks as environmental instead of cognitive failures", async () => {
+    const lines = [
+      {
+        type: "message",
+        timestamp: "2026-04-01T00:00:00.000Z",
+        message: {
+          role: "assistant",
+          content: [
+            {
+              type: "toolCall",
+              id: "exec-lock",
+              name: "exec",
+              arguments: { command: "openclaw status" },
+            },
+          ],
+        },
+      },
+      {
+        type: "message",
+        message: {
+          role: "toolResult",
+          toolCallId: "exec-lock",
+          toolName: "exec",
+          details: { status: "error", error: "session file locked (timeout 30000ms): main lock" },
+        },
+      },
+    ];
+    await fs.writeFile(
+      sessionFile,
+      lines.map((line) => JSON.stringify(line)).join("\n") + "\n",
+      "utf-8",
+    );
+
+    const result = await harvestSkynetObservedCausalEpisodes({ sessionFiles: [sessionFile] });
+
+    expect(result.episodes).toHaveLength(1);
+    expect(result.episodes[0]?.outcome.failureDomain).toBe("environmental");
+    expect(result.episodes[0]?.outcome.failureClass).toBe("session_lock");
+    expect(result.episodes[0]?.bootstrapLabel).toBe("stall");
+  });
 });

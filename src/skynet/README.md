@@ -8,6 +8,22 @@ The separation should stay explicit:
 - `Omega` = internal control/runtime line inside the platform
 - `Skynet Brain Lab` = search for a new cognitive substrate beyond a plain LLM-centric agent
 
+This repo should be operated under a two-line directive:
+
+1. `OpenSkyNet`
+   Keep the platform solid, measurable, and operational.
+2. `Skynet Brain Lab`
+   Search for a new brain, new substrate, and more general cognition than the current architecture provides.
+
+The lab is allowed to be more radical than the platform.
+The platform is not required to mirror the lab.
+
+Current working posture:
+
+- `OpenSkyNet` is in relative stabilization mode
+- only continuity or operational bug fixes should touch the platform for now
+- new architecture work should happen here first
+
 ## Why This Exists
 
 `OpenSkyNet` is already useful and relatively solid as an operational agent.
@@ -72,6 +88,8 @@ A lab result should only be promoted when:
 
 - `doc/`
   Theory, papers, and conceptual roadmaps. Use as hypothesis fuel, not as proof.
+- `analysis/`
+  Brain Lab analysis, architecture audits, benchmark readings, and next-cycle decisions.
 - `experiments/`
   One-off runnable probes, historical lines, and benchmark scripts.
 - `runtime-observer/`
@@ -91,6 +109,12 @@ If the goal is:
 
 - make `OpenSkyNet` more reliable or cheaper -> work in platform / `Omega`
 - discover a new mind topology -> work here first
+
+If a result is promising but still fragile:
+
+- keep it in the lab
+- design a benchmark where it should win on its own terms
+- only then ask whether it transfers into the platform
 
 The lab should be free to fail.
 The platform should not pay for those failures prematurely.

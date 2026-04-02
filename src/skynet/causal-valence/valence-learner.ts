@@ -14,6 +14,7 @@ export type SkynetCausalValenceModel = {
 export type SkynetCausalPrediction = {
   label: SkynetCausalValenceLabel;
   scores: Record<SkynetCausalValenceLabel, number>;
+  confidence: number;
 };
 
 const LABELS: SkynetCausalValenceLabel[] = ["progress", "relief", "stall", "frustration", "damage"];
@@ -49,7 +50,9 @@ function cosineSimilarity(a: number[], b: number[]): number {
   if (normA === 0 || normB === 0) {
     return 0;
   }
-  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+  // Softmax-like sharpening of similarity to increase separation
+  const sim = dot / (Math.sqrt(normA) * Math.sqrt(normB));
+  return Math.pow(Math.max(0, sim), 4);
 }
 
 export function encodeSkynetCausalEpisodeFeatures(episode: SkynetCausalEpisode): number[] {
@@ -129,12 +132,24 @@ export function predictSkynetCausalValence(
     },
     {} as Record<SkynetCausalValenceLabel, number>,
   );
-  const label =
-    model.labels
-      .slice()
-      .sort(
-        (a, b) => (scores[b] ?? Number.NEGATIVE_INFINITY) - (scores[a] ?? Number.NEGATIVE_INFINITY),
-      )
-      .at(0) ?? "stall";
-  return { label, scores };
+  const sortedLabels = model.labels
+    .slice()
+    .sort(
+      (a, b) => (scores[b] ?? Number.NEGATIVE_INFINITY) - (scores[a] ?? Number.NEGATIVE_INFINITY),
+    );
+  const label = sortedLabels.at(0) ?? "stall";
+  const primaryScore = scores[label] ?? 0;
+  const secondaryScore = sortedLabels.length > 1 ? (scores[sortedLabels[1]!] ?? 0) : 0;
+
+  // Use a softer distance-based confidence to avoid extreme 0/1 jumps
+  // This helps when prototypes are very close or very far.
+  const confidence = primaryScore - secondaryScore;
+
+  /**
+   * Threshold recommendation for kernel promotion:
+   * - Confidence > 0.4: Actionable/High (Reliable feeling)
+   * - Confidence 0.1 - 0.4: Ambiguous (Mixed context)
+   * - Confidence < 0.1: Noise (Unreliable prediction)
+   */
+  return { label, scores, confidence };
 }

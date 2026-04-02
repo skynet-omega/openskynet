@@ -1,0 +1,14 @@
+{
+  "metadata": {
+    "hypothesis": "Stochastic resonance in fluid phase improves OOD resilience",
+    "date": "2026-04-02"
+  },
+  "bifurcation_ref": {
+    "acc_id": 0.9800000190734863,
+    "acc_ood": 0.9300000667572021
+  },
+  "phase_transition": {
+    "acc_id": 0.9580000638961792,
+    "acc_ood": 0.9180000424385071
+  }
+}

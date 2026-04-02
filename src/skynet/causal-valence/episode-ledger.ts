@@ -14,6 +14,7 @@ export type SkynetCausalFailureClass =
   | "gateway_restart"
   | "gateway_connection"
   | "permission_denied"
+  | "session_lock"
   | "missing_path"
   | "validation_error"
   | "unknown_error";
@@ -116,7 +117,9 @@ export function deriveSkynetBootstrapValenceLabel(params: {
   if (
     outcome.status !== "ok" &&
     !isEnvironmentalFailure &&
-    (outcome.collateralDamage >= 0.35 || outcome.recoveryBurden >= 0.6 || !outcome.validationPassed)
+    (outcome.collateralDamage >= 0.3 ||
+      (outcome.recoveryBurden >= 0.65 && !isCognitiveFailure) ||
+      !outcome.validationPassed)
   ) {
     return "damage";
   }
@@ -158,14 +161,11 @@ export function deriveSkynetBootstrapValenceLabel(params: {
   ) {
     return "progress";
   }
+  if (outcome.collateralDamage >= 0.35 || outcome.recoveryBurden >= 0.6) {
+    return "damage";
+  }
   if (outcome.status === "ok" && (!outcome.targetSatisfied || outcome.continuityDelta <= 0.15)) {
     return "stall";
-  }
-  if (isEnvironmentalFailure && outcome.collateralDamage <= 0.1) {
-    return "stall";
-  }
-  if (outcome.collateralDamage >= 0.3 || outcome.recoveryBurden >= 0.55) {
-    return "damage";
   }
   if (context.failureStreak >= 2) {
     return "frustration";

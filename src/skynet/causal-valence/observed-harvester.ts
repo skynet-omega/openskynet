@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { classifyOpenSkynetRuntimeFailure } from "../../infra/runtime-failure.js";
 import type {
   SkynetCausalContinuityFreshness,
   SkynetCausalEpisode,
@@ -266,69 +267,14 @@ function deriveOutcome(params: {
     textBlocks.some((text) => text.includes('"status": "error"'));
   const isOk =
     !hasErrorText && detailStatus !== "error" && (exitCode === undefined || exitCode === 0);
-  const classifyFailure = (): {
+  const failure: {
     failureDomain: SkynetCausalFailureDomain;
     failureClass: SkynetCausalFailureClass;
-  } => {
-    if (isOk) {
-      return { failureDomain: "none", failureClass: "none" };
-    }
-    if (
-      combinedText.includes("rate limit") ||
-      combinedText.includes("no capacity available") ||
-      combinedText.includes("resource exhausted") ||
-      combinedText.includes("429")
-    ) {
-      return { failureDomain: "environmental", failureClass: "provider_rate_limit" };
-    }
-    if (
-      detailStatus === "timeout" ||
-      combinedText.includes("timed out") ||
-      combinedText.includes("timeout")
-    ) {
-      return { failureDomain: "environmental", failureClass: "provider_timeout" };
-    }
-    if (
-      combinedText.includes("service restart") ||
-      combinedText.includes("config change detected") ||
-      combinedText.includes("restarting") ||
-      combinedText.includes("wait for active embedded runs timed out")
-    ) {
-      return { failureDomain: "environmental", failureClass: "gateway_restart" };
-    }
-    if (
-      combinedText.includes("gateway closed") ||
-      combinedText.includes("connection reset") ||
-      combinedText.includes("connection refused") ||
-      combinedText.includes("token mismatch")
-    ) {
-      return { failureDomain: "environmental", failureClass: "gateway_connection" };
-    }
-    if (
-      combinedText.includes("permission denied") ||
-      combinedText.includes("eacces") ||
-      combinedText.includes("operation not permitted")
-    ) {
-      return { failureDomain: "environmental", failureClass: "permission_denied" };
-    }
-    if (
-      combinedText.includes("enoent") ||
-      combinedText.includes("no such file") ||
-      combinedText.includes("cannot find")
-    ) {
-      return { failureDomain: "cognitive", failureClass: "missing_path" };
-    }
-    if (
-      combinedText.includes("syntax error") ||
-      combinedText.includes("type error") ||
-      combinedText.includes("validation failed") ||
-      combinedText.includes("test failed")
-    ) {
-      return { failureDomain: "cognitive", failureClass: "validation_error" };
-    }
-    return { failureDomain: "mixed", failureClass: "unknown_error" };
-  };
-  const failure = classifyFailure();
+  } = classifyOpenSkynetRuntimeFailure({
+    status: detailStatus,
+    errorText: combinedText,
+    isOk,
+  });
   const targetSatisfied =
     isOk &&
     (params.targetCount > 0 ||

@@ -1,0 +1,246 @@
+{
+  "experiment": "exp51_cyborg_minimal_multiseed",
+  "seeds": [11, 23, 37],
+  "summary": {
+    "gru_baseline": {
+      "mean_acc_ood": 0.9135416944821676,
+      "mean_epochs_to_80": 6.666666666666667,
+      "param_count": 26180
+    },
+    "organ_only": {
+      "mean_acc_ood": 0.953125,
+      "mean_epochs_to_80": 2.0,
+      "param_count": 10312
+    },
+    "cyborg_minimal": {
+      "mean_acc_ood": 0.846875011920929,
+      "mean_epochs_to_80": 3.0,
+      "param_count": 22088
+    }
+  },
+  "runs": [
+    {
+      "hypothesis_id": "gru_baseline",
+      "family": "baseline",
+      "seed": 11,
+      "acc_ood": 0.8687500357627869,
+      "epochs_to_80": 7,
+      "param_count": 26180,
+      "temperature_delta": 0.0,
+      "surprise_mean": null,
+      "notes": {
+        "acc_id": 1.0,
+        "acc_ood": 0.8687500357627869,
+        "debug_id": {
+          "state_energy_mean": 0.687810388704141
+        },
+        "debug_ood": {
+          "state_energy_mean": 0.6655697639171894
+        },
+        "recovery_curve": [1.0, 0.9937500357627869, 1.0, 1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "hypothesis_id": "gru_baseline",
+      "family": "baseline",
+      "seed": 23,
+      "acc_ood": 0.8812500238418579,
+      "epochs_to_80": 7,
+      "param_count": 26180,
+      "temperature_delta": 0.0,
+      "surprise_mean": null,
+      "notes": {
+        "acc_id": 1.0,
+        "acc_ood": 0.8812500238418579,
+        "debug_id": {
+          "state_energy_mean": 0.6863676694532236
+        },
+        "debug_ood": {
+          "state_energy_mean": 0.6919528257388335
+        },
+        "recovery_curve": [0.996874988079071, 0.9906250238418579, 1.0, 1.0, 0.9906250238418579, 1.0]
+      }
+    },
+    {
+      "hypothesis_id": "gru_baseline",
+      "family": "baseline",
+      "seed": 37,
+      "acc_ood": 0.9906250238418579,
+      "epochs_to_80": 6,
+      "param_count": 26180,
+      "temperature_delta": 0.0,
+      "surprise_mean": null,
+      "notes": {
+        "acc_id": 1.0,
+        "acc_ood": 0.9906250238418579,
+        "debug_id": {
+          "state_energy_mean": 0.7165646602710088
+        },
+        "debug_ood": {
+          "state_energy_mean": 0.7399412548312774
+        },
+        "recovery_curve": [
+          0.996874988079071, 0.996874988079071, 0.996874988079071, 0.996874988079071, 0.96875,
+          0.9750000238418579
+        ]
+      }
+    },
+    {
+      "hypothesis_id": "organ_only",
+      "family": "continuous_organ",
+      "seed": 11,
+      "acc_ood": 0.965624988079071,
+      "epochs_to_80": 2,
+      "param_count": 10312,
+      "temperature_delta": 0.006820928782988844,
+      "surprise_mean": null,
+      "notes": {
+        "acc_id": 1.0,
+        "acc_ood": 0.965624988079071,
+        "debug_id": {
+          "temperature_mean": 0.25076623757680255,
+          "state_energy_mean": 0.06545652449131012
+        },
+        "debug_ood": {
+          "temperature_mean": 0.2575871663597914,
+          "state_energy_mean": 0.17749623954296112
+        },
+        "recovery_curve": [
+          0.987500011920929, 0.987500011920929, 0.9906250238418579, 0.996874988079071, 0.984375, 1.0
+        ]
+      }
+    },
+    {
+      "hypothesis_id": "organ_only",
+      "family": "continuous_organ",
+      "seed": 23,
+      "acc_ood": 0.9593750238418579,
+      "epochs_to_80": 2,
+      "param_count": 10312,
+      "temperature_delta": 0.00860240979072377,
+      "surprise_mean": null,
+      "notes": {
+        "acc_id": 1.0,
+        "acc_ood": 0.9593750238418579,
+        "debug_id": {
+          "temperature_mean": 0.24198680991927782,
+          "state_energy_mean": 0.07824143022298813
+        },
+        "debug_ood": {
+          "temperature_mean": 0.2505892197100016,
+          "state_energy_mean": 0.22022485733032227
+        },
+        "recovery_curve": [
+          0.9750000238418579, 0.971875011920929, 0.987500011920929, 0.984375, 0.9906250238418579,
+          0.9937500357627869
+        ]
+      }
+    },
+    {
+      "hypothesis_id": "organ_only",
+      "family": "continuous_organ",
+      "seed": 37,
+      "acc_ood": 0.934374988079071,
+      "epochs_to_80": 2,
+      "param_count": 10312,
+      "temperature_delta": 0.016040957891024055,
+      "surprise_mean": null,
+      "notes": {
+        "acc_id": 1.0,
+        "acc_ood": 0.934374988079071,
+        "debug_id": {
+          "temperature_mean": 0.2595610283315182,
+          "state_energy_mean": 0.07138139009475708
+        },
+        "debug_ood": {
+          "temperature_mean": 0.27560198622254223,
+          "state_energy_mean": 0.19633738696575165
+        },
+        "recovery_curve": [
+          0.9750000238418579, 0.984375, 0.987500011920929, 0.984375, 0.9937500357627869,
+          0.9906250238418579
+        ]
+      }
+    },
+    {
+      "hypothesis_id": "cyborg_minimal",
+      "family": "v28_cyborg_minimal",
+      "seed": 11,
+      "acc_ood": 0.918749988079071,
+      "epochs_to_80": 3,
+      "param_count": 22088,
+      "temperature_delta": -0.017941446449512122,
+      "surprise_mean": 0.30259670001956135,
+      "notes": {
+        "acc_id": 1.0,
+        "acc_ood": 0.918749988079071,
+        "debug_id": {
+          "temperature_mean": 0.36374733100334805,
+          "bridge_mean": 0.31195549045999843,
+          "state_energy_mean": 0.6114492416381836
+        },
+        "debug_ood": {
+          "temperature_mean": 0.34580588455383593,
+          "bridge_mean": 0.30259670001956135,
+          "state_energy_mean": 1.0758943557739258
+        },
+        "recovery_curve": [0.965624988079071, 1.0, 1.0, 1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "hypothesis_id": "cyborg_minimal",
+      "family": "v28_cyborg_minimal",
+      "seed": 23,
+      "acc_ood": 0.846875011920929,
+      "epochs_to_80": 3,
+      "param_count": 22088,
+      "temperature_delta": -0.017733260416067542,
+      "surprise_mean": 0.285285842533295,
+      "notes": {
+        "acc_id": 1.0,
+        "acc_ood": 0.846875011920929,
+        "debug_id": {
+          "temperature_mean": 0.3671695962548256,
+          "bridge_mean": 0.2847892201195161,
+          "state_energy_mean": 0.6636984944343567
+        },
+        "debug_ood": {
+          "temperature_mean": 0.34943633583875805,
+          "bridge_mean": 0.285285842533295,
+          "state_energy_mean": 1.1815060377120972
+        },
+        "recovery_curve": [
+          0.984375, 0.987500011920929, 0.996874988079071, 1.0, 0.9937500357627869,
+          0.9937500357627869
+        ]
+      }
+    },
+    {
+      "hypothesis_id": "cyborg_minimal",
+      "family": "v28_cyborg_minimal",
+      "seed": 37,
+      "acc_ood": 0.7750000357627869,
+      "epochs_to_80": 3,
+      "param_count": 22088,
+      "temperature_delta": -0.0029972487917312995,
+      "surprise_mean": 0.32830030757647294,
+      "notes": {
+        "acc_id": 1.0,
+        "acc_ood": 0.7750000357627869,
+        "debug_id": {
+          "temperature_mean": 0.41743413358926773,
+          "bridge_mean": 0.3152773045003414,
+          "state_energy_mean": 0.7370055317878723
+        },
+        "debug_ood": {
+          "temperature_mean": 0.41443688479753643,
+          "bridge_mean": 0.32830030757647294,
+          "state_energy_mean": 1.3063029050827026
+        },
+        "recovery_curve": [
+          0.984375, 1.0, 0.9937500357627869, 0.9906250238418579, 1.0, 0.996874988079071
+        ]
+      }
+    }
+  ]
+}

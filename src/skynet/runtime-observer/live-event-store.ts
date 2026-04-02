@@ -112,6 +112,23 @@ export async function appendSkynetRuntimeObserverLiveObservation(params: {
   return jsonlPath;
 }
 
+export async function loadSkynetRuntimeObserverLiveObservations(params: {
+  workspaceRoot: string;
+  sessionKey: string;
+}): Promise<SkynetRuntimeLiveObservation[]> {
+  const jsonlPath = resolveSkynetRuntimeObserverLiveJsonlPath(params);
+  try {
+    const raw = await fs.readFile(jsonlPath, "utf-8");
+    return raw
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as SkynetRuntimeLiveObservation);
+  } catch {
+    return [];
+  }
+}
+
 export async function writeSkynetRuntimeObserverLiveSummary(
   summary: SkynetRuntimeObserverTapSummary,
 ): Promise<void> {
