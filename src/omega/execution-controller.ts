@@ -377,13 +377,16 @@ export function shouldDispatchOmegaHeartbeatPrompt(params: {
   wakeAction: OmegaWakeAction;
   shouldRunAutonomy: boolean;
 }): boolean {
+  // Executive already decided to dispatch a turn.
   if (params.dispatchPlan.shouldDispatchLlmTurn) {
     return true;
   }
-  if (params.wakeAction.kind === "heartbeat_ok" && !params.shouldRunAutonomy) {
-    return false;
+  // A non-idle wake action means there is pending work (goal to resume, prune, etc.).
+  if (params.wakeAction.kind !== "heartbeat_ok") {
+    return true;
   }
-  return false;
+  // Idle wake, but autonomy is running — let autonomous drives dispatch.
+  return params.shouldRunAutonomy;
 }
 
 export function deriveOmegaHeartbeatCorrectiveControl(params: {

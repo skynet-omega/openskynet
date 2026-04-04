@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { SkynetCausalEpisode } from "./episode-ledger.js";
 import {
+  encodeSkynetCausalEpisodeFeatures,
   trainSkynetCausalValenceModel,
   predictSkynetCausalValence,
   type SkynetCausalValenceModel,
@@ -9,7 +10,8 @@ import {
 describe("Causal Valence: Multi-Action Sensitivity Experiment", () => {
   const baseEpisode: SkynetCausalEpisode = {
     id: "test",
-    timestamp: Date.now(),
+    sessionKey: "agent:openskynet:main",
+    recordedAt: Date.now(),
     context: {
       continuityFreshness: "fresh",
       failureStreak: 0,
@@ -19,6 +21,16 @@ describe("Causal Valence: Multi-Action Sensitivity Experiment", () => {
     transition: {
       operations: [],
       targetPaths: ["src/main.ts"],
+    },
+    outcome: {
+      status: "ok",
+      failureDomain: "none",
+      failureClass: "none",
+      targetSatisfied: true,
+      validationPassed: true,
+      continuityDelta: 0.2,
+      recoveryBurden: 0.1,
+      collateralDamage: 0,
     },
     bootstrapLabel: "stall", // Default for training
   };

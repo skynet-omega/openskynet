@@ -38,6 +38,18 @@ class ScalingHypergraphOrgan(nn.Module):
         self.plasticity_rate = nn.Parameter(torch.tensor(0.01))
         self.decay_rate = nn.Parameter(torch.tensor(0.001))
         self.pruning_threshold = 0.05 # Balanced pruning
+        self.energy_gamma = nn.Parameter(torch.tensor(1.0)) # Dirichlet Energy Filter
+
+    def compute_local_dirichlet_energy(self, h, A):
+        """
+        E_i = sum_j A_ij * ||h_i - h_j||^2
+        Identifies noise (High Energy) vs Signal (Low Energy).
+        """
+        B, N, F = h.shape
+        h_exp1 = h.unsqueeze(2)
+        h_exp2 = h.unsqueeze(1)
+        dist_sq = torch.sum((h_exp1 - h_exp2)**2, dim=-1)
+        return torch.sum(A * dist_sq, dim=-1)
 
     def forward(self, x_in, h_prev, A_prev, training=True):
         batch = x_in.shape[0]
@@ -50,20 +62,25 @@ class ScalingHypergraphOrgan(nn.Module):
         h_diffused = torch.bmm(A_norm, h)
         h = h + 0.2 * (h_diffused - h)
         
-        # 2. Plasticity with Contrast (amplifies strong correlations)
+        # 2. Dirichlet Energy Gating (Sobriety Filter)
+        # Calculates local roughness to identify and block noise propagation.
+        energy = self.compute_local_dirichlet_energy(h, A_prev)
+        energy_gate = torch.exp(-self.energy_gamma.abs() * energy)
+        gate_mat = torch.bmm(energy_gate.unsqueeze(2), energy_gate.unsqueeze(1))
+        
+        # 3. Plasticity with Contrast + Dirichlet Gating
         h_normed = F.normalize(h, dim=-1)
         corr = torch.bmm(h_normed, h_normed.transpose(1, 2))
-        # High-Contrast Update: Power of 2 is more balanced than 3
         contrast_corr = torch.pow(corr.clamp(min=0), 2.0) 
         
         eta = torch.sigmoid(self.plasticity_rate) * 0.05
         lam = torch.sigmoid(self.decay_rate) * 0.01
         
-        A_next = A_prev + eta * contrast_corr - lam * A_prev
+        # Connections only grow if BOTH nodes are 'smooth' (signal-rich)
+        A_next = A_prev + eta * (contrast_corr * gate_mat) - lam * A_prev
         
-        # 3. Aggressive Synaptic Pruning (Sobriety Filter)
+        # 4. Aggressive Synaptic Pruning
         if training:
-            # Keep only the strongest connections (Local Inhibition simulation)
             A_next[A_next < self.pruning_threshold] = 0.0
             
         A_next = torch.clamp(A_next, 0.0, 1.0)
@@ -83,7 +100,11 @@ class SKYNET_CORE_V100_SINGULARITY(nn.Module):
         self.text_embed = nn.Embedding(vocab_size, d_model)
         self.quantizer = GeometricQuantizer()
         self.vision_proj = nn.Linear(30 * 30, d_model)
+        
+        # Noise Filter (Attention by Contrast)
+        self.input_gate = nn.Linear(d_model, d_model)
         self.input_norm = nn.LayerNorm(d_model)
+        
         self.cortex = nn.GRU(d_model, d_model, batch_first=True)
         
         self.phys_proj = nn.Linear(d_model, n_nodes * d_feature)
@@ -120,7 +141,11 @@ class SKYNET_CORE_V100_SINGULARITY(nn.Module):
         if x_text is not None: feats.append(self.text_embed(x_text))
         if x_vision is not None: feats.append(self.vision_proj(self.quantizer(x_vision).view(batch, -1)))
         
-        h_in = self.input_norm(torch.stack(feats).mean(0))
+        # 1. Input Denoising via Contrast Gating (The Focus Limit Fix)
+        raw_in = torch.stack(feats).mean(0)
+        gate = torch.sigmoid(self.input_gate(raw_in))
+        h_in = self.input_norm(raw_in * gate)
+        
         if self.cortex_state is None: self.cortex_state = torch.zeros(1, batch, self.d_model, device=self.device)
         h_ctx, self.cortex_state = self.cortex(h_in.unsqueeze(1), self.cortex_state)
         h_ctx = h_ctx.squeeze(1)

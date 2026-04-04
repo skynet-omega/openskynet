@@ -1,8 +1,8 @@
 import { execSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { appendSkynetCausalEpisode } from "./episode-ledger.js";
-import { harvestSkynetObservedCausalEpisodes } from "./observed-harvester.js";
+import { appendSkynetCausalEpisode } from "../causal-valence/episode-ledger.js";
+import { harvestSkynetObservedCausalEpisodes } from "../causal-valence/observed-harvester.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = path.resolve(__dirname, "../../..");

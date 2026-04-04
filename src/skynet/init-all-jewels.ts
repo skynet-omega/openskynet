@@ -1,7 +1,7 @@
 /**
  * omega/init-all-jewels.ts
  *
- * Inicializa todas las 5 joyas de SKYNET_OMEGA en OpenSkyNet
+ * Inicializa joyas experimentales de SKYNET_OMEGA.
  * Debe ser llamado una sola vez al startup
  */
 
@@ -21,15 +21,20 @@ export interface JewelInitStatus {
   message: string;
 }
 
+function isExperimentalReasoningEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.OPENSKYNET_EXPERIMENTAL_REASONING?.trim() === "1";
+}
+
 /**
  * Inicializar todas las 5 joyas
  * Retorna status de inicialización
  */
 export async function initializeAllJewels(): Promise<JewelInitStatus[]> {
   const status: JewelInitStatus[] = [];
+  const experimentalReasoningEnabled = isExperimentalReasoningEnabled();
 
   try {
-    console.log("[Jewels] 🚀 Initializing all 5 SKYNET_OMEGA jewels...\n");
+    console.log("[Jewels] 🚀 Initializing SKYNET_OMEGA experimental jewels...\n");
 
     // 1. Neural Logic Engine
     try {
@@ -65,37 +70,53 @@ export async function initializeAllJewels(): Promise<JewelInitStatus[]> {
       });
     }
 
-    // 3. Lyapunov Controller
-    try {
-      initializeLyapunovController();
-      getLyapunovController();
+    // 3. Lyapunov Controller (experimental, opt-in)
+    if (experimentalReasoningEnabled) {
+      try {
+        initializeLyapunovController();
+        getLyapunovController();
+        status.push({
+          name: "Lyapunov Controller",
+          initialized: true,
+          message: `✅ Experimental stability probe enabled`,
+        });
+      } catch (err) {
+        status.push({
+          name: "Lyapunov Controller",
+          initialized: false,
+          message: `❌ Failed: ${err instanceof Error ? err.message : "Unknown error"}`,
+        });
+      }
+    } else {
       status.push({
         name: "Lyapunov Controller",
         initialized: true,
-        message: `✅ Homeostasis control ready, prevents divergence > 0.35`,
-      });
-    } catch (err) {
-      status.push({
-        name: "Lyapunov Controller",
-        initialized: false,
-        message: `❌ Failed: ${err instanceof Error ? err.message : "Unknown error"}`,
+        message: "🧪 Experimental-disabled by default (set OPENSKYNET_EXPERIMENTAL_REASONING=1)",
       });
     }
 
-    // 4. Causal Reasoner
-    try {
-      initializeCausalReasoner();
-      getCausalReasoner();
+    // 4. Causal Reasoner (experimental, opt-in)
+    if (experimentalReasoningEnabled) {
+      try {
+        initializeCausalReasoner();
+        getCausalReasoner();
+        status.push({
+          name: "Causal Reasoner",
+          initialized: true,
+          message: `✅ Experimental causal probe enabled`,
+        });
+      } catch (err) {
+        status.push({
+          name: "Causal Reasoner",
+          initialized: false,
+          message: `❌ Failed: ${err instanceof Error ? err.message : "Unknown error"}`,
+        });
+      }
+    } else {
       status.push({
         name: "Causal Reasoner",
         initialized: true,
-        message: `✅ DAG builder ready, learns causality vs correlation`,
-      });
-    } catch (err) {
-      status.push({
-        name: "Causal Reasoner",
-        initialized: false,
-        message: `❌ Failed: ${err instanceof Error ? err.message : "Unknown error"}`,
+        message: "🧪 Experimental-disabled by default (set OPENSKYNET_EXPERIMENTAL_REASONING=1)",
       });
     }
 
@@ -149,8 +170,7 @@ export async function initializeAllJewels(): Promise<JewelInitStatus[]> {
     if (!allInitialized) {
       console.warn("[Jewels] ⚠️  Some jewels failed to initialize. System may degrade gracefully.");
     } else {
-      console.log("[Jewels] 🎯 All 5 jewels + orchestrator READY for integrated reasoning!");
-      console.log("[Jewels] Expected improvement: 90% → 99%+ autonomy, <5% LLM calls");
+      console.log("[Jewels] 🎯 Experimental jewel surface initialized.");
     }
 
     return status;
@@ -186,17 +206,25 @@ export function validateAllJewels(): {
   }
 
   try {
-    const lyapunov = getLyapunovController();
-    const stats = lyapunov.getStats();
-    diagnostics.lyapunov = `LastDiv: ${stats.lastDivergence.toFixed(3)}, AvgDiv: ${stats.avgDivergence.toFixed(3)}, Trend: ${stats.trend.toFixed(3)}`;
+    if (!isExperimentalReasoningEnabled()) {
+      diagnostics.lyapunov = "🧪 DISABLED: experimental reasoning off";
+    } else {
+      const lyapunov = getLyapunovController();
+      const stats = lyapunov.getStats();
+      diagnostics.lyapunov = `LastDiv: ${stats.lastDivergence.toFixed(3)}, AvgDiv: ${stats.avgDivergence.toFixed(3)}, Trend: ${stats.trend.toFixed(3)}`;
+    }
   } catch (err) {
     diagnostics.lyapunov = `❌ ERROR: ${err instanceof Error ? err.message : "Unknown"}`;
   }
 
   try {
-    const causal = getCausalReasoner();
-    const stats = causal.getStats();
-    diagnostics.causal = `Nodes: ${stats.nodes}, Edges: ${stats.edges}, Confounders: ${stats.confounders}, Observations: ${stats.observations}`;
+    if (!isExperimentalReasoningEnabled()) {
+      diagnostics.causal = "🧪 DISABLED: experimental reasoning off";
+    } else {
+      const causal = getCausalReasoner();
+      const stats = causal.getStats();
+      diagnostics.causal = `Nodes: ${stats.nodes}, Edges: ${stats.edges}, Confounders: ${stats.confounders}, Observations: ${stats.observations}`;
+    }
   } catch (err) {
     diagnostics.causal = `❌ ERROR: ${err instanceof Error ? err.message : "Unknown"}`;
   }

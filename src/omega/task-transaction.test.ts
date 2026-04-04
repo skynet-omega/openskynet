@@ -239,13 +239,13 @@ describe("omega task transaction", () => {
         }),
       ],
       nextRecoveryStep: {
-        kind: "abort",
-        reason: "failure_streak_too_high",
+        kind: "resume",
+        reason: "verified_write_failure_after_restart",
         route: "sessions_spawn",
         remainingTargets: [relativeTargetPath],
         requiredKeys: [],
       },
     });
-    expect(prompt).toContain("Next recovery step: abort (failure_streak_too_high)");
+    expect(prompt).toContain("Next recovery step: resume (verified_write_failure_after_restart)");
   });
 });

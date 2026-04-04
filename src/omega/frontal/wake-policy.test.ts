@@ -57,9 +57,33 @@ function makeKernel(overrides?: Partial<OmegaSelfTimeKernelState>): OmegaSelfTim
 }
 
 describe("omega wake policy", () => {
-  it("aborts autonomous interrupted-goal recovery when verified failure streak is too high", () => {
+  it("keeps autonomous interrupted-goal recovery alive through two verified failures", () => {
     const action = decideOmegaWakeAction({
       kernel: makeKernel(),
+    });
+
+    expect(action).toEqual({
+      kind: "resume_interrupted_goal",
+      reason: "verified_write_failure_after_restart",
+      goalTask: "patch target file",
+      goalTargets: ["workspace/file.py"],
+      failureStreak: 2,
+      suggestedRoute: "sessions_spawn",
+      errorKind: "target_not_touched",
+    });
+  });
+
+  it("aborts autonomous interrupted-goal recovery only after the calibrated streak ceiling", () => {
+    const action = decideOmegaWakeAction({
+      kernel: makeKernel({
+        tension: {
+          openGoalCount: 1,
+          staleGoalCount: 0,
+          failureStreak: 3,
+          repeatedFailureKinds: ["target_not_touched"],
+          pendingCorrection: true,
+        },
+      }),
     });
 
     expect(action).toEqual({
@@ -67,7 +91,7 @@ describe("omega wake policy", () => {
       reason: "failure_streak_too_high",
       goalTask: "patch target file",
       goalTargets: ["workspace/file.py"],
-      failureStreak: 2,
+      failureStreak: 3,
       suggestedRoute: "sessions_spawn",
       errorKind: "target_not_touched",
     });

@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { loadOmegaWSP } from "./omega-wsp.js";
 import {
   buildOmegaSessionContextPrompt,
   deriveFocusedActiveTargets,
@@ -134,7 +135,9 @@ describe("omega session context", () => {
     expect(prompt).toContain("Role: local_editor");
     expect(prompt).toContain("Persistent goal: patch target file");
     expect(prompt).toContain("Persistent targets: workspace/manual_code_probe/range_tools.py");
-    expect(prompt).toContain("Learned constraints: return_exact_json_object, touch_required_targets");
+    expect(prompt).toContain(
+      "Learned constraints: return_exact_json_object, touch_required_targets",
+    );
     expect(prompt).toContain("[OMEGA Session Timeline]");
     expect(prompt).toContain("[OMEGA Self/Time Kernel]");
     expect(prompt).toContain("Kernel failure streak: 2");
@@ -300,6 +303,108 @@ describe("omega session context", () => {
         }),
       ]),
     );
+  });
+
+  it("persists calibrated WSP drive state and resolves failure tension after a successful repair", async () => {
+    await recordOmegaSessionOutcome({
+      workspaceRoot,
+      sessionKey: "main",
+      task: "patch target file",
+      validation: {
+        expectsJson: false,
+        expectedKeys: [],
+        expectedPaths: ["workspace/manual_code_probe/range_tools.py"],
+      },
+      outcome: {
+        status: "error",
+        errorKind: "target_not_touched",
+        observedChangedFiles: [],
+        writeOk: false,
+      },
+    });
+
+    const afterFailure = await loadOmegaWSP(workspaceRoot, "main");
+    expect(afterFailure.updateCount).toBe(1);
+    expect(
+      afterFailure.drives.find((drive) => drive.name === "homeostasis")?.error,
+    ).toBeGreaterThan(0);
+    expect(afterFailure.beliefs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          topic: "omega:last_outcome_status",
+          value: "error",
+        }),
+        expect.objectContaining({
+          topic: "omega:error_kind:target_not_touched",
+          value: "observed_recently",
+        }),
+        expect.objectContaining({
+          topic: "target:workspace/manual_code_probe/range_tools.py",
+          value: "write_verification_failed_recently",
+        }),
+      ]),
+    );
+    expect(afterFailure.causalEdges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          cause: "task:patch target file",
+          effect: "error:target_not_touched",
+        }),
+        expect.objectContaining({
+          cause: "task:patch target file",
+          effect: "write:workspace/manual_code_probe/range_tools.py",
+        }),
+      ]),
+    );
+    expect(
+      afterFailure.tensions.some(
+        (tension) => tension.type === "unresolved_failure" && !tension.resolvedAt,
+      ),
+    ).toBe(true);
+
+    await recordOmegaSessionOutcome({
+      workspaceRoot,
+      sessionKey: "main",
+      task: "patch target file",
+      validation: {
+        expectsJson: false,
+        expectedKeys: [],
+        expectedPaths: ["workspace/manual_code_probe/range_tools.py"],
+      },
+      outcome: {
+        status: "ok",
+        observedChangedFiles: ["workspace/manual_code_probe/range_tools.py"],
+        writeOk: true,
+      },
+    });
+
+    const afterSuccess = await loadOmegaWSP(workspaceRoot, "main");
+    expect(afterSuccess.updateCount).toBe(2);
+    expect(afterSuccess.beliefs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          topic: "omega:last_outcome_status",
+          value: "ok",
+        }),
+        expect.objectContaining({
+          topic: "target:workspace/manual_code_probe/range_tools.py",
+          value: "verified_writable",
+        }),
+      ]),
+    );
+    expect(
+      afterSuccess.causalEdges.some(
+        (edge) =>
+          edge.cause === "task:patch target file" &&
+          edge.effect === "write:workspace/manual_code_probe/range_tools.py" &&
+          edge.observations >= 2,
+      ),
+    ).toBe(true);
+    expect(
+      afterSuccess.tensions
+        .filter((tension) => tension.type === "unresolved_failure")
+        .every((tension) => typeof tension.resolvedAt === "number"),
+    ).toBe(true);
   });
 
   it("prunes stale goals from the kernel ledger without deleting active work", async () => {
@@ -557,9 +662,13 @@ describe("omega session context", () => {
     });
 
     expect(pruned.prunedGoalTasks).toEqual(["fix module and test together"]);
-    expect(afterKernel?.goals.some((goal) => goal.task === "fix module and test together")).toBe(false);
+    expect(afterKernel?.goals.some((goal) => goal.task === "fix module and test together")).toBe(
+      false,
+    );
     expect(afterKernel?.activeGoalId).toBeDefined();
-    expect(afterKernel?.goals.some((goal) => goal.task === "fix test only" && goal.status === "active")).toBe(true);
+    expect(
+      afterKernel?.goals.some((goal) => goal.task === "fix test only" && goal.status === "active"),
+    ).toBe(true);
     expect(afterState).toMatchObject({
       activeGoal: "fix test only",
       activeTargets: ["workspace/b.py"],

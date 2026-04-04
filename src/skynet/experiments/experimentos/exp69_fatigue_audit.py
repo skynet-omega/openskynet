@@ -99,11 +99,28 @@ def run_fatigue_audit():
 
     # --- TEST 2: NOISE RESILIENCE ---
     print("\n[Audit 2] Testing Resilience to Saturating Noise...")
+    x_noisy_train, y_noisy_train = generate_chain_data(chain_length=2, n_samples=200)
+    x_noisy_train[:, :, 100:600] += torch.randn_like(x_noisy_train[:, :, 100:600]) * 5.0 
+    
+    # Train the Sobriety Filter (Input Gate & Synaptic Pruning)
+    model.train()
+    for _ in range(5):
+        for i in range(0, len(x_noisy_train), batch_size):
+            model.reset()
+            xb = x_noisy_train[i:i+batch_size]
+            yb = y_noisy_train[i:i+batch_size]
+            for t in range(xb.shape[1]):
+                out = model(x_text=xb[:, t].argmax(-1))
+            loss = F.cross_entropy(out['logits'], yb)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            
     x_clean, y_clean = generate_chain_data(chain_length=2, n_samples=200)
-    # Add massive noise to other input dims
     x_noisy = x_clean.clone()
     x_noisy[:, :, 100:600] += torch.randn_like(x_noisy[:, :, 100:600]) * 5.0 
     
+    model.eval()
     with torch.no_grad():
         model.reset()
         for t in range(x_noisy.shape[1]):

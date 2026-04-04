@@ -43,10 +43,7 @@ export function hasActiveOmegaWspDriveAuthority(
   if (ageMs !== null && ageMs > OMEGA_WSP_MAX_AUTHORITY_STALENESS_MS) {
     return false;
   }
-  if (wsp.updateCount > 0) {
-    return true;
-  }
-  return wsp.drives.some((drive) => Math.abs(drive.error) > 0.01);
+  return wsp.updateCount > 0;
 }
 
 export function deriveOmegaStateAuthoritySnapshot(params: {
@@ -104,7 +101,7 @@ export function deriveOmegaStateAuthoritySnapshot(params: {
       ? {
           source: "omega-wsp",
           status: "authoritative",
-          reason: "persistent_homeostatic_drive_state_available",
+          reason: "persistent_homeostatic_drive_state_calibrated",
         }
       : params.wsp &&
           wspWasPreviouslyCalibrated &&

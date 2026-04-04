@@ -132,11 +132,7 @@ function normalizeText(value: string): string {
 
 function normalizeList(values: string[]): string[] {
   return Array.from(
-    new Set(
-      values
-        .map((value) => value.trim())
-        .filter((value) => value.length > 0),
-    ),
+    new Set(values.map((value) => value.trim()).filter((value) => value.length > 0)),
   );
 }
 
@@ -173,17 +169,27 @@ function cloneCausalEdge(edge: OmegaKernelCausalEdge): OmegaKernelCausalEdge {
 }
 
 function uniqueRepeatedFailureKinds(values: string[]): string[] {
-  return Array.from(
-    new Set(
-      values.filter((value, index, all) => value.length > 0 && all.indexOf(value) !== index),
-    ),
-  );
+  // Collect kinds that appear more than once (i.e., genuinely repeated).
+  const seen = new Set<string>();
+  const repeated = new Set<string>();
+  for (const value of values) {
+    if (value.length === 0) continue;
+    if (seen.has(value)) {
+      repeated.add(value);
+    } else {
+      seen.add(value);
+    }
+  }
+  return Array.from(repeated);
 }
 
 function sameGoalMatch(goal: OmegaKernelGoal, task: string, targets: string[]): boolean {
   const normalizedTargets = normalizeList(targets);
   if (normalizedTargets.length > 0) {
-    return JSON.stringify(goal.targets) === JSON.stringify(normalizedTargets);
+    // Sort both sides so order differences don't create duplicate goals.
+    const sortedGoal = [...goal.targets].sort();
+    const sortedNew = [...normalizedTargets].sort();
+    return JSON.stringify(sortedGoal) === JSON.stringify(sortedNew);
   }
   return normalizeText(goal.task) === normalizeText(task);
 }
@@ -221,7 +227,10 @@ function deriveKernelTension(params: {
   currentOutcome: KernelOutcomeSnapshot;
   interaction: OmegaInputInterpretation;
 }): OmegaKernelTensionState {
-  const recentOutcomes = [...params.timeline.slice(-3).map((entry) => entry.outcome), params.currentOutcome];
+  const recentOutcomes = [
+    ...params.timeline.slice(-3).map((entry) => entry.outcome),
+    params.currentOutcome,
+  ];
   const failureKinds = recentOutcomes
     .filter((outcome) => outcome.status !== "ok")
     .map((outcome) => outcome.errorKind ?? "");
@@ -255,9 +264,7 @@ function pruneGoalLedger(goals: OmegaKernelGoal[], activeGoalId?: string): Omega
   return kept.sort((left, right) => left.updatedTurn - right.updatedTurn);
 }
 
-function cloneCausalGraph(
-  graph?: OmegaKernelCausalGraphState,
-): OmegaKernelCausalGraphState {
+function cloneCausalGraph(graph?: OmegaKernelCausalGraphState): OmegaKernelCausalGraphState {
   return {
     files: (graph?.files ?? []).map(cloneTrackedFile),
     edges: (graph?.edges ?? []).map(cloneCausalEdge),

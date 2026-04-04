@@ -1,9 +1,13 @@
 /**
  * src/omega/jepa-drive-enhancement.ts
  *
- * JEPA Tension Bridge Enhancement para Drives
+ * Legacy "JEPA" tension bridge for drives.
  *
- * Cuando JEPA detecta alta frustración, puede:
+ * Realidad actual:
+ * - no usa embeddings ni predictor JEPA en el path de control
+ * - usa una heurística observacional sobre failure-rate reciente
+ *
+ * Cuando la heurística detecta alta frustración, puede:
  * 1. Elevar urgencia de drives existentes
  * 2. Activar drives que estarían dormidas
  * 3. Cambiar target de curiosidad si hay pattern
@@ -12,14 +16,15 @@
 import type { InnerDriveSignal } from "./inner-life/index.js";
 
 export interface JepaTensionMetrics {
-  frustration: number; // 0-2 (heurística: failureRate * 2)
+  frustration: number; // 0-2 (heurística observacional: failureRate * 2)
   confidence: number; // 0-1
   surprise?: number; // 0-1 worsening vs prior recent window
   error?: string;
 }
 
 /**
- * Enhance a drive signal using JEPA tension metrics.
+ * Enhance a drive signal using legacy JEPA-named tension metrics.
+ * The actual signal today is a failure-rate heuristic, not JEPA inference.
  *
  * Reglas de enhancement (v2 - optimized thresholds):
  * - Si frustration > 0.5: elevar urgencia (antes era 1.0, creaba dead zone)
@@ -27,8 +32,8 @@ export interface JepaTensionMetrics {
  * - Removed: Low frustration reduction (was counterproductive)
  *
  * Rationale:
- * - Decision frequency increases when system struggles (frustration > 0.5)
- * - Entropy alert activates when really stuck (frustration > 1.5)
+ * - Decision frequency increases when the system struggles (frustration > 0.5)
+ * - Entropy alert activates when the heuristic says the loop is really stuck
  * - No negative boost: autonomy shouldn't decrease when things work
  */
 export function enhanceDriveWithJepaTension(
@@ -37,12 +42,12 @@ export function enhanceDriveWithJepaTension(
 ): InnerDriveSignal {
   const surprise = Math.max(0, Math.min(1, jepaTension.surprise ?? 0));
 
-  // Si hay error en JEPA, retornar señal original sin cambios
+  // Si la heurística falla, retornar señal original sin cambios
   if (jepaTension.error || jepaTension.confidence < 0.3) {
     return driveSignal;
   }
 
-  // Caso 1: Drive idle pero JEPA detecta frustración extrema
+  // Caso 1: Drive idle pero la heurística detecta frustración extrema
   // Cuando frustración > 1.5 (75% failures), fuerza exploración
   if (
     driveSignal.kind === "idle" &&
@@ -50,13 +55,13 @@ export function enhanceDriveWithJepaTension(
   ) {
     return {
       kind: "entropy_alert",
-      silentMs: 0, // JEPA triggered, no es silencio temporal
-      reason: `JEPA-EMERGENCY: frustration=${jepaTension.frustration.toFixed(2)} surprise=${surprise.toFixed(2)}`,
+      silentMs: 0, // heuristic triggered, no es silencio temporal
+      reason: `HEURISTIC-EMERGENCY: frustration=${jepaTension.frustration.toFixed(2)} surprise=${surprise.toFixed(2)}`,
       urgency: Math.min(0.98, 0.58 + jepaTension.frustration * 0.12 + surprise * 0.2),
     };
   }
 
-  // Caso 2: Drive existing pero JEPA eleva urgencia por frustración
+  // Caso 2: Drive existing pero la heurística eleva urgencia por frustración
   // Threshold lowered from 1.0 to 0.5 to capture mid-range struggles
   if (driveSignal.kind !== "idle" && (jepaTension.frustration > 0.5 || surprise > 0.22)) {
     const baseUrgency = driveSignal.urgency ?? 0.5;
@@ -66,7 +71,7 @@ export function enhanceDriveWithJepaTension(
     return {
       ...driveSignal,
       urgency: newUrgency,
-      reason: `${driveSignal.reason} [JEPA-ENHANCED: +${(boostAmount * 100).toFixed(0)}% surprise=${surprise.toFixed(2)}]`,
+      reason: `${driveSignal.reason} [HEURISTIC-ENHANCED: +${(boostAmount * 100).toFixed(0)}% surprise=${surprise.toFixed(2)}]`,
     };
   }
 
@@ -86,13 +91,13 @@ export function enhanceDriveWithJepaTension(
       return {
         kind: "curiosity",
         target: "memory/",
-        reason: `JEPA-ENGAGED: moderate frustration=${jepaTension.frustration.toFixed(2)} surprise=${surprise.toFixed(2)}`,
+        reason: `HEURISTIC-ENGAGED: moderate frustration=${jepaTension.frustration.toFixed(2)} surprise=${surprise.toFixed(2)}`,
         urgency: Math.min(0.84, urgency),
       };
     } else {
       return {
         kind: "homeostasis",
-        reason: `JEPA-ENGAGED: moderate frustration=${jepaTension.frustration.toFixed(2)} surprise=${surprise.toFixed(2)}`,
+        reason: `HEURISTIC-ENGAGED: moderate frustration=${jepaTension.frustration.toFixed(2)} surprise=${surprise.toFixed(2)}`,
         urgency: Math.min(0.82, urgency),
       };
     }
@@ -103,16 +108,16 @@ export function enhanceDriveWithJepaTension(
 }
 
 /**
- * Metrics from JEPA predictor about frustration
+ * Legacy JEPA-named metrics from recent turn outcomes.
  *
  * Heurística simplificada:
  * - Timeline analysis: % de fallos recientes
  * - frustration = failureRate * 2 (0-2 scale)
  * - confidence = 1 - failureRate
  *
- * Con datos reales de SKYNET_OMEGA/jepa_predictor.py:
- * - VICReg loss como proxy de "sorpresa"
- * - Embedding divergence como proxy de "incertidumbre"
+ * Nota:
+ * - el nombre histórico se mantiene por compatibilidad de imports
+ * - esto no debe interpretarse como predictor JEPA operativo
  *
  * Compatible with both KernelTimelineEntry and OmegaSessionTimelineEntry:
  * - If `turn` field is missing, derives it from array index

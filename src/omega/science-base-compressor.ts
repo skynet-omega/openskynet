@@ -1,14 +1,14 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
+const MAX_SCIENCE_BASE_RULES = 128;
+
 /**
  * Executes a "sleep cycle" for the empirical memory.
  * It reads SCIENCE_BASE.md, deduplicates rules, groups similar findings,
  * and rewrites the file to prevent it from growing indefinitely.
  */
-export async function compressScienceBase(params: {
-  workspaceRoot: string;
-}): Promise<{
+export async function compressScienceBase(params: { workspaceRoot: string }): Promise<{
   originalLines: number;
   newLines: number;
   status: "compressed" | "skipped" | "error";
@@ -76,11 +76,12 @@ export async function compressScienceBase(params: {
     }
 
     // Reconstruct
+    const compactedTableRows = Array.from(tableRecords.values()).slice(-MAX_SCIENCE_BASE_RULES);
     const newContent = [
       ...headerLines,
       ...cleanedKnowledge,
       ...tableHeaders,
-      ...Array.from(tableRecords.values()),
+      ...compactedTableRows,
     ].join("\n");
 
     if (newContent.length !== content.length) {

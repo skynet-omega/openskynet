@@ -1,7 +1,7 @@
 import type { OmegaKernelGoal, OmegaSelfTimeKernelState } from "./self-time-kernel.js";
 import { type OmegaInterruptedGoalRecovery } from "./types.js";
 
-export const OMEGA_AUTONOMOUS_RECOVERY_MAX_FAILURE_STREAK = 1;
+export const OMEGA_AUTONOMOUS_RECOVERY_MAX_FAILURE_STREAK = 2;
 
 const WRITE_FAILURE_ERROR_KINDS = new Set(["target_not_touched", "missing_target_writes"]);
 const LOCALITY_FAILURE_ERROR_KINDS = new Set(["unexpected_collateral_writes"]);

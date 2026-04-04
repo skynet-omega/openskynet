@@ -1,15 +1,13 @@
 import crypto from "node:crypto";
 import path from "node:path";
 import { withFileLock } from "../infra/file-lock.js";
+import { sanitizeOmegaSessionKey } from "./paths.js";
 
 const OMEGA_SESSION_LOCK_TIMEOUT_MS = 10_000;
 const OMEGA_SESSION_LOCK_STALE_MS = 30_000;
 
 function sanitizeSessionKey(sessionKey: string): string {
-  const normalized = sessionKey.trim() || "main";
-  const readable = normalized.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 48) || "main";
-  const digest = crypto.createHash("sha256").update(normalized).digest("hex").slice(0, 12);
-  return `${readable}-${digest}.json`;
+  return sanitizeOmegaSessionKey(sessionKey);
 }
 
 function resolveOmegaSessionLockFile(params: {

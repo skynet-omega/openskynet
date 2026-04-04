@@ -1,8 +1,8 @@
 /**
  * omega-integrated-reasoning.ts
  *
- * Orquestador de las 5 joyas de SKYNET_OMEGA
- * Coordina: NLE + HM + Lyapunov + Causal + Metabolism
+ * Orquestador experimental de joyas SKYNET_OMEGA.
+ * El núcleo productivo no debe depender de Lyapunov/Causal por defecto.
  *
  * Interfaz unificada para heartbeat.ts
  */
@@ -12,6 +12,10 @@ import { getHierarchicalMemory } from "./hierarchical-memory.js";
 import { getLyapunovController } from "./lyapunov-controller.js";
 import { getNeuralLogicEngine } from "./neural-logic-engine.js";
 import { getSparseMetabolism } from "./sparse-metabolism.js";
+
+function isExperimentalReasoningEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.OPENSKYNET_EXPERIMENTAL_REASONING?.trim() === "1";
+}
 
 export interface IntegratedReasoningState {
   timestamp: number;
@@ -89,6 +93,7 @@ export class OmegaIntegratedReasoner {
     // ───────────────────────────────────────────────────────────────
     const metabolism = getSparseMetabolism();
     const metabolismState = metabolism.computeMetabolism(frustration);
+    const experimentalReasoningEnabled = isExperimentalReasoningEnabled();
 
     const state: IntegratedReasoningState = {
       timestamp,
@@ -174,7 +179,7 @@ export class OmegaIntegratedReasoner {
     // FASE 3: LYAPUNOV CONTROL
     // ───────────────────────────────────────────────────────────────
     let originalUrgency = enhancedDrive.urgency ?? 1.0;
-    if (metabolism.shouldActivate("lyapunov_controller")) {
+    if (experimentalReasoningEnabled && metabolism.shouldActivate("lyapunov_controller")) {
       const lyapunov = getLyapunovController();
 
       // Calcular divergencia
@@ -201,7 +206,11 @@ export class OmegaIntegratedReasoner {
     // ───────────────────────────────────────────────────────────────
     // FASE 4: CAUSAL REASONER
     // ───────────────────────────────────────────────────────────────
-    if (metabolism.shouldActivate("causal_reasoner") && driveSignal.kind !== "idle") {
+    if (
+      experimentalReasoningEnabled &&
+      metabolism.shouldActivate("causal_reasoner") &&
+      driveSignal.kind !== "idle"
+    ) {
       const reasoner = getCausalReasoner();
 
       // Observar correlación
@@ -257,11 +266,11 @@ export class OmegaIntegratedReasoner {
     }
 
     if (state.lyapunov) {
-      report += `  [Lyapunov] Divergence=${state.lyapunov.divergence.toFixed(3)}, Damping=${(state.lyapunov.damping * 100).toFixed(1)}%, ${state.lyapunov.isStable ? "🟢 STABLE" : "🔴 AT RISK"}\n`;
+      report += `  [Lyapunov/experimental] Divergence=${state.lyapunov.divergence.toFixed(3)}, Damping=${(state.lyapunov.damping * 100).toFixed(1)}%, ${state.lyapunov.isStable ? "🟢 STABLE" : "🔴 AT RISK"}\n`;
     }
 
     if (state.causal) {
-      report += `  [Causal] DAG nodes=${state.causal.nodesInGraph}, confounders=${state.causal.confoundersDetected}\n`;
+      report += `  [Causal/experimental] DAG nodes=${state.causal.nodesInGraph}, confounders=${state.causal.confoundersDetected}\n`;
       if (state.causal.predictedBackfires.length > 0) {
         report += `    ⚠ Predicted backfires: ${state.causal.predictedBackfires.join(", ")}\n`;
       }

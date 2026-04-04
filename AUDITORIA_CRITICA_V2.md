@@ -1,89 +1,164 @@
-# Auditoria Critica V2: Estado Real de OpenSkyNet
+# Auditoría Crítica V2
 
-**Fecha:** 2026-03-26
-**Base:** revision empirica del repo, runtime activo y stores reales
+> Estado actualizado al `2026-04-04`. Este documento reemplaza el diagnóstico anterior para que el repo no quede con hallazgos ya resueltos mezclados con pendientes reales.
 
 ## Veredicto
 
-OpenSkyNet ya no esta en fase de caos inicial, pero tampoco es todavia un sistema soberano. La direccion `Skynet` es real y util. La implementacion actual mezcla piezas prometedoras con varias capacidades todavia simuladas, parciales o demasiado dependientes del LLM.
+El kernel de `src/omega` ya no está en el estado criticado originalmente. Las piezas que antes eran aspiracionales o engañosas quedaron en una de estas categorías:
 
-Clasificacion global de la auditoria anterior:
+- `resuelto`: el problema lógico fue corregido en código y cubierto por tests.
+- `parcial`: el problema bajó de severidad, pero todavía falta validación empírica más dura.
+- `vigente`: sigue siendo una deuda real y no debe venderse como cerrada.
 
-- `macro`: mayormente correcta
-- `micro`: incompleta y con varias afirmaciones exageradas
-- `estado actual`: necesita precision empirica, no narrativa
+## Macro
 
-## Lo Verdadero
+### Resuelto
 
-- Existe una transicion real de `Omega` hacia `Skynet` como nucleo experimental dentro de [src/skynet](/home/daroch/openskynet/src/skynet).
-- La memoria viva estructurada es una mejora real y ya opera desde [living-memory.ts](/home/daroch/openskynet/src/omega/living-memory.ts).
-- `world-model.ts` si integra memoria durable, agenda, continuidad y estudio supervisor en [world-model.ts](/home/daroch/openskynet/src/omega/world-model.ts).
-- `constraintBridgeMemories` existe y si ayuda a heredar restricciones entre ciclos en [world-model.ts](/home/daroch/openskynet/src/omega/world-model.ts).
-- La Web UI ya puede inspeccionar estado estructurado de `Skynet` desde [debug.ts](/home/daroch/openskynet/ui/src/ui/controllers/debug.ts) y [overview.ts](/home/daroch/openskynet/ui/src/ui/views/overview.ts).
+- `recovery.ts`: la recuperación autónoma ya no aborta tras un solo fallo. `OMEGA_AUTONOMOUS_RECOVERY_MAX_FAILURE_STREAK` pasó a `2`, con tests en `wake-policy.test.ts` y `task-transaction.test.ts`.
+- `omega-wsp.ts`: WSP dejó de ser solo lectura. Ahora tiene writer único por turno desde `recordOmegaSessionOutcome()`, persiste en `.openskynet/omega-wsp.json`, actualiza drives, beliefs, causal edges y tensiones.
+- `state-authority.ts`: WSP ya no tiene autoridad por existir. Solo cuenta si fue calibrado de verdad (`updateCount > 0`) y no está stale.
+- `jepa-drive-enhancement.ts`: sigue manteniendo el nombre histórico por compatibilidad, pero el contenido y los reasons visibles ahora lo describen como heurística observacional, no como JEPA real.
+- `session-context.ts`: se corrigió la canonicalización de `sessionKey`, eliminando el bug que vaciaba transacciones al recargar.
+- `sparse-metabolism.ts` y `omega-integrated-reasoning.ts`: `Lyapunov` y `CausalReasoner` quedaron fuera del path productivo por defecto detrás de `OPENSKYNET_EXPERIMENTAL_REASONING=1`.
+- `science-base-writer.ts`: ya no deduplica por substring débil. Ahora normaliza task+files, deduplica por clave semántica y dispara compresión automática cuando la tabla crece.
+- `science-base-compressor.ts`: además de deduplicar, ahora impone un tope real de reglas para evitar crecimiento indefinido.
 
-## Lo Falso O Exagerado
+### Parcial
 
-- [bifurcation-engine.ts](/home/daroch/openskynet/src/skynet/bifurcation-engine.ts) no ejecuta ramas paralelas ni da resiliencia operacional por si mismo. Hoy persiste decisiones de bifurcacion; no es un scheduler multi-ruta.
-- [research-harvester.ts](/home/daroch/openskynet/src/skynet/artifacts/research-harvester.ts) no es todavia una pieza central madura. Es un extractor heuristico sobre archivos `SKYNET_*.md`.
-- `lobeState` en [heartbeat-idle.ts](/home/daroch/openskynet/src/omega/heartbeat-idle.ts) no esta “declarado pero sin asignar”. Ese hallazgo ya era obsoleto.
-- La “fragmentacion de la verdad en MEMORY.md” ya no describe bien el sistema. La autoridad actual de `Skynet` esta en `.openskynet/living-memory/` y stores estructurados.
-- No hay evidencia de que `Skynet` ya tenga soberania de autoinyeccion de codigo en produccion sin supervision. Hay agenda, compromiso y artefactos; no una cadena cerrada de promocion autonoma.
+- `omega-wsp.ts`: beliefs y causal edges ya tienen writer y lector, pero todavía falta medir con ablación dura si mejoran decisiones reales frente a `kernel-only`.
+- `study-supervisor.ts` y `problem-agenda.ts`: siguen siendo capas derivadas útiles, pero no tienen benchmark fuerte de utilidad incremental.
+- `science-base`: ya no crece de forma ingenua, pero su valor sigue dependiendo de la calidad de las reglas generadas; la poda de tamaño evita daño, no demuestra beneficio.
 
-## Limitaciones Criticas Reales
+### Vigente
 
-### 1. Soberania de decision incompleta
+- No existe todavía una ablación formal `kernel-only vs kernel+WSP` que pruebe costo/beneficio en decisiones reales.
+- `Lyapunov` y `CausalReasoner` están correctamente despromovidos, pero no rehabilitados. Siguen siendo experimentos, no capacidades productivas demostradas.
 
-El sistema todavia depende demasiado del LLM para la capa alta de interpretacion y seleccion. Hay mas estructura que antes, pero no un control frio/caliente totalmente separado ni una economia cognitiva cerrada.
+## Meso
 
-### 2. Demasiadas piezas con autoridad parcial
+### 1. Kernel + Wake Policy
 
-Aunque la memoria viva mejoro mucho, OpenSkyNet todavia reparte estado entre:
+Estado: `resuelto`
 
-- stores estructurados en `.openskynet/`
-- transcripts/sesiones del gateway
-- memoria humana derivada en `memory/*.md`
-- varios subsistemas `omega` con responsabilidad superpuesta
+Sigue siendo la parte más limpia y falsable del sistema. El cambio importante fue remover el aborto prematuro de recovery. Hoy el comportamiento es más razonable:
 
-Esto es mejor que antes, pero todavia no es un mapa “macOS”: hay demasiadas piezas que siguen coexistiendo por arrastre historico.
+- `failureStreak <= 2`: todavía intenta recuperación.
+- `failureStreak >= 3`: aborta la recuperación interrumpida.
 
-### 3. El experimento `Skynet` aun tiene mas coordinacion que metabolismo
+### 2. Durable Memory + Empirical Metrics
 
-Hoy `Skynet` ya tiene:
+Estado: `resuelto`
 
-- foco
-- continuidad
-- compromiso
-- pulso
-- artefactos
+No apareció evidencia nueva que contradiga el diagnóstico bueno original. Siguen siendo las piezas más directamente empíricas del kernel:
 
-Pero todavia no tiene un metabolismo cognitivo suficientemente fuerte como para sostener una agenda cientifica robusta sin mucha interpretacion textual.
+- aprendizaje por fingerprint de tarea/targets
+- routing ajustado por historial
+- métricas operativas persistidas en JSON llano
 
-### 4. Hay artefactos experimentales desparejos
+### 3. WSP
 
-No todos los artefactos bajo `src/skynet/artifacts/` tienen la misma madurez. Algunos ya sirven; otros siguen siendo sondas o probes de valor parcial. Esto exige revision empirica continua y poda real.
+Estado: `parcial`
 
-### 5. El store de sesiones del agente sigue siendo delicado
+La crítica original ya no es correcta. Antes WSP estaba medio muerto; ahora sí cierra un loop mínimo:
 
-La contaminacion previa del `main` por heartbeat mostro que la capa de sesiones todavia podia arrastrar metadata equivocada. Eso ya fue corregido, pero demuestra que el runtime conversacional y el runtime experimental aun no estan totalmente desacoplados.
+`turno -> syncOmegaWspFromTurn -> saveOmegaWsp -> state-authority/policy`
 
-## Estado Operativo Actual
+Qué sí hace ahora:
 
-- `heartbeat` del agente `openskynet`: desactivado
-- `main`: limpio y recreado
-- WhatsApp: desactivado en configuracion activa
-- Telegram: canal principal activo
-- `living-memory`: activo y visible por UI
+- decaimiento temporal de drives
+- satisfacción/penalización por outcome
+- tensiones persistentes
+- beliefs mínimas sobre outcome, errores y targets verificables
+- causal edges mínimos sobre tarea→error y tarea→write
 
-## Direccion Correcta
+Qué falta:
 
-La siguiente fase no deberia centrarse en mas microajustes dispersos. Deberia centrarse en:
+- demostrar que este estado cambia decisiones con beneficio neto suficiente
+- evitar inflar la narrativa más allá de ese loop mínimo
 
-1. reducir centros de autoridad
-2. reforzar el nucleo experimental `Skynet`
-3. convertir artefactos/probes en mecanismos ejecutivos reales
-4. medir autonomia, continuidad y causalidad con benchmarks propios
-5. podar lo experimental que no pase ese filtro
+### 4. Lyapunov Controller
+
+Estado: `resuelto` como problema de honestidad arquitectónica
+
+No fue “arreglado” para producción; fue correctamente relegado a experimento opt-in. Eso resuelve el problema práctico: ya no contamina el kernel productivo con una promesa que no cumple.
+
+### 5. CausalReasoner
+
+Estado: `resuelto` como problema de honestidad arquitectónica
+
+Mismo criterio que Lyapunov. Sigue existiendo como laboratorio, no como pieza activa del runtime normal.
+
+### 6. JEPA Enhancement
+
+Estado: `resuelto`
+
+La implementación sigue siendo heurística simple, pero ya no se presenta como una capacidad que no es. El problema pendiente aquí era semántico y de arquitectura de expectativas, no de corrección funcional.
+
+### 7. SCIENCE_BASE
+
+Estado: `parcial`
+
+Antes el problema era doble:
+
+- dedupe débil
+- compresión no automática
+
+Eso ya quedó corregido:
+
+- el writer normaliza archivos, deduplica por task+files y evita duplicados por orden distinto
+- la compresión se dispara automáticamente al cruzar umbral
+- el compresor también recorta el tamaño total de reglas retenidas
+
+Lo que sigue pendiente es más epistemológico que operativo: demostrar que las reglas retenidas mejoran realmente el comportamiento en vez de solo ocupar contexto.
+
+## Micro
+
+### M1. Recovery max failure streak
+
+Estado: `resuelto`
+
+- Antes: `1`
+- Ahora: `2`
+- Evidencia: `wake-policy.test.ts`, `task-transaction.test.ts`
+
+### M2. WSP sin writer real
+
+Estado: `resuelto`
+
+- Antes: WSP era casi todo estructura sin metabolismo operativo
+- Ahora: `recordOmegaSessionOutcome()` sincroniza WSP por turno y persiste el resultado
+
+### M3. Beliefs y causal edges del WSP vacíos
+
+Estado: `resuelto`
+
+Ya no están vacíos por diseño. Se alimentan con outcome, targets esperados, cambios observados y kinds de error.
+
+### M4. Dos grafos causales muertos en producción
+
+Estado: `resuelto` de forma pragmática
+
+El kernel mantiene su grafo útil. Las otras capas causales quedaron fuera del path productivo por defecto en lugar de seguir fingiendo relevancia runtime.
+
+### M5. SCIENCE_BASE sin control de crecimiento
+
+Estado: `resuelto`
+
+Ahora hay:
+
+- dedupe por clave normalizada
+- compresión automática por umbral
+- límite de reglas retenidas
 
 ## Conclusión
 
-OpenSkyNet ya no es solo un asistente con tools. Pero tampoco es todavia un organismo soberano. El progreso real esta en haber creado un sustrato donde `Skynet` puede existir como linea experimental persistente. El cuello de botella ya no es “crear mas piezas”, sino decidir cuales sobreviven y cuales se convierten en mecanismo real.
+La versión anterior de esta auditoría quedó obsoleta en puntos clave. Hoy el juicio más honesto es:
+
+- el núcleo útil del sistema sí existe y está mejor alineado con su retórica
+- las capas experimentales fueron despromovidas correctamente
+- WSP pasó de “casi decorativo” a “mínimamente operativo”
+- la deuda principal ya no es de wiring, sino de validación empírica costo/beneficio
+
+## Criterio para subir a Git
+
+Para este frente, el proyecto ya no tiene un pendiente crítico que impida subirlo por incoherencia interna del kernel. Lo que queda abierto es investigación y benchmark, no una contradicción obvia entre documento y código productivo.

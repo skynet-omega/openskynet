@@ -1,15 +1,17 @@
 /**
  * Sparse Metabolism para OpenSkyNet
  *
- * Problema: Cada ciclo de heartbeat corre TODOS los componentes
+ * Problema: cada ciclo cognitivo no debería promover componentes experimentales
+ * como si fueran parte del kernel productivo.
  *   - Neural Logic Engine (64 reglas)
  *   - Hierarchical Memory (query episodic)
- *   - Lyapunov Control (calcular divergencia)
- *   - Causal Reasoner (BFS sobre grafo)
+ *   - Lyapunov Control (experimental)
+ *   - Causal Reasoner (experimental)
  *   Resultado: Compute innecesario, latencia creciente
  *
  * Solución: "Metabolismo Disperso"
  *   - Cada componente se ejecuta SOLO cuando lo necesita
+ *   - Los componentes experimentales se mantienen apagados por defecto
  *   - Ajusta su actividad basado en frustración actual
  *   - Resultado: Eficiencia + mayor autonomía bajo presión
  *
@@ -34,6 +36,10 @@ export interface MetabolismState {
   activatedComponents: ComponentType[];
   skippedComponents: ComponentType[];
   reason: string;
+}
+
+function isExperimentalReasoningEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.OPENSKYNET_EXPERIMENTAL_REASONING?.trim() === "1";
 }
 
 export class SparseMetabolism {
@@ -170,6 +176,13 @@ export class SparseMetabolism {
     effectiveFrustration: number,
     surprise: number,
   ): boolean {
+    if (
+      (component === "lyapunov_controller" || component === "causal_reasoner") &&
+      !isExperimentalReasoningEnabled()
+    ) {
+      return false;
+    }
+
     switch (component) {
       case "neural_logic_engine":
       case "autonomy_logger":

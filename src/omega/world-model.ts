@@ -8,7 +8,6 @@ import type { OmegaSessionSelfState } from "./event-model.js";
 import {
   type SkynetContinuityState,
   type SkynetNucleusState,
-  type SkynetBifurcationState,
   type SkynetStudyProgram,
 } from "./internal-project-lab.js";
 import { loadOpenSkynetInternalProjectProfile } from "./internal-project.js";
@@ -77,13 +76,9 @@ export type OmegaWorldModelSnapshot = {
   internalProjectNucleus?: SkynetNucleusState;
   internalProjectStudyProgram?: SkynetStudyProgram;
   internalProjectContinuity?: SkynetContinuityState;
-  /** @deprecated compatibility alias */
   skynetNucleus?: SkynetNucleusState;
-  /** @deprecated compatibility alias */
   skynetStudyProgram?: SkynetStudyProgram;
-  /** @deprecated compatibility alias */
   skynetContinuity?: SkynetContinuityState;
-  skynetBifurcation?: SkynetBifurcationState;
   degradedComponents: Array<{
     component: string;
     reason: string;

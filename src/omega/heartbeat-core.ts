@@ -675,6 +675,8 @@ export async function runAutonomousLoop(
   log(`🚀 LOOP AUTÓNOMO ACTIVO (cada ${intervalMinutes} min)`);
   log(`Workspace: ${params.workspaceRoot} | Session: ${params.sessionKey}`);
 
+  let consecutiveErrors = 0;
+
   while (true) {
     cycleCount++;
     const cycleStart = Date.now();
@@ -700,10 +702,18 @@ export async function runAutonomousLoop(
 
       const elapsed = ((Date.now() - cycleStart) / 1000).toFixed(2);
       log(`✓ Ciclo #${cycleCount} completado en ${elapsed}s`);
+      consecutiveErrors = 0;
     } catch (error) {
+      consecutiveErrors++;
+      const backoffMs = Math.min(consecutiveErrors * intervalMs, 4 * intervalMs);
       log(
-        `❌ Error en ciclo #${cycleCount}: ${error instanceof Error ? error.message : String(error)}`,
+        `❌ Error en ciclo #${cycleCount} (streak=${consecutiveErrors}): ${
+          error instanceof Error ? error.message : String(error)
+        }`,
       );
+      log(`⏰ Backoff ${(backoffMs / 60_000).toFixed(1)} min por errores consecutivos...`);
+      await new Promise((resolve) => setTimeout(resolve, backoffMs));
+      continue;
     }
 
     log(`⏰ Próximo ciclo en ${intervalMinutes} min...`);

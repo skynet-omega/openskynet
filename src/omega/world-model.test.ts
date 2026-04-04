@@ -280,9 +280,7 @@ describe("omega world model", () => {
     expect(snapshot.internalProjectStudyProgram?.items.length).toBe(3);
     expect(snapshot.internalProjectStudyProgram?.items[0]?.title).toContain("Empujar foco activo");
     expect(snapshot.internalProjectContinuity?.focusStreak).toBe(1);
-    expect(snapshot.skynetNucleus).toEqual(snapshot.internalProjectNucleus);
-    expect(snapshot.skynetStudyProgram).toEqual(snapshot.internalProjectStudyProgram);
-    expect(snapshot.skynetContinuity).toEqual(snapshot.internalProjectContinuity);
+    // Deprecated skynet* aliases have been removed — use internalProject* fields instead.
   });
 
   it("includes the study supervisor focus in the idle heartbeat prompt", async () => {

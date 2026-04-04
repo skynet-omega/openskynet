@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { writeJsonAtomic } from "../infra/json-files.js";
 import type { OmegaHeartbeatTurnResult } from "./heartbeat.js";
+import { sanitizeOmegaSessionKey } from "./paths.js";
 import type { OmegaHeartbeatTurnPolicy } from "./policy-engine.js";
 import { withOmegaSessionLock } from "./state-lock.js";
 
@@ -46,10 +47,7 @@ const OMEGA_OPERATIONAL_MEMORY_FRESH_MS = 15 * 60 * 1000;
 const OMEGA_OPERATIONAL_MEMORY_AGING_MS = 2 * 60 * 60 * 1000;
 
 function sanitizeSessionKey(sessionKey: string): string {
-  const normalized = sessionKey.trim() || "main";
-  const readable = normalized.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 48) || "main";
-  const digest = crypto.createHash("sha256").update(normalized).digest("hex").slice(0, 12);
-  return `${readable}-${digest}.json`;
+  return sanitizeOmegaSessionKey(sessionKey);
 }
 
 function resolveOmegaOperationalMemoryDir(workspaceRoot: string): string {
@@ -244,7 +242,16 @@ export async function recordOmegaOperationalTurnMemoryBatch(params: {
       timelineDelta: turn.stateDelta.timelineDelta,
       kernelUpdated: turn.stateDelta.kernelUpdated,
       latencyBreakdown: turn.latencyBreakdown,
-      causalImpact: turn.stateDelta.progressObserved ? 1.0 : 0.0,
+      // Granular causal impact: both kernel and timeline delta = max quality;
+      // only one of them = partial; neither = no impact.
+      causalImpact:
+        turn.stateDelta.kernelUpdated && turn.stateDelta.timelineDelta > 0
+          ? 1.0
+          : turn.stateDelta.kernelUpdated
+            ? 0.7
+            : turn.stateDelta.timelineDelta > 0
+              ? 0.4
+              : 0.0,
     }));
     const nextEntries = [...existing, ...newEntries].slice(-OMEGA_OPERATIONAL_MEMORY_LIMIT);
     await fs

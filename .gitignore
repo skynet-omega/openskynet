@@ -26,6 +26,7 @@
 **/node_modules/
 *.bun-build
 *.log*
+*.pth
 *.pyc
 .*.log*
 *.Zone.Identifier
@@ -127,3 +128,5 @@ src/canvas-host/a2ui/*.map
 tmp/
 tsc
 memory/
+src/skynet/experiments/experimentos/fast_data.txt
+auth-profiles.json

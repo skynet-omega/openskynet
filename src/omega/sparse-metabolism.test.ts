@@ -10,8 +10,14 @@ describe("SparseMetabolism", () => {
 
   it("should activate all components when frustration is maximum", () => {
     const state = metabolism.computeMetabolism(1.0);
-    expect(state.activatedComponents.length).toBe(6);
-    expect(state.skippedComponents.length).toBe(0);
+    expect(state.activatedComponents).toEqual([
+      "neural_logic_engine",
+      "hierarchical_memory",
+      "autonomy_logger",
+      "jepa_enhancer",
+    ]);
+    expect(state.skippedComponents).toContain("lyapunov_controller");
+    expect(state.skippedComponents).toContain("causal_reasoner");
   });
 
   it("should skip high-threshold components when frustration is low", () => {

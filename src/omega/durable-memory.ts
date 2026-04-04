@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { sanitizeOmegaSessionKey } from "./paths.js";
 import type {
   OmegaSessionOutcomeSnapshot,
   OmegaSessionValidationSnapshot,
@@ -63,10 +64,7 @@ function durableMemoryId(task: string, targets: string[], errorKind?: string): s
 }
 
 function sanitizeSessionKey(sessionKey: string): string {
-  const normalized = sessionKey.trim() || "main";
-  const readable = normalized.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 48) || "main";
-  const digest = crypto.createHash("sha256").update(normalized).digest("hex").slice(0, 12);
-  return `${readable}-${digest}.json`;
+  return sanitizeOmegaSessionKey(sessionKey);
 }
 
 function resolveOmegaDurableMemoryDir(workspaceRoot: string): string {
@@ -250,10 +248,12 @@ export async function admitOmegaDurableMemory(params: {
         params.outcome.structuredOk === true ||
         (params.outcome.observedChangedFiles?.length ?? 0) > 0);
 
+    // A "repeated" failure means it has already failed at least once before.
+    // `(failureCount ?? 0) + 1 >= 1` was always true — wrong semantics.
     const repeatedFailure =
       params.outcome.status !== "ok" &&
       typeof params.outcome.errorKind === "string" &&
-      (current?.failureCount ?? 0) + 1 >= 1;
+      (current?.failureCount ?? 0) >= 1;
 
     const learnedConstraints = Array.from(
       new Set([...(current?.learnedConstraints ?? []), ...(params.learnedConstraints ?? [])]),

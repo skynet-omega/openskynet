@@ -379,7 +379,8 @@ export async function runOneHeartbeatCycleWithDeps(
 
     prompt = await deps.buildPrompt({ workspaceRoot, sessionKey });
     if (!prompt) {
-      iterations = i + 1;
+      // `i` iterations were actually executed; don't over-count.
+      iterations = i;
       stopReason = "no_prompt";
       break;
     }

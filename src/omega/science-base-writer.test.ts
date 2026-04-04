@@ -45,4 +45,39 @@ describe("science base writer", () => {
     const content = await fs.readFile(path.join(workspaceRoot, "SCIENCE_BASE.md"), "utf-8");
     expect(content.match(/repair continuity drift/g)).toHaveLength(1);
   });
+
+  it("deduplicates equivalent file sets even when order changes", async () => {
+    await appendScienceBaseRule({
+      workspaceRoot,
+      task: "repair continuity drift",
+      observedChangedFiles: ["src/omega/b.ts", "src/omega/a.ts"],
+      sessionKey: "agent:main:main",
+    });
+    await appendScienceBaseRule({
+      workspaceRoot,
+      task: "repair continuity drift",
+      observedChangedFiles: ["src/omega/a.ts", "src/omega/b.ts"],
+      sessionKey: "agent:main:main",
+    });
+
+    const content = await fs.readFile(path.join(workspaceRoot, "SCIENCE_BASE.md"), "utf-8");
+    expect(content.match(/repair continuity drift/g)).toHaveLength(1);
+    expect(content).toContain("src/omega/a.ts, src/omega/b.ts");
+  });
+
+  it("auto-compresses once the table crosses the threshold", async () => {
+    for (let index = 0; index < 48; index += 1) {
+      await appendScienceBaseRule({
+        workspaceRoot,
+        task: `repair continuity drift ${index}`,
+        observedChangedFiles: [`src/omega/file-${index}.ts`],
+        sessionKey: "agent:main:main",
+      });
+    }
+
+    const content = await fs.readFile(path.join(workspaceRoot, "SCIENCE_BASE.md"), "utf-8");
+    const rows = content.split("\n").filter((line) => line.startsWith("| 20"));
+    expect(rows).toHaveLength(48);
+    expect(content).toContain("| Timestamp | Tarea | Archivos Modificados | Sesión |");
+  });
 });

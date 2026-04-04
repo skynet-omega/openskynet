@@ -9,6 +9,8 @@ import {
   syncOmegaEpisodeMemoryDigest,
 } from "./episodic-recall.js";
 import { deriveOmegaSessionSelfState, type OmegaSessionSelfState } from "./event-model.js";
+import { syncOmegaWspFromTurn } from "./omega-wsp.js";
+import { sanitizeOmegaSessionKey } from "./paths.js";
 import { buildScienceBasePromptSection } from "./science-base-reader.js";
 import { appendScienceBaseRule } from "./science-base-writer.js";
 import {
@@ -19,6 +21,7 @@ import {
   type OmegaKernelTrackedFile,
   type OmegaSelfTimeKernelState,
 } from "./self-time-kernel.js";
+import { withOmegaSessionLock } from "./state-lock.js";
 import {
   cloneOmegaTaskTransactions,
   parseOmegaTaskTransactions,
@@ -363,10 +366,7 @@ function parseSelfTimeKernel(
 }
 
 function sanitizeSessionKey(sessionKey: string): string {
-  const normalized = canonicalizeOmegaSessionKey(sessionKey);
-  const readable = normalized.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 48) || "main";
-  const digest = crypto.createHash("sha256").update(normalized).digest("hex").slice(0, 12);
-  return `${readable}-${digest}.json`;
+  return sanitizeOmegaSessionKey(sessionKey);
 }
 
 function canonicalizeOmegaSessionKey(sessionKey: string): string {
@@ -401,9 +401,10 @@ export function resolveOmegaSessionStateFile(params: {
   workspaceRoot: string;
   sessionKey: string;
 }): string {
+  const canonicalSessionKey = canonicalizeOmegaSessionKey(params.sessionKey);
   return path.join(
     resolveOmegaSessionStateDir(params.workspaceRoot),
-    sanitizeSessionKey(params.sessionKey),
+    sanitizeSessionKey(canonicalSessionKey),
   );
 }
 
@@ -747,63 +748,90 @@ export async function recordOmegaSessionOutcome(params: {
   const stateDir = resolveOmegaSessionStateDir(params.workspaceRoot);
   await fs.mkdir(stateDir, { recursive: true });
 
-  const existing = await readOmegaSessionTimeline({
-    workspaceRoot: params.workspaceRoot,
-    sessionKey: canonicalSessionKey,
-  });
-  const entries = [...(existing?.entries ?? [])];
-  const causalTargets = deriveTimelineCausalTargets({
-    validation: params.validation,
-    priorState: existing?.state,
-    priorKernel: existing?.kernel,
-  });
-  const newEntry: OmegaSessionTimelineEntry = {
-    createdAt: Date.now(),
-    task: params.task,
-    validation: params.validation,
-    outcome: params.outcome,
-    ...(causalTargets.length > 0 ? { causalTargets } : {}),
-    ...(typeof params.reply === "string" && params.reply.length > 0 ? { reply: params.reply } : {}),
-  };
-  entries.push(newEntry);
-  const nextState = deriveOmegaSessionSelfState({
-    priorState: existing?.state,
-    task: params.task,
-    validation: params.validation,
-    outcome: params.outcome,
-    timeline: entries.slice(0, -1),
-  });
-  const nextKernel = deriveOmegaSelfTimeKernel({
-    priorState: existing?.kernel,
-    sessionKey: canonicalSessionKey,
-    task: params.task,
-    validation: params.validation,
-    outcome: params.outcome,
-    timeline: entries.slice(0, -1),
-  });
-  const nextTransactions = updateOmegaTaskTransactions({
-    priorTransactions: existing?.transactions ?? [],
-    priorKernel: existing?.kernel,
-    nextKernel,
-    task: params.task,
-    validation: params.validation,
-    outcome: params.outcome,
-    execution: params.execution,
-  });
+  // ── Lock protects the read-modify-write of the session file to prevent
+  // concurrent writes from heartbeat + spawned sub-agents corrupting state. ──
+  let nextState!: ReturnType<typeof deriveOmegaSessionSelfState>;
+  let nextKernel!: ReturnType<typeof deriveOmegaSelfTimeKernel>;
+  let nextTransactions!: ReturnType<typeof updateOmegaTaskTransactions>;
+  const nowMs = Date.now();
 
-  const stateFile = resolveOmegaSessionStateFile({
-    workspaceRoot: params.workspaceRoot,
-    sessionKey: canonicalSessionKey,
-  });
-  const payload: OmegaSessionTimelineFile = {
-    sessionKey: canonicalSessionKey,
-    updatedAt: Date.now(),
-    entries: entries.slice(-OMEGA_SESSION_HISTORY_LIMIT),
-    state: nextState,
-    kernel: nextKernel,
-    transactions: nextTransactions,
-  };
-  await fs.writeFile(stateFile, JSON.stringify(payload, null, 2), "utf-8");
+  await withOmegaSessionLock(
+    { workspaceRoot: params.workspaceRoot, sessionKey: canonicalSessionKey },
+    async () => {
+      const existing = await readOmegaSessionTimeline({
+        workspaceRoot: params.workspaceRoot,
+        sessionKey: canonicalSessionKey,
+      });
+      const entries = [...(existing?.entries ?? [])];
+      const causalTargets = deriveTimelineCausalTargets({
+        validation: params.validation,
+        priorState: existing?.state,
+        priorKernel: existing?.kernel,
+      });
+      const newEntry: OmegaSessionTimelineEntry = {
+        createdAt: nowMs,
+        task: params.task,
+        validation: params.validation,
+        outcome: params.outcome,
+        ...(causalTargets.length > 0 ? { causalTargets } : {}),
+        ...(typeof params.reply === "string" && params.reply.length > 0
+          ? { reply: params.reply }
+          : {}),
+      };
+      entries.push(newEntry);
+      nextState = deriveOmegaSessionSelfState({
+        priorState: existing?.state,
+        task: params.task,
+        validation: params.validation,
+        outcome: params.outcome,
+        timeline: entries.slice(0, -1),
+      });
+      nextKernel = deriveOmegaSelfTimeKernel({
+        priorState: existing?.kernel,
+        sessionKey: canonicalSessionKey,
+        task: params.task,
+        validation: params.validation,
+        outcome: params.outcome,
+        timeline: entries.slice(0, -1),
+      });
+      nextTransactions = updateOmegaTaskTransactions({
+        priorTransactions: existing?.transactions ?? [],
+        priorKernel: existing?.kernel,
+        nextKernel,
+        task: params.task,
+        validation: params.validation,
+        outcome: params.outcome,
+        execution: params.execution,
+      });
+
+      const stateFile = resolveOmegaSessionStateFile({
+        workspaceRoot: params.workspaceRoot,
+        sessionKey: canonicalSessionKey,
+      });
+      const payload: OmegaSessionTimelineFile = {
+        sessionKey: canonicalSessionKey,
+        updatedAt: nowMs,
+        entries: entries.slice(-OMEGA_SESSION_HISTORY_LIMIT),
+        state: nextState,
+        kernel: nextKernel,
+        transactions: nextTransactions,
+      };
+      await fs.writeFile(stateFile, JSON.stringify(payload, null, 2), "utf-8");
+
+      await syncOmegaWspFromTurn({
+        workspaceRoot: params.workspaceRoot,
+        sessionKey: canonicalSessionKey,
+        task: params.task,
+        validation: params.validation,
+        outcome: params.outcome,
+        kernelTension: nextKernel?.tension,
+        nowMs,
+      }).catch(() => undefined);
+    },
+  );
+
+  // ── Side-effects run outside the lock to avoid nested-lock deadlocks.
+  //    Each of these acquires its own lock internally when needed. ──
   await syncOmegaEpisodeMemoryDigest({
     workspaceRoot: params.workspaceRoot,
     sessionKey: canonicalSessionKey,

@@ -19,7 +19,11 @@
  * Estas funciones no llaman al LLM. No tocan disco directamente.
  */
 
-import type { OmegaWorldStatePersistent, WspDriveState } from "../omega-wsp.js";
+import {
+  applyTurnOutcomeToWsp,
+  type OmegaWorldStatePersistent,
+  type WspDriveState,
+} from "../omega-wsp.js";
 import type { OmegaSelfTimeKernelState } from "../self-time-kernel.js";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -323,36 +327,9 @@ export function applyTurnOutcomeToDrives(
   wsp: OmegaWorldStatePersistent,
   outcome: { status: "ok" | "error" | "timeout"; errorKind?: string },
 ): OmegaWorldStatePersistent {
-  if (outcome.status === "ok") {
-    // Éxito: sube competencia y homeostasis, decay natural en otras
-    const competenceDrive = wsp.drives.find((d) => d.name === "competence");
-    const homeostasisDrive = wsp.drives.find((d) => d.name === "homeostasis");
-    if (competenceDrive) {
-      competenceDrive.currentLevel = Math.min(1.0, competenceDrive.currentLevel + 0.1);
-      competenceDrive.error = competenceDrive.setpoint - competenceDrive.currentLevel;
-      competenceDrive.lastSatisfiedAt = Date.now();
-    }
-    if (homeostasisDrive) {
-      homeostasisDrive.currentLevel = Math.min(1.0, homeostasisDrive.currentLevel + 0.05);
-      homeostasisDrive.error = homeostasisDrive.setpoint - homeostasisDrive.currentLevel;
-      homeostasisDrive.lastSatisfiedAt = Date.now();
-    }
-  } else {
-    // Fallo: penaliza competencia y homeostasis proporcionalmente
-    const penalty = outcome.status === "timeout" ? 0.15 : 0.1;
-    const competenceDrive = wsp.drives.find((d) => d.name === "competence");
-    const homeostasisDrive = wsp.drives.find((d) => d.name === "homeostasis");
-    if (competenceDrive) {
-      competenceDrive.currentLevel = Math.max(0, competenceDrive.currentLevel - penalty);
-      competenceDrive.error = competenceDrive.setpoint - competenceDrive.currentLevel;
-    }
-    if (homeostasisDrive) {
-      homeostasisDrive.currentLevel = Math.max(0, homeostasisDrive.currentLevel - penalty * 1.2);
-      homeostasisDrive.error = homeostasisDrive.setpoint - homeostasisDrive.currentLevel;
-    }
-  }
-
-  wsp.updatedAt = Date.now();
-  wsp.updateCount += 1;
-  return wsp;
+  return applyTurnOutcomeToWsp({
+    wsp,
+    task: "legacy_drive_update",
+    outcome,
+  });
 }
