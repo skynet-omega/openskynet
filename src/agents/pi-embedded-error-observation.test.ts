@@ -3,6 +3,7 @@ import * as loggingConfigModule from "../logging/config.js";
 import {
   buildApiErrorObservationFields,
   buildTextObservationFields,
+  buildUsageObservationFields,
   sanitizeForConsole,
 } from "./pi-embedded-error-observation.js";
 
@@ -175,6 +176,52 @@ describe("buildApiErrorObservationFields", () => {
 
     expect(observed.rawErrorPreview).not.toContain("custom-secret-abc123");
     expect(observed.rawErrorPreview).toContain("custom");
+  });
+
+  it("classifies quota-exhausted 429s and extracts reset hints", () => {
+    const observed = buildApiErrorObservationFields(
+      "Cloud Code Assist API error (429): You have exhausted your capacity on this model. Your quota will reset after 2h53m46s.",
+    );
+
+    expect(observed).toMatchObject({
+      apiRateLimitClass: "quota_exhausted",
+      apiRateLimitResetAfter: "2h53m46s",
+    });
+  });
+
+  it("classifies capacity-unavailable 429s separately from quota exhaustion", () => {
+    const observed = buildApiErrorObservationFields(
+      "Cloud Code Assist API error (429): No capacity available for model gemini-3-flash-preview on the server",
+    );
+
+    expect(observed).toMatchObject({
+      apiRateLimitClass: "capacity_unavailable",
+    });
+    expect(observed.apiRateLimitResetAfter).toBeUndefined();
+  });
+});
+
+describe("buildUsageObservationFields", () => {
+  it("prefers last-call usage and derives prompt tokens when not explicitly provided", () => {
+    const observed = buildUsageObservationFields({
+      usage: { input: 10_000, output: 1_500, cacheRead: 90_000, total: 101_500 },
+      lastCallUsage: {
+        input: 3_000,
+        output: 300,
+        cacheRead: 12_000,
+        cacheWrite: 400,
+        total: 15_700,
+      },
+    });
+
+    expect(observed).toMatchObject({
+      promptTokens: 15_400,
+      usageInputTokens: 3_000,
+      usageOutputTokens: 300,
+      usageCacheReadTokens: 12_000,
+      usageCacheWriteTokens: 400,
+      usageTotalTokens: 15_700,
+    });
   });
 });
 

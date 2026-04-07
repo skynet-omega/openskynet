@@ -32,6 +32,7 @@ type SharedServiceEnvironmentFields = {
   tmpDir: string;
   minimalPath: string | undefined;
   proxyEnv: Record<string, string | undefined>;
+  runtimeEnv: Record<string, string | undefined>;
   nodeCaCerts: string | undefined;
   nodeUseSystemCa: string | undefined;
 };
@@ -47,11 +48,44 @@ const SERVICE_PROXY_ENV_KEYS = [
   "all_proxy",
 ] as const;
 
+const SERVICE_RUNTIME_ENV_KEYS = [
+  "CONDA_PREFIX",
+  "CONDA_DEFAULT_ENV",
+  "CONDA_EXE",
+  "CUDA_HOME",
+  "CUDA_PATH",
+  "CUDA_ROOT",
+  "LD_LIBRARY_PATH",
+  "LIBRARY_PATH",
+  "NVIDIA_VISIBLE_DEVICES",
+  "NVIDIA_DRIVER_CAPABILITIES",
+  "OLLAMA_HOST",
+  "OLLAMA_ORIGINS",
+] as const;
+
 function readServiceProxyEnvironment(
   env: Record<string, string | undefined>,
 ): Record<string, string | undefined> {
   const out: Record<string, string | undefined> = {};
   for (const key of SERVICE_PROXY_ENV_KEYS) {
+    const value = env[key];
+    if (typeof value !== "string") {
+      continue;
+    }
+    const trimmed = value.trim();
+    if (!trimmed) {
+      continue;
+    }
+    out[key] = trimmed;
+  }
+  return out;
+}
+
+function readServiceRuntimeEnvironment(
+  env: Record<string, string | undefined>,
+): Record<string, string | undefined> {
+  const out: Record<string, string | undefined> = {};
+  for (const key of SERVICE_RUNTIME_ENV_KEYS) {
     const value = env[key];
     if (typeof value !== "string") {
       continue;
@@ -96,6 +130,10 @@ function addCommonEnvConfiguredBinDirs(
   addNonEmptyDir(dirs, appendSubdir(env?.BUN_INSTALL, "bin"));
   addNonEmptyDir(dirs, appendSubdir(env?.VOLTA_HOME, "bin"));
   addNonEmptyDir(dirs, appendSubdir(env?.ASDF_DATA_DIR, "shims"));
+  addNonEmptyDir(dirs, appendSubdir(env?.CONDA_PREFIX, "bin"));
+  addNonEmptyDir(dirs, appendSubdir(env?.CUDA_HOME, "bin"));
+  addNonEmptyDir(dirs, appendSubdir(env?.CUDA_PATH, "bin"));
+  addNonEmptyDir(dirs, appendSubdir(env?.CUDA_ROOT, "bin"));
 }
 
 function resolveSystemPathDirs(platform: NodeJS.Platform): string[] {
@@ -299,6 +337,7 @@ function buildCommonServiceEnvironment(
     HOME: env.HOME,
     TMPDIR: sharedEnv.tmpDir,
     ...sharedEnv.proxyEnv,
+    ...sharedEnv.runtimeEnv,
     NODE_EXTRA_CA_CERTS: sharedEnv.nodeCaCerts,
     NODE_USE_SYSTEM_CA: sharedEnv.nodeUseSystemCa,
     OPENCLAW_STATE_DIR: sharedEnv.stateDir,
@@ -319,6 +358,7 @@ function resolveSharedServiceEnvironmentFields(
   // Keep a usable temp directory for supervised services even when the host env omits TMPDIR.
   const tmpDir = env.TMPDIR?.trim() || os.tmpdir();
   const proxyEnv = readServiceProxyEnvironment(env);
+  const runtimeEnv = readServiceRuntimeEnvironment(env);
   // On macOS, launchd services don't inherit the shell environment, so Node's undici/fetch
   // cannot locate the system CA bundle. Default to /etc/ssl/cert.pem so TLS verification
   // works correctly when running as a LaunchAgent without extra user configuration.
@@ -333,6 +373,7 @@ function resolveSharedServiceEnvironmentFields(
     // freezing the install-time snapshot into gateway.cmd/node-host.cmd.
     minimalPath: platform === "win32" ? undefined : buildMinimalServicePath({ env, platform }),
     proxyEnv,
+    runtimeEnv,
     nodeCaCerts,
     nodeUseSystemCa,
   };

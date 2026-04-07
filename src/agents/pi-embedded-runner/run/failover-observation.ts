@@ -2,9 +2,11 @@ import { redactIdentifier } from "../../../logging/redact-identifier.js";
 import type { AuthProfileFailureReason } from "../../auth-profiles.js";
 import {
   buildApiErrorObservationFields,
+  buildUsageObservationFields,
   sanitizeForConsole,
 } from "../../pi-embedded-error-observation.js";
 import type { FailoverReason } from "../../pi-embedded-helpers.js";
+import type { UsageLike } from "../../usage.js";
 import { log } from "../logger.js";
 
 export type FailoverDecisionLoggerInput = {
@@ -21,6 +23,8 @@ export type FailoverDecisionLoggerInput = {
   timedOut?: boolean;
   aborted?: boolean;
   status?: number;
+  promptTokens?: number;
+  lastCallUsage?: UsageLike | null;
 };
 
 export type FailoverDecisionLoggerBase = Omit<FailoverDecisionLoggerInput, "decision" | "status">;
@@ -52,6 +56,10 @@ export function createFailoverDecisionLogger(
   const reasonText = normalizedBase.failoverReason ?? "none";
   return (decision, extra) => {
     const observedError = buildApiErrorObservationFields(normalizedBase.rawError);
+    const observedUsage = buildUsageObservationFields({
+      promptTokens: normalizedBase.promptTokens,
+      lastCallUsage: normalizedBase.lastCallUsage,
+    });
     log.warn("embedded run failover decision", {
       event: "embedded_run_failover_decision",
       tags: ["error_handling", "failover", normalizedBase.stage, decision],
@@ -68,6 +76,7 @@ export function createFailoverDecisionLogger(
       aborted: normalizedBase.aborted,
       status: extra?.status,
       ...observedError,
+      ...observedUsage,
       consoleMessage:
         `embedded run failover decision: runId=${safeRunId} stage=${normalizedBase.stage} decision=${decision} ` +
         `reason=${reasonText} provider=${safeProvider}/${safeModel} profile=${profileText}`,

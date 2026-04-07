@@ -51,6 +51,27 @@ describe("sessionsCommand", () => {
     expect(row).toContain("pi:opus");
   });
 
+  it("marks long sessions with pressure labels", async () => {
+    const store = writeStore({
+      "agent:main:main": {
+        sessionId: "main",
+        updatedAt: Date.now() - 15 * 60_000,
+        totalTokens: 165_000,
+        totalTokensFresh: true,
+        contextTokens: 1_000_000,
+        model: "pi:opus",
+      },
+    });
+
+    const { runtime, logs } = makeRuntime();
+    await sessionsCommand({ store }, runtime);
+
+    fs.rmSync(store);
+
+    const row = logs.find((line) => line.includes("agent:main:main")) ?? "";
+    expect(row).toContain("165k/1000k (17%) COMPACT");
+  });
+
   it("shows placeholder rows when tokens are missing", async () => {
     const store = writeStore({
       "discord:group:demo": {
@@ -96,14 +117,17 @@ describe("sessionsCommand", () => {
         key: string;
         totalTokens: number | null;
         totalTokensFresh: boolean;
+        contextPressure: string;
       }>;
     }>(sessionsCommand, store);
     const main = payload.sessions?.find((row) => row.key === "main");
     const group = payload.sessions?.find((row) => row.key === "discord:group:demo");
     expect(main?.totalTokens).toBe(2000);
     expect(main?.totalTokensFresh).toBe(true);
+    expect(main?.contextPressure).toBe("ok");
     expect(group?.totalTokens).toBeNull();
     expect(group?.totalTokensFresh).toBe(false);
+    expect(group?.contextPressure).toBe("unknown");
   });
 
   it("applies --active filtering in JSON output", async () => {

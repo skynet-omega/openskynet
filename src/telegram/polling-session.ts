@@ -13,6 +13,13 @@ const TELEGRAM_POLL_RESTART_POLICY = {
   jitter: 0.25,
 };
 
+const TELEGRAM_CONFLICT_RESTART_POLICY = {
+  initialMs: 30_000,
+  maxMs: 5 * 60_000,
+  factor: 2,
+  jitter: 0.2,
+};
+
 const POLL_STALL_THRESHOLD_MS = 90_000;
 const POLL_WATCHDOG_INTERVAL_MS = 30_000;
 const POLL_STOP_GRACE_MS = 15_000;
@@ -92,9 +99,12 @@ export class TelegramPollingSession {
     }
   }
 
-  async #waitBeforeRestart(buildLine: (delay: string) => string): Promise<boolean> {
+  async #waitBeforeRestart(
+    buildLine: (delay: string) => string,
+    policy = TELEGRAM_POLL_RESTART_POLICY,
+  ): Promise<boolean> {
     this.#restartAttempts += 1;
-    const delayMs = computeBackoff(TELEGRAM_POLL_RESTART_POLICY, this.#restartAttempts);
+    const delayMs = computeBackoff(policy, this.#restartAttempts);
     const delay = formatDurationPrecise(delayMs);
     this.opts.log(buildLine(delay));
     try {
@@ -279,7 +289,11 @@ export class TelegramPollingSession {
       const reason = isConflict ? "getUpdates conflict" : "network error";
       const errMsg = formatErrorMessage(err);
       const shouldRestart = await this.#waitBeforeRestart(
-        (delay) => `Telegram ${reason}: ${errMsg}; retrying in ${delay}.`,
+        (delay) =>
+          isConflict
+            ? `Telegram ${reason}: ${errMsg}; another poller is likely active for this bot token, retrying in ${delay}.`
+            : `Telegram ${reason}: ${errMsg}; retrying in ${delay}.`,
+        isConflict ? TELEGRAM_CONFLICT_RESTART_POLICY : TELEGRAM_POLL_RESTART_POLICY,
       );
       return shouldRestart ? "continue" : "exit";
     } finally {

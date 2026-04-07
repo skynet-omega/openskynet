@@ -1,0 +1,20 @@
+--- V600 STORYTIME: SIMPLICITY ANALYSIS ---
+
+  [TRAINING] Absorbiendo el cuento (500 ciclos)...
+    Paso 100 | Estabilidad del Solitón (Loss): 0.0852
+    Paso 200 | Estabilidad del Solitón (Loss): 0.0816
+    Paso 300 | Estabilidad del Solitón (Loss): 0.0800
+    Paso 400 | Estabilidad del Solitón (Loss): 0.0791
+    Paso 500 | Estabilidad del Solitón (Loss): 0.0785
+
+--- AUTOPSIA INTERNA: ¿QUÉ SE FORMÓ? ---
+  Energía de Resonancia: 15.4261
+  Input: 'alicia buscaba una' -> Top 5 Resonancias:
+    - hermosa      | Fuerza: 15.2682
+    - una          | Fuerza: 3.9755
+    - flor         | Fuerza: 3.8396
+    - gato         | Fuerza: 3.3017
+    - bajo         | Fuerza: 3.1195
+
+  [INFERENCE] Generación Geodésica:
+  Prompt: 'el gato' -> Result: el gato era pequeño y muy suave rió mucho mucho y alicia

@@ -35,6 +35,8 @@ afterEach(() => {
   resolveControlUiRootSyncMock.mockReset();
   isPackageProvenControlUiRootSyncMock.mockReset();
   isPackageProvenControlUiRootSyncMock.mockReturnValue(true);
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
 });
 
 describe("handleControlUiHttpRequest auto-detected root", () => {
@@ -96,6 +98,43 @@ describe("handleControlUiHttpRequest auto-detected root", () => {
 
       expect(handled).toBe(true);
       expect(res.statusCode).toBe(404);
+    });
+  });
+
+  it("does not emit control-ui debug logs unless explicitly enabled", async () => {
+    await withControlUiRoot(async (tmp) => {
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+      resolveControlUiRootSyncMock.mockReturnValue(tmp);
+
+      const { res } = makeMockHttpResponse();
+      const handled = handleControlUiHttpRequest(
+        { url: "/", method: "GET" } as IncomingMessage,
+        res,
+      );
+
+      expect(handled).toBe(true);
+      expect(errorSpy).not.toHaveBeenCalled();
+      expect(logSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  it("emits control-ui debug logs when explicitly enabled", async () => {
+    await withControlUiRoot(async (tmp) => {
+      vi.stubEnv("OPENCLAW_CONTROL_UI_DEBUG", "1");
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      resolveControlUiRootSyncMock.mockReturnValue(tmp);
+
+      const { res } = makeMockHttpResponse();
+      const handled = handleControlUiHttpRequest(
+        { url: "/", method: "GET" } as IncomingMessage,
+        res,
+      );
+
+      expect(handled).toBe(true);
+      expect(errorSpy).toHaveBeenCalledWith(
+        `[CONTROL-UI-DEBUG] Resolved root: ${tmp}, realpath: ${tmp}`,
+      );
     });
   });
 });

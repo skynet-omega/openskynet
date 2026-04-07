@@ -189,4 +189,46 @@ describe("spawnSubagentDirect workspace inheritance", () => {
       workspaceDir: "/tmp/requester-workspace",
     });
   });
+
+  it("pins admin-only gateway calls to operator.admin while keeping agent spawn least-privilege", async () => {
+    const calls: Array<{ method?: string; scopes?: string[] }> = [];
+    hoisted.callGatewayMock.mockImplementation(
+      async (opts: { method?: string; scopes?: string[] }) => {
+        calls.push({ method: opts.method, scopes: opts.scopes });
+        if (opts.method === "sessions.patch" || opts.method === "sessions.delete") {
+          return { ok: true };
+        }
+        if (opts.method === "agent") {
+          return { runId: "run-1" };
+        }
+        return {};
+      },
+    );
+
+    const result = await spawnSubagentDirect(
+      {
+        task: "verify gateway scope pinning",
+        model: "openai-codex/gpt-5.4",
+      },
+      {
+        agentSessionKey: "agent:main:main",
+        agentChannel: "telegram",
+        agentAccountId: "123",
+        agentTo: "456",
+        workspaceDir: "/tmp/requester-workspace",
+      },
+    );
+
+    expect(result.status).toBe("accepted");
+    expect(calls.length).toBeGreaterThan(0);
+
+    for (const call of calls) {
+      if (call.method === "sessions.patch" || call.method === "sessions.delete") {
+        expect(call.scopes).toEqual(["operator.admin"]);
+      }
+      if (call.method === "agent") {
+        expect(call.scopes).toBeUndefined();
+      }
+    }
+  });
 });

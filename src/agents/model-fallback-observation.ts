@@ -14,6 +14,8 @@ function buildErrorObservationFields(error?: string): {
   providerErrorType?: string;
   providerErrorMessagePreview?: string;
   requestIdHash?: string;
+  apiRateLimitClass?: "quota_exhausted" | "capacity_unavailable";
+  apiRateLimitResetAfter?: string;
 } {
   const observed = buildTextObservationFields(error);
   return {
@@ -24,6 +26,8 @@ function buildErrorObservationFields(error?: string): {
     providerErrorType: observed.providerErrorType,
     providerErrorMessagePreview: observed.providerErrorMessagePreview,
     requestIdHash: observed.requestIdHash,
+    apiRateLimitClass: observed.apiRateLimitClass,
+    apiRateLimitResetAfter: observed.apiRateLimitResetAfter,
   };
 }
 

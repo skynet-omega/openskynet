@@ -15,6 +15,10 @@ Before doing anything else:
 3. Read `memory/YYYY-MM-DD.md` (today + yesterday) for recent context
 4. **If in MAIN SESSION** (direct chat with your human): Also read `MEMORY.md`
 
+Optional:
+
+- Read `IDENTITY.md` only if you need a quick reminder of the platform's operational role or the boundary between `OpenSkyNet` and `Skynet Brain Lab`.
+
 Don't ask permission. Just do it.
 
 ## Memory

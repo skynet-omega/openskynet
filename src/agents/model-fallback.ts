@@ -140,10 +140,17 @@ async function runFallbackCandidate<T>(params: {
       result,
     };
   } catch (err) {
-    if (shouldRethrowAbort(err)) {
+    // Normalize abort-wrapped failover errors (for example, provider-specific
+    // RESOURCE_EXHAUSTED wrapped in AbortError) so the fallback loop can
+    // continue instead of treating them as user aborts.
+    const normalizedFailover = coerceToFailoverError(err, {
+      provider: params.provider,
+      model: params.model,
+    });
+    if (shouldRethrowAbort(err) && !normalizedFailover) {
       throw err;
     }
-    return { ok: false, error: err };
+    return { ok: false, error: normalizedFailover ?? err };
   }
 }
 

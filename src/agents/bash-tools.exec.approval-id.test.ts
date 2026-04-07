@@ -640,7 +640,7 @@ describe("exec approvals", () => {
     expect(text).toContain("Web UI or terminal UI");
   });
 
-  it("tells Telegram users that allowed approvers were DMed when Telegram approvals are disabled but Discord DM approvals are enabled", async () => {
+  it("tells Telegram users to use an enabled approval surface when Telegram approvals are disabled", async () => {
     await writeOpenClawConfig(
       {
         channels: {
@@ -673,7 +673,8 @@ describe("exec approvals", () => {
     });
 
     const text = expectApprovalUnavailableText(result);
-    expect(text).toContain("Approval required. I sent the allowed approvers DMs.");
+    expect(text).toContain("chat exec approvals are not enabled on Telegram");
+    expect(text).toContain("Web UI or terminal UI");
   });
 
   it("denies node obfuscated command when approval request times out", async () => {

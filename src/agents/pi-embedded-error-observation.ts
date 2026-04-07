@@ -3,6 +3,7 @@ import { redactIdentifier } from "../logging/redact-identifier.js";
 import { getDefaultRedactPatterns, redactSensitiveText } from "../logging/redact.js";
 import { getApiErrorPayloadFingerprint, parseApiErrorInfo } from "./pi-embedded-helpers.js";
 import { stableStringify } from "./stable-stringify.js";
+import { derivePromptTokens, normalizeUsage, type UsageLike } from "./usage.js";
 
 const MAX_OBSERVATION_INPUT_CHARS = 64_000;
 const MAX_FINGERPRINT_MESSAGE_CHARS = 8_000;
@@ -14,6 +15,14 @@ const OBSERVATION_EXTRA_REDACT_PATTERNS = [
   String.raw`"(?:api[-_]?key|api_key)"\s*:\s*"([^"]+)"`,
   String.raw`(?:\bCookie\b\s*[:=]\s*[^;=\s]+=|;\s*[^;=\s]+=)([^;\s\r\n]+)`,
 ];
+
+export type ApiRateLimitObservationClass = "quota_exhausted" | "capacity_unavailable";
+
+type UsageObservationInput = {
+  promptTokens?: number;
+  usage?: UsageLike | null;
+  lastCallUsage?: UsageLike | null;
+};
 
 function resolveConfiguredRedactPatterns(): string[] {
   const configured = readLoggingConfig()?.redactPatterns;
@@ -128,6 +137,79 @@ function buildObservationFingerprint(params: {
   return getApiErrorPayloadFingerprint(params.raw);
 }
 
+function classifyApiRateLimitObservation(rawError?: string): {
+  apiRateLimitClass?: ApiRateLimitObservationClass;
+  apiRateLimitResetAfter?: string;
+} {
+  const trimmed = rawError?.trim();
+  if (!trimmed) {
+    return {};
+  }
+  const parsed = parseApiErrorInfo(trimmed);
+  const lower = trimmed.toLowerCase();
+  const is429 = parsed?.httpCode === "429" || lower.includes("429") || lower.includes("rate limit");
+  if (!is429) {
+    return {};
+  }
+
+  const resetMatch = trimmed.match(/quota will reset after\s+([^\n.]+)/i);
+  const resetAfter = resetMatch?.[1]?.trim();
+  const quotaExhausted =
+    /quota will reset after/i.test(trimmed) ||
+    /exhausted your capacity on this model/i.test(trimmed) ||
+    /usage limit/i.test(trimmed) ||
+    /quota exceeded/i.test(trimmed) ||
+    /exceeded your current quota/i.test(trimmed) ||
+    /resource has been exhausted/i.test(trimmed);
+
+  if (quotaExhausted) {
+    return {
+      apiRateLimitClass: "quota_exhausted",
+      apiRateLimitResetAfter: resetAfter,
+    };
+  }
+
+  const capacityUnavailable =
+    /no capacity available/i.test(trimmed) ||
+    /temporary capacity issue/i.test(trimmed) ||
+    /capacity unavailable/i.test(trimmed) ||
+    /request rejected \(429\)/i.test(trimmed);
+  if (capacityUnavailable) {
+    return {
+      apiRateLimitClass: "capacity_unavailable",
+      apiRateLimitResetAfter: resetAfter,
+    };
+  }
+
+  return {};
+}
+
+export function buildUsageObservationFields(input?: UsageObservationInput): {
+  promptTokens?: number;
+  usageInputTokens?: number;
+  usageOutputTokens?: number;
+  usageCacheReadTokens?: number;
+  usageCacheWriteTokens?: number;
+  usageTotalTokens?: number;
+} {
+  if (!input) {
+    return {};
+  }
+  const usage = normalizeUsage(input.lastCallUsage ?? input.usage);
+  const promptTokens =
+    input.promptTokens && Number.isFinite(input.promptTokens) && input.promptTokens > 0
+      ? Math.floor(input.promptTokens)
+      : derivePromptTokens(usage);
+  return {
+    promptTokens,
+    usageInputTokens: usage?.input,
+    usageOutputTokens: usage?.output,
+    usageCacheReadTokens: usage?.cacheRead,
+    usageCacheWriteTokens: usage?.cacheWrite,
+    usageTotalTokens: usage?.total,
+  };
+}
+
 export function buildApiErrorObservationFields(rawError?: string): {
   rawErrorPreview?: string;
   rawErrorHash?: string;
@@ -136,6 +218,8 @@ export function buildApiErrorObservationFields(rawError?: string): {
   providerErrorType?: string;
   providerErrorMessagePreview?: string;
   requestIdHash?: string;
+  apiRateLimitClass?: ApiRateLimitObservationClass;
+  apiRateLimitResetAfter?: string;
 } {
   const trimmed = boundObservationInput(rawError);
   if (!trimmed) {
@@ -171,6 +255,7 @@ export function buildApiErrorObservationFields(rawError?: string): {
         PROVIDER_ERROR_PREVIEW_MAX_CHARS,
       ),
       requestIdHash,
+      ...classifyApiRateLimitObservation(trimmed),
     };
   } catch {
     return {};
@@ -185,6 +270,8 @@ export function buildTextObservationFields(text?: string): {
   providerErrorType?: string;
   providerErrorMessagePreview?: string;
   requestIdHash?: string;
+  apiRateLimitClass?: ApiRateLimitObservationClass;
+  apiRateLimitResetAfter?: string;
 } {
   const observed = buildApiErrorObservationFields(text);
   return {
@@ -195,5 +282,7 @@ export function buildTextObservationFields(text?: string): {
     providerErrorType: observed.providerErrorType,
     providerErrorMessagePreview: observed.providerErrorMessagePreview,
     requestIdHash: observed.requestIdHash,
+    apiRateLimitClass: observed.apiRateLimitClass,
+    apiRateLimitResetAfter: observed.apiRateLimitResetAfter,
   };
 }

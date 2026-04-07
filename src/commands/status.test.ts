@@ -412,6 +412,7 @@ describe("statusCommand", () => {
     expect(payload.sessions.recent[0].cacheWrite).toBe(1_000);
     expect(payload.sessions.recent[0].totalTokensFresh).toBe(true);
     expect(payload.sessions.recent[0].remainingTokens).toBe(5000);
+    expect(payload.sessions.recent[0].contextPressure).toBe("ok");
     expect(payload.sessions.recent[0].flags).toContain("verbose:on");
     expect(payload.securityAudit.summary.critical).toBe(1);
     expect(payload.securityAudit.summary.warn).toBe(1);
@@ -428,7 +429,24 @@ describe("statusCommand", () => {
       expect(payload.sessions.recent[0].totalTokensFresh).toBe(false);
       expect(payload.sessions.recent[0].percentUsed).toBeNull();
       expect(payload.sessions.recent[0].remainingTokens).toBeNull();
+      expect(payload.sessions.recent[0].contextPressure).toBe("unknown");
     });
+  });
+
+  it("prints pressure labels for long sessions", async () => {
+    mocks.loadSessionStore.mockReturnValueOnce({
+      "+1000": {
+        ...createDefaultSessionStoreEntry(),
+        totalTokens: 165_000,
+        totalTokensFresh: true,
+        contextTokens: 1_000_000,
+      },
+    });
+
+    const logs = await runStatusAndGetLogs();
+    expect(logs.some((line) => line.includes("165k/1000k (17%)") && line.includes("COMPACT"))).toBe(
+      true,
+    );
   });
 
   it("prints unknown usage in formatted output when totalTokens is missing", async () => {

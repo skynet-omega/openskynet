@@ -385,6 +385,7 @@ describe("GatewayClient connect auth payload", () => {
           token?: string;
           deviceToken?: string;
         };
+        scopes?: string[];
       };
     };
   }
@@ -496,7 +497,10 @@ describe("GatewayClient connect auth payload", () => {
   });
 
   it("uses stored device token when shared token is not provided", () => {
-    loadDeviceAuthTokenMock.mockReturnValue({ token: "stored-device-token" });
+    loadDeviceAuthTokenMock.mockReturnValue({
+      token: "stored-device-token",
+      scopes: ["operator.read"],
+    });
     const client = new GatewayClient({
       url: "ws://127.0.0.1:18789",
     });
@@ -510,6 +514,7 @@ describe("GatewayClient connect auth payload", () => {
       token: "stored-device-token",
       deviceToken: "stored-device-token",
     });
+    expect(connectRequestFrom(ws).params?.scopes).toEqual(["operator.read"]);
     client.stop();
   });
 

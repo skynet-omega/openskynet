@@ -766,6 +766,7 @@ describe("runEmbeddedPiAgent auth profile rotation", () => {
       profileId: safeProfileId,
       providerErrorType: "overloaded_error",
       rawErrorPreview: expect.stringContaining('"request_id":"sha256:'),
+      promptTokens: expect.any(Number),
     });
 
     const stateRecord = records.find(

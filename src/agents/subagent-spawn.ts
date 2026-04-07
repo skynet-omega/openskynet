@@ -3,7 +3,8 @@ import { promises as fs } from "node:fs";
 import { formatThinkingLevels, normalizeThinkLevel } from "../auto-reply/thinking.js";
 import { DEFAULT_SUBAGENT_MAX_SPAWN_DEPTH } from "../config/agent-limits.js";
 import { loadConfig, type OpenClawConfig } from "../config/config.js";
-import { callGateway } from "../gateway/call.js";
+import { callGateway, type CallGatewayOptions } from "../gateway/call.js";
+import { ADMIN_SCOPE, isAdminOnlyMethod } from "../gateway/method-scopes.js";
 import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
 import {
   isValidAgentId,
@@ -142,7 +143,7 @@ async function cleanupProvisionalSession(
   },
 ): Promise<void> {
   try {
-    await callGateway({
+    await callSubagentGateway({
       method: "sessions.delete",
       params: {
         key: childSessionKey,
@@ -194,6 +195,16 @@ function summarizeError(err: unknown): string {
     return err;
   }
   return "error";
+}
+
+async function callSubagentGateway<T = Record<string, unknown>>(
+  params: CallGatewayOptions,
+): Promise<T> {
+  const scopes = params.scopes ?? (isAdminOnlyMethod(params.method) ? [ADMIN_SCOPE] : undefined);
+  return await callGateway<T>({
+    ...params,
+    ...(scopes ? { scopes } : {}),
+  });
 }
 
 async function loadCurrentConfig() {
@@ -435,7 +446,7 @@ export async function spawnSubagentDirect(
   }
   const patchChildSession = async (patch: Record<string, unknown>): Promise<string | undefined> => {
     try {
-      await callGateway({
+      await callSubagentGateway({
         method: "sessions.patch",
         params: { key: childSessionKey, ...patch },
         timeoutMs: 10_000,
@@ -499,7 +510,7 @@ export async function spawnSubagentDirect(
     });
     if (bindResult.status === "error") {
       try {
-        await callGateway({
+        await callSubagentGateway({
           method: "sessions.delete",
           params: { key: childSessionKey, emitLifecycleHooks: false },
           timeoutMs: 10_000,
@@ -620,7 +631,7 @@ export async function spawnSubagentDirect(
       workspaceDir: _workspaceDir,
       ...publicSpawnedMetadata
     } = spawnedMetadata;
-    const response = await callGateway<{ runId: string }>({
+    const response = await callSubagentGateway<{ runId: string }>({
       method: "agent",
       params: {
         message: childTaskMessage,
@@ -681,7 +692,7 @@ export async function spawnSubagentDirect(
       // Always delete the provisional child session after a failed spawn attempt.
       // If we already emitted subagent_ended above, suppress a duplicate lifecycle hook.
       try {
-        await callGateway({
+        await callSubagentGateway({
           method: "sessions.delete",
           params: {
             key: childSessionKey,
@@ -733,7 +744,7 @@ export async function spawnSubagentDirect(
       }
     }
     try {
-      await callGateway({
+      await callSubagentGateway({
         method: "sessions.delete",
         params: { key: childSessionKey, deleteTranscript: true, emitLifecycleHooks: false },
         timeoutMs: 10_000,

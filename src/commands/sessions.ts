@@ -7,6 +7,7 @@ import { info } from "../globals.js";
 import { parseAgentSessionKey } from "../routing/session-key.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { isRich, theme } from "../terminal/theme.js";
+import { classifySessionPressure, formatSessionPressureLabel } from "./session-pressure.js";
 import { resolveSessionStoreTargetsOrExit } from "./session-store-targets.js";
 import {
   formatSessionAgeCell,
@@ -63,7 +64,11 @@ const formatTokensCell = (
   const ctxLabel = contextTokens ? formatKTokens(contextTokens) : "?";
   const pct = contextTokens ? Math.min(999, Math.round((total / contextTokens) * 100)) : null;
   const label = `${totalLabel}/${ctxLabel} (${pct ?? "?"}%)`;
-  const padded = label.padEnd(TOKENS_PAD);
+  const pressureLabel = formatSessionPressureLabel(
+    classifySessionPressure({ totalTokens: total, contextTokens }),
+  );
+  const withPressure = pressureLabel ? `${label} ${pressureLabel}` : label;
+  const padded = withPressure.padEnd(TOKENS_PAD);
   return colorByPct(padded, pct, rich);
 };
 
@@ -164,6 +169,11 @@ export async function sessionsCommand(
                 typeof r.totalTokens === "number" ? r.totalTokensFresh !== false : false,
               contextTokens:
                 r.contextTokens ?? lookupContextTokens(model) ?? configContextTokens ?? null,
+              contextPressure: classifySessionPressure({
+                totalTokens: resolveFreshSessionTotalTokens(r),
+                contextTokens:
+                  r.contextTokens ?? lookupContextTokens(model) ?? configContextTokens ?? null,
+              }),
               model,
             };
           }),

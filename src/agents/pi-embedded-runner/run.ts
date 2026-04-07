@@ -1301,6 +1301,7 @@ export async function runEmbeddedPiAgent(
               profileId: failedPromptProfileId,
               fallbackConfigured,
               aborted,
+              promptTokens: derivePromptTokens(lastRunPromptUsage),
             });
             if (
               promptFailoverFailure &&
@@ -1378,6 +1379,8 @@ export async function runEmbeddedPiAgent(
             fallbackConfigured,
             timedOut,
             aborted,
+            promptTokens: derivePromptTokens(lastRunPromptUsage),
+            lastCallUsage: normalizeUsage(lastAssistant?.usage as UsageLike),
           });
 
           if (

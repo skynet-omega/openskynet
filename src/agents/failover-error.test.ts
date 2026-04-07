@@ -450,4 +450,35 @@ describe("failover-error", () => {
     expect(described.message).toBe("123");
     expect(described.reason).toBeUndefined();
   });
+
+  it("classifies abort-wrapped RESOURCE_EXHAUSTED as rate_limit", () => {
+    const err = Object.assign(new Error("request was aborted"), {
+      name: "AbortError",
+      cause: {
+        code: "RESOURCE_EXHAUSTED",
+        message: "RESOURCE_EXHAUSTED: Resource has been exhausted (e.g. check quota).",
+      },
+    });
+
+    expect(resolveFailoverReasonFromError(err)).toBe("rate_limit");
+  });
+
+  it("reads wrapped status/message/code from nested cause chains", () => {
+    const err = new Error("outer wrapper", {
+      cause: {
+        error: {
+          statusCode: "429",
+          code: "RESOURCE_EXHAUSTED",
+          message:
+            "Cloud Code Assist API error (429): You have exhausted your capacity on this model.",
+        },
+      },
+    });
+
+    const described = describeFailoverError(err);
+    expect(described.reason).toBe("rate_limit");
+    expect(described.status).toBe(429);
+    expect(described.code).toBe("RESOURCE_EXHAUSTED");
+    expect(described.message).toBe("outer wrapper");
+  });
 });

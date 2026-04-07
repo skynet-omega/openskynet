@@ -33,6 +33,7 @@ import {
 const ROOT_PREFIX = "/";
 const CONTROL_UI_ASSETS_MISSING_MESSAGE =
   "Control UI assets not found. Build them with `pnpm ui:build` (auto-installs UI deps), or run `pnpm ui:dev` during development.";
+const CONTROL_UI_DEBUG_ENV = "OPENCLAW_CONTROL_UI_DEBUG";
 
 export type ControlUiRequestOptions = {
   basePath?: string;
@@ -122,6 +123,18 @@ function sendJson(res: ServerResponse, status: number, body: unknown) {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache");
   res.end(JSON.stringify(body));
+}
+
+function isControlUiDebugEnabled(): boolean {
+  const raw = process.env[CONTROL_UI_DEBUG_ENV]?.trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes";
+}
+
+function logControlUiDebug(message: string, ...args: unknown[]) {
+  if (!isControlUiDebugEnabled()) {
+    return;
+  }
+  console.error(message, ...args);
 }
 
 function respondControlUiAssetsUnavailable(
@@ -382,7 +395,7 @@ export function handleControlUiHttpRequest(
         });
 
   if (!root) {
-    console.error(
+    logControlUiDebug(
       `[CONTROL-UI-DEBUG] resolveControlUiRootSync failed. argv1: ${process.argv[1]}, cwd: ${process.cwd()}, moduleUrl: ${import.meta.url}`,
     );
     respondControlUiAssetsUnavailable(res);
@@ -392,10 +405,10 @@ export function handleControlUiHttpRequest(
   const rootReal = (() => {
     try {
       const resolved = fs.realpathSync(root);
-      console.log(`[CONTROL-UI-DEBUG] Resolved root: ${root}, realpath: ${resolved}`);
+      logControlUiDebug(`[CONTROL-UI-DEBUG] Resolved root: ${root}, realpath: ${resolved}`);
       return resolved;
     } catch (error) {
-      console.error(`[CONTROL-UI-DEBUG] fs.realpathSync failed for ${root}`, error);
+      logControlUiDebug(`[CONTROL-UI-DEBUG] fs.realpathSync failed for ${root}`, error);
       if (isExpectedSafePathError(error)) {
         return null;
       }

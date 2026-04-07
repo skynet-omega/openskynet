@@ -79,6 +79,15 @@ describe("handleAgentEnd", () => {
       provider: "anthropic",
       model: "claude-test",
       errorMessage: '{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}',
+      agentMeta: {
+        promptTokens: 145000,
+        lastCallUsage: {
+          input: 12000,
+          output: 900,
+          cacheRead: 133000,
+          total: 145900,
+        },
+      },
       content: [{ type: "text", text: "" }],
     });
 
@@ -93,8 +102,32 @@ describe("handleAgentEnd", () => {
       error: "The AI service is temporarily overloaded. Please try again in a moment.",
       failoverReason: "overloaded",
       providerErrorType: "overloaded_error",
+      promptTokens: 145000,
+      usageInputTokens: 12000,
+      usageCacheReadTokens: 133000,
+      usageTotalTokens: 145900,
       consoleMessage:
         "embedded run agent end: runId=run-1 isError=true model=claude-test provider=anthropic error=The AI service is temporarily overloaded. Please try again in a moment.",
+    });
+  });
+
+  it("classifies quota-exhausted 429s in lifecycle error logs", () => {
+    const ctx = createContext({
+      role: "assistant",
+      stopReason: "error",
+      provider: "google-gemini-cli",
+      model: "gemini-3.1-pro-preview",
+      errorMessage:
+        "Cloud Code Assist API error (429): You have exhausted your capacity on this model. Your quota will reset after 2h53m46s.",
+      content: [{ type: "text", text: "" }],
+    });
+
+    handleAgentEnd(ctx);
+
+    const meta = vi.mocked(ctx.log.warn).mock.calls[0]?.[1];
+    expect(meta).toMatchObject({
+      apiRateLimitClass: "quota_exhausted",
+      apiRateLimitResetAfter: "2h53m46s",
     });
   });
 

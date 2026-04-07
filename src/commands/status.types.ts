@@ -1,4 +1,5 @@
 import type { ChannelId } from "../channels/plugins/types.js";
+import type { SessionPressure } from "./session-pressure.js";
 
 export type SessionStatus = {
   agentId?: string;
@@ -22,6 +23,7 @@ export type SessionStatus = {
   cacheWrite?: number;
   remainingTokens: number | null;
   percentUsed: number | null;
+  contextPressure: SessionPressure;
   model: string | null;
   contextTokens: number | null;
   flags: string[];

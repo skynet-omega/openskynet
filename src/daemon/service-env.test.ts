@@ -331,6 +331,27 @@ describe("buildServiceEnvironment", () => {
     expect(env.all_proxy).toBe("socks5://proxy.local:1080");
   });
 
+  it("forwards GPU/runtime environment variables for supervised services", () => {
+    const env = buildServiceEnvironment({
+      env: {
+        HOME: "/home/user",
+        CONDA_PREFIX: "/home/user/miniconda3/envs/GPU",
+        CUDA_HOME: "/usr/local/cuda",
+        LD_LIBRARY_PATH: "/usr/lib/wsl/lib:/opt/lib",
+        OLLAMA_HOST: "http://127.0.0.1:11434",
+      },
+      port: 18789,
+      platform: "linux",
+    });
+
+    expect(env.CONDA_PREFIX).toBe("/home/user/miniconda3/envs/GPU");
+    expect(env.CUDA_HOME).toBe("/usr/local/cuda");
+    expect(env.LD_LIBRARY_PATH).toBe("/usr/lib/wsl/lib:/opt/lib");
+    expect(env.OLLAMA_HOST).toBe("http://127.0.0.1:11434");
+    expect(env.PATH).toContain("/home/user/miniconda3/envs/GPU/bin");
+    expect(env.PATH).toContain("/usr/local/cuda/bin");
+  });
+
   it("omits PATH on Windows so Scheduled Tasks can inherit the current shell path", () => {
     const env = buildServiceEnvironment({
       env: {
@@ -401,6 +422,24 @@ describe("buildNodeServiceEnvironment", () => {
 
     expect(env.HTTPS_PROXY).toBe("https://proxy.local:7890");
     expect(env.no_proxy).toBe("localhost,127.0.0.1");
+  });
+
+  it("forwards GPU/runtime environment variables for node services", () => {
+    const env = buildNodeServiceEnvironment({
+      env: {
+        HOME: "/home/user",
+        CONDA_PREFIX: "/home/user/miniconda3/envs/GPU",
+        CUDA_PATH: "/usr/local/cuda",
+        LD_LIBRARY_PATH: "/usr/lib/wsl/lib",
+      },
+      platform: "linux",
+    });
+
+    expect(env.CONDA_PREFIX).toBe("/home/user/miniconda3/envs/GPU");
+    expect(env.CUDA_PATH).toBe("/usr/local/cuda");
+    expect(env.LD_LIBRARY_PATH).toBe("/usr/lib/wsl/lib");
+    expect(env.PATH).toContain("/home/user/miniconda3/envs/GPU/bin");
+    expect(env.PATH).toContain("/usr/local/cuda/bin");
   });
 
   it("forwards TMPDIR for node services", () => {

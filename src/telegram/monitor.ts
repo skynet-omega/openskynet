@@ -1,9 +1,14 @@
+import crypto from "node:crypto";
+import os from "node:os";
+import path from "node:path";
 import type { RunOptions } from "@grammyjs/runner";
 import { resolveAgentMaxConcurrent } from "../config/agent-limits.js";
 import type { OpenClawConfig } from "../config/config.js";
 import { loadConfig } from "../config/config.js";
 import { waitForAbortSignal } from "../infra/abort-signal.js";
+import { computeBackoff, sleepWithAbort } from "../infra/backoff.js";
 import { formatErrorMessage } from "../infra/errors.js";
+import { acquireFileLock, type FileLockHandle } from "../infra/file-lock.js";
 import { registerUnhandledRejectionHandler } from "../infra/unhandled-rejections.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { resolveTelegramAccount } from "./accounts.js";
@@ -33,6 +38,23 @@ export type MonitorTelegramOpts = {
   webhookUrl?: string;
   webhookCertPath?: string;
 };
+
+const TELEGRAM_PROVIDER_LOCK_OPTIONS = {
+  retries: {
+    retries: 0,
+    factor: 1.2,
+    minTimeout: 50,
+    maxTimeout: 50,
+  },
+  stale: 2 * 60 * 1000,
+} as const;
+
+const TELEGRAM_PROVIDER_LOCK_WAIT_POLICY = {
+  initialMs: 5_000,
+  maxMs: 60_000,
+  factor: 1.8,
+  jitter: 0.25,
+} as const;
 
 export function createTelegramRunnerOptions(cfg: OpenClawConfig): RunOptions<unknown> {
   return {
@@ -74,10 +96,54 @@ const isGrammyHttpError = (err: unknown): boolean => {
   return (err as { name?: string }).name === "HttpError";
 };
 
+function resolveTelegramProviderLockPath(token: string): string {
+  const tokenHash = crypto.createHash("sha256").update(token).digest("hex").slice(0, 24);
+  return path.join(os.tmpdir(), "openclaw-telegram-provider-locks", tokenHash);
+}
+
+function isFileLockTimeoutError(err: unknown): boolean {
+  return err instanceof Error && err.message.includes("file lock timeout");
+}
+
+async function acquireTelegramProviderLock(params: {
+  token: string;
+  abortSignal?: AbortSignal;
+  log: (line: string) => void;
+}): Promise<FileLockHandle | undefined> {
+  const lockPath = resolveTelegramProviderLockPath(params.token);
+  let attempts = 0;
+
+  while (!params.abortSignal?.aborted) {
+    try {
+      return await acquireFileLock(lockPath, TELEGRAM_PROVIDER_LOCK_OPTIONS);
+    } catch (err) {
+      if (!isFileLockTimeoutError(err)) {
+        throw err;
+      }
+      const delayMs = computeBackoff(TELEGRAM_PROVIDER_LOCK_WAIT_POLICY, attempts);
+      attempts += 1;
+      params.log(
+        `[telegram] Another local instance already owns the polling token lock (${path.basename(lockPath)}); retrying in ${Math.round(delayMs / 1000)}s.`,
+      );
+      try {
+        await sleepWithAbort(delayMs, params.abortSignal);
+      } catch (sleepErr) {
+        if (params.abortSignal?.aborted) {
+          return undefined;
+        }
+        throw sleepErr;
+      }
+    }
+  }
+
+  return undefined;
+}
+
 export async function monitorTelegramProvider(opts: MonitorTelegramOpts = {}) {
   const log = opts.runtime?.error ?? console.error;
   let pollingSession: TelegramPollingSession | undefined;
   let execApprovalsHandler: TelegramExecApprovalHandler | undefined;
+  let providerLock: FileLockHandle | undefined;
 
   const unregisterHandler = registerUnhandledRejectionHandler((err) => {
     const isNetworkError = isRecoverableTelegramNetworkError(err, { context: "polling" });
@@ -112,6 +178,15 @@ export async function monitorTelegramProvider(opts: MonitorTelegramOpts = {}) {
       throw new Error(
         `Telegram bot token missing for account "${account.accountId}" (set channels.telegram.accounts.${account.accountId}.botToken/tokenFile or TELEGRAM_BOT_TOKEN for default).`,
       );
+    }
+
+    providerLock = await acquireTelegramProviderLock({
+      token,
+      abortSignal: opts.abortSignal,
+      log,
+    });
+    if (!providerLock) {
+      return;
     }
 
     const proxyFetch =
@@ -192,6 +267,7 @@ export async function monitorTelegramProvider(opts: MonitorTelegramOpts = {}) {
     });
     await pollingSession.runUntilAbort();
   } finally {
+    await providerLock?.release().catch(() => undefined);
     await execApprovalsHandler?.stop().catch(() => {});
     unregisterHandler();
   }

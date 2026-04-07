@@ -20,6 +20,7 @@ import { resolveHeartbeatSummaryForAgent } from "../infra/heartbeat-runner.js";
 import { peekSystemEvents } from "../infra/system-events.js";
 import { parseAgentSessionKey } from "../routing/session-key.js";
 import { resolveRuntimeServiceVersion } from "../version.js";
+import { classifySessionPressure } from "./session-pressure.js";
 import { resolveLinkChannelContext } from "./status.link-channel.js";
 import type { HeartbeatStatus, SessionStatus, StatusSummary } from "./status.types.js";
 
@@ -162,6 +163,10 @@ export async function getStatusSummary(
           contextTokens && contextTokens > 0 && total !== undefined
             ? Math.min(999, Math.round((total / contextTokens) * 100))
             : null;
+        const contextPressure = classifySessionPressure({
+          totalTokens: total,
+          contextTokens,
+        });
         const parsedAgentId = parseAgentSessionKey(key)?.agentId;
         const agentId = opts.agentIdOverride ?? parsedAgentId;
 
@@ -187,6 +192,7 @@ export async function getStatusSummary(
           totalTokensFresh,
           remainingTokens: remaining,
           percentUsed: pct,
+          contextPressure,
           model,
           contextTokens,
           flags: buildFlags(entry),

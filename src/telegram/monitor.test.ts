@@ -76,6 +76,16 @@ const { computeBackoff, sleepWithAbort } = vi.hoisted(() => ({
   computeBackoff: vi.fn(() => 0),
   sleepWithAbort: vi.fn(async () => undefined),
 }));
+const { acquireFileLockMock, releaseFileLockMock } = vi.hoisted(() => {
+  const releaseFileLockMock = vi.fn(async () => undefined);
+  return {
+    acquireFileLockMock: vi.fn(async () => ({
+      lockPath: "/tmp/openclaw-telegram-provider-locks/test.lock",
+      release: releaseFileLockMock,
+    })),
+    releaseFileLockMock,
+  };
+});
 const { readTelegramUpdateOffsetSpy } = vi.hoisted(() => ({
   readTelegramUpdateOffsetSpy: vi.fn(async () => null as number | null),
 }));
@@ -259,6 +269,10 @@ vi.mock("../infra/backoff.js", () => ({
   sleepWithAbort,
 }));
 
+vi.mock("../infra/file-lock.js", () => ({
+  acquireFileLock: acquireFileLockMock,
+}));
+
 vi.mock("../infra/unhandled-rejections.js", () => ({
   registerUnhandledRejectionHandler: registerUnhandledRejectionHandlerMock,
 }));
@@ -297,6 +311,11 @@ describe("monitorTelegramProvider (grammY)", () => {
     createTelegramBotCalls.length = 0;
     computeBackoff.mockClear();
     sleepWithAbort.mockClear();
+    acquireFileLockMock.mockReset().mockImplementation(async () => ({
+      lockPath: "/tmp/openclaw-telegram-provider-locks/test.lock",
+      release: releaseFileLockMock,
+    }));
+    releaseFileLockMock.mockClear();
     startTelegramWebhookSpy.mockClear();
     registerUnhandledRejectionHandlerMock.mockClear();
     resetUnhandledRejection();
@@ -386,6 +405,26 @@ describe("monitorTelegramProvider (grammY)", () => {
     await monitorTelegramProvider({ token: "tok", abortSignal: abort.signal });
 
     expectRecoverableRetryState(2);
+  });
+
+  it("waits for the local token lock instead of starting a duplicate poller", async () => {
+    const abort = new AbortController();
+    acquireFileLockMock
+      .mockRejectedValueOnce(
+        new Error("file lock timeout for /tmp/openclaw-telegram-provider-locks/test"),
+      )
+      .mockResolvedValueOnce({
+        lockPath: "/tmp/openclaw-telegram-provider-locks/test.lock",
+        release: releaseFileLockMock,
+      });
+    mockRunOnceAndAbort(abort);
+
+    await monitorTelegramProvider({ token: "tok", abortSignal: abort.signal });
+
+    expect(acquireFileLockMock).toHaveBeenCalledTimes(2);
+    expect(sleepWithAbort).toHaveBeenCalledTimes(1);
+    expect(runSpy).toHaveBeenCalledTimes(1);
+    expect(releaseFileLockMock).toHaveBeenCalledTimes(1);
   });
 
   it("deletes webhook before starting polling", async () => {

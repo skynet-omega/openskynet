@@ -69,53 +69,94 @@ export function resolveFailoverStatus(reason: FailoverReason): number | undefine
 }
 
 function getStatusCode(err: unknown): number | undefined {
+  const readDirectStatusCode = (candidateErr: unknown): number | undefined => {
+    if (!candidateErr || typeof candidateErr !== "object") {
+      return undefined;
+    }
+    const candidate =
+      (candidateErr as { status?: unknown; statusCode?: unknown }).status ??
+      (candidateErr as { statusCode?: unknown }).statusCode;
+    if (typeof candidate === "number") {
+      return candidate;
+    }
+    if (typeof candidate === "string" && /^\d+$/.test(candidate)) {
+      return Number(candidate);
+    }
+    return undefined;
+  };
+  return findErrorProperty(err, readDirectStatusCode);
+}
+
+function findErrorProperty<T>(
+  err: unknown,
+  reader: (candidate: unknown) => T | undefined,
+  seen: Set<object> = new Set(),
+): T | undefined {
+  const direct = reader(err);
+  if (direct !== undefined) {
+    return direct;
+  }
   if (!err || typeof err !== "object") {
     return undefined;
   }
-  const candidate =
-    (err as { status?: unknown; statusCode?: unknown }).status ??
-    (err as { statusCode?: unknown }).statusCode;
-  if (typeof candidate === "number") {
-    return candidate;
+  if (seen.has(err)) {
+    return undefined;
   }
-  if (typeof candidate === "string" && /^\d+$/.test(candidate)) {
-    return Number(candidate);
-  }
-  return undefined;
+  seen.add(err);
+  const candidate = err as { error?: unknown; cause?: unknown };
+  return (
+    findErrorProperty(candidate.error, reader, seen) ??
+    findErrorProperty(candidate.cause, reader, seen)
+  );
 }
 
 function getErrorCode(err: unknown): string | undefined {
-  if (!err || typeof err !== "object") {
-    return undefined;
-  }
-  const candidate = (err as { code?: unknown }).code;
-  if (typeof candidate !== "string") {
-    return undefined;
-  }
-  const trimmed = candidate.trim();
-  return trimmed ? trimmed : undefined;
+  return findErrorProperty(err, (candidateErr) => {
+    if (!candidateErr || typeof candidateErr !== "object") {
+      return undefined;
+    }
+    const directCode = (candidateErr as { code?: unknown }).code;
+    if (typeof directCode === "string") {
+      const trimmed = directCode.trim();
+      return trimmed ? trimmed : undefined;
+    }
+    const status = (candidateErr as { status?: unknown }).status;
+    if (typeof status !== "string" || /^\d+$/.test(status)) {
+      return undefined;
+    }
+    const trimmed = status.trim();
+    return trimmed ? trimmed : undefined;
+  });
 }
 
 function getErrorMessage(err: unknown): string {
-  if (err instanceof Error) {
-    return err.message;
-  }
-  if (typeof err === "string") {
-    return err;
-  }
-  if (typeof err === "number" || typeof err === "boolean" || typeof err === "bigint") {
-    return String(err);
-  }
-  if (typeof err === "symbol") {
-    return err.description ?? "";
-  }
-  if (err && typeof err === "object") {
-    const message = (err as { message?: unknown }).message;
-    if (typeof message === "string") {
-      return message;
-    }
-  }
-  return "";
+  return (
+    findErrorProperty(err, (candidateErr) => {
+      if (candidateErr instanceof Error) {
+        return candidateErr.message || undefined;
+      }
+      if (typeof candidateErr === "string") {
+        return candidateErr || undefined;
+      }
+      if (
+        typeof candidateErr === "number" ||
+        typeof candidateErr === "boolean" ||
+        typeof candidateErr === "bigint"
+      ) {
+        return String(candidateErr);
+      }
+      if (typeof candidateErr === "symbol") {
+        return candidateErr.description ?? undefined;
+      }
+      if (candidateErr && typeof candidateErr === "object") {
+        const message = (candidateErr as { message?: unknown }).message;
+        if (typeof message === "string") {
+          return message || undefined;
+        }
+      }
+      return undefined;
+    }) ?? ""
+  );
 }
 
 function hasTimeoutHint(err: unknown): boolean {
@@ -127,6 +168,13 @@ function hasTimeoutHint(err: unknown): boolean {
   }
   const message = getErrorMessage(err);
   return Boolean(message && isTimeoutErrorMessage(message));
+}
+
+function getErrorCause(err: unknown): unknown {
+  if (!err || typeof err !== "object" || !("cause" in err)) {
+    return undefined;
+  }
+  return (err as { cause?: unknown }).cause;
 }
 
 export function isTimeoutError(err: unknown): boolean {
@@ -153,10 +201,17 @@ export function resolveFailoverReasonFromError(err: unknown): FailoverReason | n
     return err.reason;
   }
 
+  const cause = getErrorCause(err);
   const status = getStatusCode(err);
   const message = getErrorMessage(err);
   const statusReason = classifyFailoverReasonFromHttpStatus(status, message);
   if (statusReason) {
+    if (statusReason === "timeout" && cause && cause !== err) {
+      const causeReason = resolveFailoverReasonFromError(cause);
+      if (causeReason && causeReason !== "timeout") {
+        return causeReason;
+      }
+    }
     return statusReason;
   }
 
@@ -179,12 +234,28 @@ export function resolveFailoverReasonFromError(err: unknown): FailoverReason | n
     return "timeout";
   }
   if (isTimeoutError(err)) {
+    if (cause && cause !== err) {
+      const causeReason = resolveFailoverReasonFromError(cause);
+      if (causeReason && causeReason !== "timeout") {
+        return causeReason;
+      }
+    }
     return "timeout";
   }
   if (!message) {
+    if (cause && cause !== err) {
+      return resolveFailoverReasonFromError(cause);
+    }
     return null;
   }
-  return classifyFailoverReason(message);
+  const directReason = classifyFailoverReason(message);
+  if ((directReason === null || directReason === "timeout") && cause && cause !== err) {
+    const causeReason = resolveFailoverReasonFromError(cause);
+    if (causeReason && (directReason === null || causeReason !== "timeout")) {
+      return causeReason;
+    }
+  }
+  return directReason;
 }
 
 export function describeFailoverError(err: unknown): {

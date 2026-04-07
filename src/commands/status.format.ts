@@ -1,5 +1,6 @@
 import { formatDurationPrecise } from "../infra/format-time/format-duration.ts";
 import { formatRuntimeStatusWithDetails } from "../infra/runtime-status.ts";
+import { formatSessionPressureLabel, type SessionPressure } from "./session-pressure.js";
 import type { SessionStatus } from "./status.types.js";
 export { shortenText } from "./text-format.js";
 
@@ -16,7 +17,7 @@ export const formatDuration = (ms: number | null | undefined) => {
 export const formatTokensCompact = (
   sess: Pick<
     SessionStatus,
-    "totalTokens" | "contextTokens" | "percentUsed" | "cacheRead" | "cacheWrite"
+    "totalTokens" | "contextTokens" | "percentUsed" | "cacheRead" | "cacheWrite" | "contextPressure"
   >,
 ) => {
   const used = sess.totalTokens;
@@ -42,6 +43,11 @@ export const formatTokensCompact = (
         : cacheRead + (typeof cacheWrite === "number" ? cacheWrite : 0);
     const hitRate = Math.round((cacheRead / total) * 100);
     result += ` · 🗄️ ${hitRate}% cached`;
+  }
+
+  const pressureLabel = formatSessionPressureLabel(sess.contextPressure as SessionPressure);
+  if (pressureLabel) {
+    result += ` · ${pressureLabel}`;
   }
 
   return result;

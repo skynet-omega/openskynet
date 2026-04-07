@@ -4,11 +4,13 @@ import { createInlineCodeState } from "../markdown/code-spans.js";
 import {
   buildApiErrorObservationFields,
   buildTextObservationFields,
+  buildUsageObservationFields,
   sanitizeForConsole,
 } from "./pi-embedded-error-observation.js";
 import { classifyFailoverReason, formatAssistantErrorText } from "./pi-embedded-helpers.js";
 import type { EmbeddedPiSubscribeContext } from "./pi-embedded-subscribe.handlers.types.js";
 import { isAssistantMessage } from "./pi-embedded-utils.js";
+import type { UsageLike } from "./usage.js";
 
 export {
   handleAutoCompactionEnd,
@@ -50,6 +52,20 @@ export function handleAgentEnd(ctx: EmbeddedPiSubscribeContext) {
       status: "error",
       errorText: `${rawError ?? ""}\n${errorText}`.trim(),
     });
+    const assistantMeta = lastAssistant as {
+      promptTokens?: number;
+      usage?: unknown;
+      agentMeta?: {
+        promptTokens?: number;
+        usage?: unknown;
+        lastCallUsage?: unknown;
+      };
+    };
+    const observedUsage = buildUsageObservationFields({
+      promptTokens: assistantMeta.agentMeta?.promptTokens ?? assistantMeta.promptTokens,
+      usage: (assistantMeta.agentMeta?.usage ?? assistantMeta.usage) as UsageLike | undefined,
+      lastCallUsage: assistantMeta.agentMeta?.lastCallUsage as UsageLike | undefined,
+    });
     const safeErrorText =
       buildTextObservationFields(errorText).textPreview ?? "LLM request failed.";
     const safeRunId = sanitizeForConsole(ctx.params.runId) ?? "-";
@@ -65,6 +81,7 @@ export function handleAgentEnd(ctx: EmbeddedPiSubscribeContext) {
       model: lastAssistant.model,
       provider: lastAssistant.provider,
       ...observedError,
+      ...observedUsage,
       consoleMessage: `embedded run agent end: runId=${safeRunId} isError=true model=${safeModel} provider=${safeProvider} error=${safeErrorText}`,
     });
     emitAgentEvent({

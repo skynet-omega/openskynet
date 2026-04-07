@@ -858,6 +858,46 @@ describe("runWithModelFallback", () => {
     });
   });
 
+  it("falls back on abort-wrapped rate-limit causes", async () => {
+    const cfg = makeCfg({
+      agents: {
+        defaults: {
+          model: {
+            primary: "google-gemini-cli/gemini-3.1-pro-preview",
+            fallbacks: ["anthropic/claude-haiku-3-5"],
+          },
+        },
+      },
+    });
+    const run = vi
+      .fn()
+      .mockRejectedValueOnce(
+        Object.assign(new Error("aborted"), {
+          name: "AbortError",
+          cause: {
+            code: "RESOURCE_EXHAUSTED",
+            message:
+              "Cloud Code Assist API error (429): You have exhausted your capacity on this model.",
+          },
+        }),
+      )
+      .mockResolvedValueOnce("ok");
+
+    const result = await runWithModelFallback({
+      cfg,
+      provider: "google-gemini-cli",
+      model: "gemini-3.1-pro-preview",
+      run,
+    });
+
+    expect(result.result).toBe("ok");
+    expect(run).toHaveBeenCalledTimes(2);
+    expect(run.mock.calls).toEqual([
+      ["google-gemini-cli", "gemini-3.1-pro-preview"],
+      ["anthropic", "claude-haiku-3-5"],
+    ]);
+  });
+
   it("falls back on abort errors with reason: abort", async () => {
     await expectFallsBackToHaiku({
       provider: "openai",
